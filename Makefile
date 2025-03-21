@@ -12,6 +12,8 @@ BUNDLE_IMG ?= intel-kubernetes-power-manager-bundle:$(VERSION)
 OCP_VERSION=4.13
 # image used for building the dockerfile for ocp
 OCP_IMAGE=redhat/ubi9-minimal@sha256:06d06f15f7b641a78f2512c8817cbecaa1bf549488e273f5ac27ff1654ed33f0
+# platform to build the images for
+PLATFORM ?= linux/amd64
 # Options for 'bundle-build'
 ifneq ($(origin CHANNELS), undefined)
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
@@ -72,12 +74,12 @@ verify-build: gofmt test race coverage tidy clean verify-test
 
 # Build the Manager and Node Agent images
 images: generate manifests install
-	 $(IMGTOOL) build -f build/Dockerfile -t intel/power-operator:v$(VERSION) .
-	 $(IMGTOOL) build -f build/Dockerfile.nodeagent -t intel/power-node-agent:v$(VERSION) .
+	 $(IMGTOOL) build -f build/Dockerfile --platform $(PLATFORM) -t intel/power-operator:v$(VERSION) .
+	 $(IMGTOOL) build -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t intel/power-node-agent:v$(VERSION) .
 
 images-ocp: generate manifests install
-	 $(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" --build-arg="MANIFEST=build/manifests/ocp/power-node-agent-ds.yaml" -f build/Dockerfile -t intel/power-operator_ocp-$(OCP_VERSION):v$(VERSION) .
-	 $(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile.nodeagent -t intel/power-node-agent_ocp-$(OCP_VERSION):v$(VERSION) .
+	 $(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" --build-arg="MANIFEST=build/manifests/ocp/power-node-agent-ds.yaml" -f build/Dockerfile --platform $(PLATFORM) -t intel/power-operator_ocp-$(OCP_VERSION):v$(VERSION) .
+	 $(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t intel/power-node-agent_ocp-$(OCP_VERSION):v$(VERSION) .
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
 	go run ./main.go
@@ -115,8 +117,12 @@ uninstall: manifests kustomize
 
 # Deploy controller in the configured Kubernetes cluster in ~/.kube/config
 deploy: manifests kustomize
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
 	$(KUSTOMIZE) build config/default | kubectl apply -f -
+
+# Undeploy controller from the K8s cluster specified in ~/.kube/config.
+undeploy:
+	$(KUSTOMIZE) build config/default | kubectl delete -f -
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
@@ -148,17 +154,17 @@ generate: controller-gen
 
 # Build the Manager's image
 build-controller:
-	$(IMGTOOL) build -f build/Dockerfile -t intel-power-operator .
+	$(IMGTOOL) build -f build/Dockerfile --platform $(PLATFORM) -t intel-power-operator .
 
 # Build the Node Agent's image
 build-agent:
-	$(IMGTOOL) build -f build/Dockerfile.nodeagent -t intel-power-node-agent .
+	$(IMGTOOL) build -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t intel-power-node-agent .
 
 build-controller-ocp:
-	$(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile -t intel/power-operator_ocp-$(OCP_VERSION):v$(VERSION) .
+	$(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile --platform $(PLATFORM) -t intel/power-operator_ocp-$(OCP_VERSION):v$(VERSION) .
 
 build-agent-ocp:
-	$(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile.nodeagent -t intel/power-node-agent_ocp-$(OCP_VERSION):v$(VERSION) .
+	$(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t intel/power-node-agent_ocp-$(OCP_VERSION):v$(VERSION) .
 
 .PHONY: docker-push controller-gen kustomize bundle bundle-build bundle-push
 # Push the image
@@ -194,7 +200,7 @@ else
 	sed -i 's/- .*role\.yaml/- \.\/ocp\/role.yaml/' config/rbac/kustomization.yaml
 endif
 	operator-sdk generate kustomize manifests -q
-	cd config/manager && $(KUSTOMIZE) edit set image controller=$(IMG)
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --use-image-digests --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) 
 	operator-sdk bundle validate ./bundle
 
