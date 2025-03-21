@@ -1,7 +1,7 @@
 ARG BASE_IMAGE=scratch
 
 # Build the manager binary
-FROM golang@sha256:f43c6f049f04cbbaeb28f0aad3eea15274a7d0a7899a617d0037aec48d7ab010 as builder
+FROM golang@sha256:f43c6f049f04cbbaeb28f0aad3eea15274a7d0a7899a617d0037aec48d7ab010 AS builder
 WORKDIR /workspace
 # Copy the Go Modules manifests
 COPY go.mod go.mod
