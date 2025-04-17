@@ -16,11 +16,52 @@ IMG_AGENT ?= docker.io/intel/power-node-agent:$(VERSION)
 # Default bundle image tag
 BUNDLE_IMG ?= intel-kubernetes-power-manager-bundle:$(VERSION)
 # version of ocp being supported
-OCP_VERSION=4.13
+OCP_VERSION=4.18
 # image used for building the dockerfile for ocp
-OCP_IMAGE=redhat/ubi9-minimal@sha256:06d06f15f7b641a78f2512c8817cbecaa1bf549488e273f5ac27ff1654ed33f0
-# platform to build the images for
+OCP_IMAGE=registry.access.redhat.com/ubi9/ubi-minimal:9.5-1742914212
+# Platform to build the images for.
 PLATFORM ?= linux/amd64
+# Target architecture.
+GOARCH = $(shell go env GOARCH)
+
+## Location to install dependencies.
+LOCALBIN ?= $(shell pwd)/bin
+$(LOCALBIN):
+	mkdir -p $(LOCALBIN)
+
+## Tool Binaries
+KUBECTL ?= $(LOCALBIN)/kubectl
+KUSTOMIZE ?= $(LOCALBIN)/kustomize
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
+ENVTEST ?= $(LOCALBIN)/setup-envtest
+
+## Tool Versions
+KUSTOMIZE_VERSION ?= v5.4.3
+CONTROLLER_TOOLS_VERSION ?= v0.17.2
+
+.PHONY: kubectl
+kubectl: $(KUBECTL) ## Use envtest to download kubectl
+$(KUBECTL): $(LOCALBIN) envtest
+	if [ ! -f $(KUBECTL) ]; then \
+		KUBEBUILDER_ASSETS=$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path); \
+		ln -sf $${KUBEBUILDER_ASSETS}/kubectl $(KUBECTL); \
+	fi
+
+.PHONY: kustomize
+kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary. If wrong version is installed, it will be removed before downloading.
+$(KUSTOMIZE): $(LOCALBIN)
+	@if test -x $(LOCALBIN)/kustomize && ! $(LOCALBIN)/kustomize version | grep -q $(KUSTOMIZE_VERSION); then \
+		echo "$(LOCALBIN)/kustomize version is not expected $(KUSTOMIZE_VERSION). Removing it before installing."; \
+		rm -rf $(LOCALBIN)/kustomize; \
+	fi
+	test -s $(LOCALBIN)/kustomize || GOBIN=$(LOCALBIN) GO111MODULE=on go install sigs.k8s.io/kustomize/kustomize/v5@$(KUSTOMIZE_VERSION)
+
+.PHONY: controller-gen
+controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary. If wrong version is installed, it will be overwritten.
+$(CONTROLLER_GEN): $(LOCALBIN)
+	test -s $(LOCALBIN)/controller-gen && $(LOCALBIN)/controller-gen --version | grep -q $(CONTROLLER_TOOLS_VERSION) || \
+	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+
 # Options for 'bundle-build'
 ifneq ($(origin CHANNELS), undefined)
 BUNDLE_CHANNELS := --channels=$(CHANNELS)
@@ -69,25 +110,25 @@ test: generate fmt vet manifests
 	go test -v ./... -coverprofile cover.out
 
 # Build manager binary
-build: generate manifests install
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o build/bin/manager build/manager/main.go
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o build/bin/nodeagent build/nodeagent/main.go
+build: generate manifests
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) GO111MODULE=on go build -a -o build/bin/manager build/manager/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) GO111MODULE=on go build -a -o build/bin/nodeagent build/nodeagent/main.go
 
 verify-build: gofmt test race coverage tidy clean verify-test
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o build/bin/manager build/manager/main.go
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o build/bin/nodeagent build/nodeagent/main.go	
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) GO111MODULE=on go build -a -o build/bin/manager build/manager/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=$(GOARCH) GO111MODULE=on go build -a -o build/bin/nodeagent build/nodeagent/main.go	
 
 # Build the Manager and Node Agent images
-images: generate manifests install
+images: generate manifests
 	 $(IMGTOOL) build -f build/Dockerfile --platform $(PLATFORM) -t intel/power-operator:v$(VERSION) .
 	 $(IMGTOOL) build -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t intel/power-node-agent:v$(VERSION) .
 
-images-ocp: generate manifests install
+images-ocp: generate manifests
 	 $(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" --build-arg="MANIFEST=build/manifests/ocp/power-node-agent-ds.yaml" -f build/Dockerfile --platform $(PLATFORM) -t ${IMG} .
 	 $(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t ${IMG_AGENT} .
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
-	go run ./main.go
+	go run ./build/manager/main.go
 
 .PHONY: helm-install helm-uninstall 
 helm-install:
@@ -175,24 +216,6 @@ build-agent-ocp:
 # Push the image
 push:
 	$(IMGTOOL) push ${IMG}
-
-# find or download controller-gen
-# download controller-gen if necessary
-controller-gen:
-ifeq (, $(shell which controller-gen))
-	go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.14.0
-CONTROLLER_GEN=$(GOBIN)/controller-gen
-else
-CONTROLLER_GEN=$(shell which controller-gen)
-endif
-
-kustomize:
-ifeq (, $(shell which kustomize))
-	go install sigs.k8s.io/kustomize/kustomize/v4@latest	
-KUSTOMIZE=$(GOBIN)/kustomize
-else
-KUSTOMIZE=$(shell which kustomize)
-endif
 
 # Generate bundle manifests and metadata, then validate generated files.
 bundle: update manifests kustomize

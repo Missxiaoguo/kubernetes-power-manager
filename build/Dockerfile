@@ -1,6 +1,9 @@
 ARG BASE_IMAGE=scratch
+
 # Build the manager binary
-FROM golang@sha256:f43c6f049f04cbbaeb28f0aad3eea15274a7d0a7899a617d0037aec48d7ab010 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.23 AS builder
+ARG TARGETOS \
+    TARGETARCH
 
 WORKDIR /workspace
 # Copy the Go Modules manifests
@@ -17,8 +20,9 @@ COPY controllers/ controllers/
 COPY pkg/ pkg/
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GO111MODULE=on go build -a -o manager main.go
+RUN CGO_ENABLED=0 GO111MODULE=on GOOS=${TARGETOS:-linux} GOARCH=$TARGETARCH go build -a -o manager main.go
 
+# Final image
 FROM ${BASE_IMAGE}
 ARG MANIFEST=build/manifests/power-node-agent-ds.yaml
 WORKDIR /
