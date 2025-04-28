@@ -77,7 +77,7 @@ github.com/google/uuid
 # github.com/imdario/mergo v0.3.13
 ## explicit; go 1.13
 github.com/imdario/mergo
-# github.com/intel/power-optimization-library v1.5.0 => gitlab.cee.redhat.com/ran/dynamic-power-library v0.0.0-20250417214511-42c1503c57f7
+# github.com/intel/power-optimization-library v1.5.0 => ./power-optimization-library
 ## explicit; go 1.23.8
 github.com/intel/power-optimization-library/pkg/power
 # github.com/josharian/intern v1.0.0
@@ -775,4 +775,4 @@ sigs.k8s.io/structured-merge-diff/v4/value
 ## explicit; go 1.12
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v2
-# github.com/intel/power-optimization-library => gitlab.cee.redhat.com/ran/dynamic-power-library v0.0.0-20250417214511-42c1503c57f7
+# github.com/intel/power-optimization-library => ./power-optimization-library

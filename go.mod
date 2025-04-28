@@ -74,4 +74,4 @@ require (
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
 
-replace github.com/intel/power-optimization-library => gitlab.cee.redhat.com/ran/dynamic-power-library v0.0.0-20250417214511-42c1503c57f7
+replace github.com/intel/power-optimization-library => ./power-optimization-library
