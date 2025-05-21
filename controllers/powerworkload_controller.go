@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	e "errors"
+
 	"github.com/go-logr/logr"
 	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
 	"github.com/intel/kubernetes-power-manager/pkg/util"
@@ -284,15 +285,6 @@ func createReservedPool(library power.Host, coreConfig powerv1.ReservedSpec, log
 		return err
 	}
 
-	if err := pseudoReservedPool.SetCpuIDs(coreConfig.Cores); err != nil {
-		if removePoolError := pseudoReservedPool.Remove(); removePoolError != nil {
-			logger.Error(removePoolError, fmt.Sprintf("error removing pool %v", pseudoReservedPool.Name()))
-		}
-
-		logger.Error(err, "error moving cores to special reserved pool")
-		return err
-	}
-
 	corePool := library.GetExclusivePool(coreConfig.PowerProfile)
 	if corePool == nil {
 		if removePoolError := pseudoReservedPool.Remove(); removePoolError != nil {
@@ -307,6 +299,15 @@ func createReservedPool(library power.Host, coreConfig powerv1.ReservedSpec, log
 			logger.Error(removePoolError, fmt.Sprintf("error removing pool %v", pseudoReservedPool.Name()))
 		}
 		logger.Error(err, "error setting profile for reserved cores")
+		return err
+	}
+
+	if err := pseudoReservedPool.SetCpuIDs(coreConfig.Cores); err != nil {
+		if removePoolError := pseudoReservedPool.Remove(); removePoolError != nil {
+			logger.Error(removePoolError, fmt.Sprintf("error removing pool %v", pseudoReservedPool.Name()))
+		}
+
+		logger.Error(err, "error moving cores to special reserved pool")
 		return err
 	}
 
