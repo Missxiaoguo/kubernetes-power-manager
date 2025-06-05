@@ -64,6 +64,8 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 		logger.Error(err, "resource is not in the intel-power namespace, ignoring")
 		return ctrl.Result{Requeue: false}, err
 	}
+	logger.Info("reconciling the power workload")
+
 	nodeName := os.Getenv("NODE_NAME")
 
 	workload := &powerv1.PowerWorkload{}

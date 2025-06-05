@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
@@ -231,14 +232,14 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		logger.Error(err, "invalid governor")
 		return ctrl.Result{Requeue: false}, err
 	}
+
 	powerProfile, err := power.NewPowerProfile(profile.Spec.Name, uint(profileMinFreq), uint(profileMaxFreq), profile.Spec.Governor, actualEpp)
 	if err != nil {
 		logger.Error(err, "could not create the power profile")
 		return ctrl.Result{Requeue: false}, err
 	}
-	// check if profile has an associated pool
+	// An exclusive pool should be created for both shared and non-shared profiles.
 	profileFromLibrary := r.PowerLibrary.GetExclusivePool(profile.Spec.Name)
-	// if not create one
 	if profileFromLibrary == nil {
 		pool, err := r.PowerLibrary.AddExclusivePool(profile.Spec.Name)
 		if err != nil {
@@ -250,6 +251,13 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 			logger.Error(err, fmt.Sprintf("error adding the profile '%s' to the power library for host '%s'", profile.Spec.Name, nodeName))
 			return ctrl.Result{}, err
 		}
+
+		// This block is trying to handle the edge case where a shared workload references a profile that was created later,
+		// but this approach is incomplete and problematic because:
+		//      1. PowerWorkload controller doesn't watch for annotation updates
+		//      2. Shared workloads can reference non-shared profiles
+		//      3. Shared workload naming is not guaranteed to follow the shared-<NodeName>-workload format
+		// TODO: Remove this workaround and implement proper webhook validation to reject workload creation if referenced profile is not found
 		if profile.Spec.Shared {
 			logger.V(5).Info(fmt.Sprintf("shared power profile successfully created: name - %s max - %d min - %d EPP - %s", profile.Spec.Name, profile.Spec.Max, profile.Spec.Min, profile.Spec.Epp))
 			workloadName := fmt.Sprintf("shared-%s-workload", nodeName)
@@ -278,23 +286,58 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 			}
 			return ctrl.Result{}, nil
 		}
-		// Create the extended resources for the profile
-		err = r.createExtendedResources(nodeName, profile.Spec.Name, profile.Spec.Epp, &logger)
-		if err != nil {
-			logger.Error(err, "error creating the extended resources for the base profile")
-			return ctrl.Result{}, err
-		}
+
+		logger.V(5).Info(fmt.Sprintf("power profile successfully created: name - %s max - %d min - %d EPP - %s", profile.Spec.Name, profileMaxFreq, profileMinFreq, profile.Spec.Epp))
 	} else {
+		// Exclusive pool for this profile already exists, update it and all the other pools that use this profile
 		err = r.PowerLibrary.GetExclusivePool(profile.Spec.Name).SetPowerProfile(powerProfile)
-		logger.V(5).Info(fmt.Sprintf("updating the power profile '%s' to the power library for node '%s'", profile.Spec.Name, nodeName))
+		msg := fmt.Sprintf("updating the power profile '%s' to the power library for node '%s'", profile.Spec.Name, nodeName)
+		logger.V(5).Info(msg)
 		if err != nil {
-			logger.Error(err, fmt.Sprintf("error updating the profile '%s' to the power library for node '%s'", profile.Spec.Name, nodeName))
-			return ctrl.Result{}, err
+			return ctrl.Result{}, fmt.Errorf("error %s: %v", msg, err)
 		}
+
+		// Update shared pool if it uses this profile
+		sharedPool := r.PowerLibrary.GetSharedPool()
+		if sharedPool.GetPowerProfile() != nil && sharedPool.GetPowerProfile().Name() == profile.Spec.Name {
+			msg := fmt.Sprintf("updating shared pool in power library with updated profile '%s' for node '%s'", profile.Spec.Name, nodeName)
+			logger.V(5).Info(msg)
+			err := sharedPool.SetPowerProfile(powerProfile)
+			if err != nil {
+				return ctrl.Result{}, fmt.Errorf("error %s: %v", msg, err)
+			}
+		}
+
+		// Update any special reserved pools created for reservedCPUs that use this profile
+		exclusivePools := r.PowerLibrary.GetAllExclusivePools()
+		for _, pool := range *exclusivePools {
+			if strings.Contains(pool.Name(), nodeName+"-reserved-") &&
+				pool.GetPowerProfile() != nil &&
+				pool.GetPowerProfile().Name() == profile.Spec.Name {
+				msg := fmt.Sprintf("updating special reserved pool '%s' in power library with updated profile '%s' for node '%s'", pool.Name(), profile.Spec.Name, nodeName)
+				logger.V(5).Info(msg)
+				err := pool.SetPowerProfile(powerProfile)
+				if err != nil {
+					return ctrl.Result{}, fmt.Errorf("error %s: %v", msg, err)
+				}
+			}
+		}
+
+		logger.V(5).Info(fmt.Sprintf("power profile successfully updated: name - %s max - %d min - %d EPP - %s", profile.Spec.Name, profileMaxFreq, profileMinFreq, profile.Spec.Epp))
 	}
 
-	logger.V(5).Info(fmt.Sprintf("power profile successfully created: name - %s max - %d min - %d EPP - %s", profile.Spec.Name, profileMaxFreq, profileMinFreq, profile.Spec.Epp))
+	if profile.Spec.Shared {
+		// Return for shared profiles, as extended resources and workloads are not created for them
+		return ctrl.Result{}, nil
+	}
 
+	// Create the extended resources for the profile
+	err = r.createExtendedResources(nodeName, profile.Spec.Name, profile.Spec.Epp, &logger)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("error creating the extended resources for the base profile: %v", err)
+	}
+
+	// Create the power workload for the profile
 	workloadName := fmt.Sprintf("%s-%s", profile.Spec.Name, nodeName)
 	logger.V(5).Info(fmt.Sprintf("configuring the workload name: %s", workloadName))
 	workload := &powerv1.PowerWorkload{}
