@@ -482,117 +482,287 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 	}
 }
 
-func TestPowerProfile_Reconcile_MaxMinValuesZero(t *testing.T) {
+func TestPowerProfile_Reconcile_MaxMinFrequencyHandling(t *testing.T) {
 	tcases := []struct {
 		testCase    string
 		nodeName    string
 		profileName string
-		validateErr func(e error) bool
-		clientObjs  []runtime.Object
+		max         int
+		min         int
+		epp         string
+		governor    string
 	}{
+		// Partial defaults - max only
 		{
-			testCase:    "Test Case 1 - Max value zero",
+			testCase:    "Max is zero, min specified, no EPP (use hardware maximum)",
 			nodeName:    "TestNode",
-			profileName: "user-created",
-			validateErr: func(e error) bool {
-				return assert.ErrorContains(t, e, "max frequency value cannot be lower than the min frequency value")
-			},
-			clientObjs: []runtime.Object{
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "user-created",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "user-created",
-						Max:  0,
-						Min:  3200,
-						Epp:  "",
-					},
-				},
-			},
+			profileName: "max-default-profile",
+			max:         0,
+			min:         2000,
+			epp:         "",
+			governor:    "powersave",
 		},
 		{
-			testCase:    "Test Case 2 - Min value zero",
+			testCase:    "Max is zero, min specified, with EPP (use hardware maximum)",
 			nodeName:    "TestNode",
-			profileName: "user-created",
-			validateErr: func(e error) bool {
-				return assert.ErrorContains(t, e, "max and min frequency must be within the range")
-			},
-			clientObjs: []runtime.Object{
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "user-created",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "user-created",
-						Max:  3600,
-						Min:  0,
-						Epp:  "",
-					},
-				},
-			},
+			profileName: "max-default-epp-profile",
+			max:         0,
+			min:         1500,
+			epp:         "performance",
+			governor:    "powersave",
+		},
+		// Partial defaults - min only
+		{
+			testCase:    "Min is zero, max specified, no EPP (use hardware minimum)",
+			nodeName:    "TestNode",
+			profileName: "min-default-profile",
+			max:         3000,
+			min:         0,
+			epp:         "",
+			governor:    "powersave",
 		},
 		{
-			testCase:    "Test Case 3 - Max/Min value zero",
+			testCase:    "Min is zero, max specified, with EPP (use hardware minimum)",
 			nodeName:    "TestNode",
-			profileName: "user-created",
-			validateErr: func(e error) bool {
-				return assert.ErrorContains(t, e, "max and min frequency must be within the range")
-			},
-			clientObjs: []runtime.Object{
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "user-created",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "user-created",
-						Max:  0,
-						Min:  0,
-						Epp:  "",
-					},
-				},
-			},
+			profileName: "min-default-epp-profile",
+			max:         2500,
+			min:         0,
+			epp:         "balance_power",
+			governor:    "powersave",
+		},
+		// Both zero - EPP-based calculation
+		{
+			testCase:    "Both zero with EPP (use EPP-based calculation)",
+			nodeName:    "TestNode",
+			profileName: "epp-based-profile",
+			max:         0,
+			min:         0,
+			epp:         "balance_performance",
+			governor:    "powersave",
+		},
+		// Both zero - hardware defaults
+		{
+			testCase:    "Both zero without EPP (use hardware defaults)",
+			nodeName:    "TestNode",
+			profileName: "hardware-default-profile",
+			max:         0,
+			min:         0,
+			epp:         "",
+			governor:    "powersave",
+		},
+		// Both specified - use as-is
+		{
+			testCase:    "Both values specified, no EPP (use as-is)",
+			nodeName:    "TestNode",
+			profileName: "explicit-values-profile",
+			max:         3200,
+			min:         1800,
+			epp:         "",
+			governor:    "powersave",
+		},
+		{
+			testCase:    "Both values specified, with EPP (use as-is)",
+			nodeName:    "TestNode",
+			profileName: "explicit-values-epp-profile",
+			max:         2800,
+			min:         2000,
+			epp:         "balance_performance",
+			governor:    "powersave",
 		},
 	}
+
 	for _, tc := range tcases {
-		t.Setenv("NODE_NAME", tc.nodeName)
+		t.Run(tc.testCase, func(t *testing.T) {
+			t.Setenv("NODE_NAME", tc.nodeName)
 
-		r, err := createProfileReconcilerObject(tc.clientObjs)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error creating the reconciler object", tc.testCase)
-		}
+			clientObjs := []runtime.Object{
+				&powerv1.PowerProfile{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      tc.profileName,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerProfileSpec{
+						Name:     tc.profileName,
+						Max:      tc.max,
+						Min:      tc.min,
+						Epp:      tc.epp,
+						Governor: tc.governor,
+					},
+				},
+				&corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: tc.nodeName,
+					},
+					Status: corev1.NodeStatus{
+						Capacity: map[corev1.ResourceName]resource.Quantity{
+							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
+						},
+					},
+				},
+			}
 
-		nodemk := new(hostMock)
-		freqSetmk := new(frequencySetMock)
-		nodemk.On("GetFreqRanges").Return(power.CoreTypeList{freqSetmk})
-		freqSetmk.On("GetMax").Return(uint(9000000))
-		freqSetmk.On("GetMin").Return(uint(100000))
-		r.PowerLibrary = nodemk
+			r, err := createProfileReconcilerObject(clientObjs)
+			if err != nil {
+				t.Fatalf("error creating the reconciler object: %v", err)
+			}
 
-		req := reconcile.Request{
-			NamespacedName: client.ObjectKey{
-				Name:      tc.profileName,
+			host, teardown, err := fullDummySystem()
+			assert.Nil(t, err)
+			defer teardown()
+			r.PowerLibrary = host
+
+			req := reconcile.Request{
+				NamespacedName: client.ObjectKey{
+					Name:      tc.profileName,
+					Namespace: IntelPowerNamespace,
+				},
+			}
+
+			_, err = r.Reconcile(context.TODO(), req)
+			assert.NoError(t, err, "unexpected error: %v", err)
+
+			// Verify that the workload was created successfully
+			workload := &powerv1.PowerWorkload{}
+			err = r.Client.Get(context.TODO(), client.ObjectKey{
+				Name:      fmt.Sprintf("%s-%s", tc.profileName, tc.nodeName),
 				Namespace: IntelPowerNamespace,
-			},
-		}
+			}, workload)
+			assert.NoError(t, err, "failed to get created workload")
 
-		_, err = r.Reconcile(context.TODO(), req)
-		tc.validateErr(err)
+			// Verify the profile was created in the power library
+			exclusivePool := host.GetExclusivePool(tc.profileName)
+			assert.NotNil(t, exclusivePool, "exclusive pool should be created")
+			assert.NotNil(t, exclusivePool.GetPowerProfile(), "pool should have a power profile")
+		})
+	}
+}
 
-		workloads := &powerv1.PowerWorkloadList{}
-		err = r.Client.List(context.TODO(), workloads)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving the power workload objects", tc.testCase)
-		}
+func TestPowerProfile_Reconcile_MaxMinFrequencyValidationErrors(t *testing.T) {
+	tcases := []struct {
+		testCase      string
+		nodeName      string
+		profileName   string
+		max           int
+		min           int
+		epp           string
+		governor      string
+		expectedError string
+	}{
+		{
+			testCase:      "Max lower than min (both specified)",
+			nodeName:      "TestNode",
+			profileName:   "invalid-range-profile",
+			max:           2600,
+			min:           2800,
+			epp:           "performance",
+			governor:      "powersave",
+			expectedError: "max frequency (2600) cannot be lower than the min frequency (2800)",
+		},
+		{
+			testCase:      "Values outside hardware range - too low",
+			nodeName:      "TestNode",
+			profileName:   "too-low-profile",
+			max:           100,
+			min:           50,
+			epp:           "",
+			governor:      "powersave",
+			expectedError: "max and min frequency must be within the range",
+		},
+		{
+			testCase:      "Values outside hardware range - too high",
+			nodeName:      "TestNode",
+			profileName:   "too-high-profile",
+			max:           9999999,
+			min:           9999998,
+			epp:           "",
+			governor:      "powersave",
+			expectedError: "max and min frequency must be within the range",
+		},
+		{
+			testCase:      "Min specified higher than hardware max when max=0",
+			nodeName:      "TestNode",
+			profileName:   "min-too-high-profile",
+			max:           0,    // Will use hardware max (3700 in our mock)
+			min:           5000, // Higher than hardware max
+			epp:           "",
+			governor:      "powersave",
+			expectedError: "max frequency (3700) cannot be lower than the min frequency (5000)",
+		},
+		{
+			testCase:      "Shared profile with values outside hardware range",
+			nodeName:      "TestNode",
+			profileName:   "shared-too-low",
+			max:           100,
+			min:           100,
+			epp:           "",
+			governor:      "powersave",
+			expectedError: "max and min frequency must be within the range",
+		},
+	}
 
-		if len(workloads.Items) > 0 {
-			t.Errorf("%s - failed: expected the number of power workload objects to be zero", tc.testCase)
-		}
+	for _, tc := range tcases {
+		t.Run(tc.testCase, func(t *testing.T) {
+			t.Setenv("NODE_NAME", tc.nodeName)
+
+			clientObjs := []runtime.Object{
+				&powerv1.PowerProfile{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      tc.profileName,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerProfileSpec{
+						Name:     tc.profileName,
+						Max:      tc.max,
+						Min:      tc.min,
+						Epp:      tc.epp,
+						Governor: tc.governor,
+					},
+				},
+				&corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: tc.nodeName,
+					},
+					Status: corev1.NodeStatus{
+						Capacity: map[corev1.ResourceName]resource.Quantity{
+							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
+						},
+					},
+				},
+			}
+
+			r, err := createProfileReconcilerObject(clientObjs)
+			if err != nil {
+				t.Fatalf("error creating the reconciler object: %v", err)
+			}
+
+			nodemk := new(hostMock)
+			freqSetmk := new(frequencySetMock)
+			nodemk.On("GetFreqRanges").Return(power.CoreTypeList{freqSetmk})
+			freqSetmk.On("GetMax").Return(uint(3700000)) // 3.7 GHz in kHz
+			freqSetmk.On("GetMin").Return(uint(1000000)) // 1.0 GHz in kHz
+			nodemk.On("GetExclusivePool", tc.profileName).Return(nil)
+			r.PowerLibrary = nodemk
+
+			req := reconcile.Request{
+				NamespacedName: client.ObjectKey{
+					Name:      tc.profileName,
+					Namespace: IntelPowerNamespace,
+				},
+			}
+
+			_, err = r.Reconcile(context.TODO(), req)
+			assert.Error(t, err, "expected an error but got none")
+			assert.ErrorContains(t, err, tc.expectedError)
+
+			// Verify no workload was created for invalid profiles
+			workloads := &powerv1.PowerWorkloadList{}
+			err = r.Client.List(context.TODO(), workloads)
+			assert.NoError(t, err)
+			for _, workload := range workloads.Items {
+				assert.NotEqual(t, fmt.Sprintf("%s-%s", tc.profileName, tc.nodeName), workload.Name,
+					"no workload should be created for invalid profile")
+			}
+		})
 	}
 }
 
@@ -913,211 +1083,6 @@ func TestPowerProfile_Reconcile_DeleteProfile(t *testing.T) {
 		if _, exists := node.Status.Capacity[resourceName]; exists {
 			t.Errorf("%s - failed: expected the extended resource '%s' to have been deleted", tc.testCase, fmt.Sprintf("%s%s", ExtendedResourcePrefix, tc.profileName))
 		}
-	}
-}
-
-func TestPowerProfile_Reconcile_MaxValueLowerThanMinValue(t *testing.T) {
-	tcases := []struct {
-		testCase    string
-		nodeName    string
-		profileName string
-		clientObjs  []runtime.Object
-	}{
-		{
-			testCase:    "Test 1 - Max value less then Min value",
-			nodeName:    "TestNode",
-			profileName: "user-created",
-			clientObjs: []runtime.Object{
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "user-created",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "user-created",
-						Max:  2600,
-						Min:  2800,
-						Epp:  "performance",
-					},
-				},
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "TestNode",
-					},
-					Status: corev1.NodeStatus{
-						Capacity: map[corev1.ResourceName]resource.Quantity{
-							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
-						},
-					},
-				},
-			},
-		},
-	}
-
-	for _, tc := range tcases {
-		t.Setenv("NODE_NAME", tc.nodeName)
-
-		r, err := createProfileReconcilerObject(tc.clientObjs)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error creating the reconciler object", tc.testCase)
-		}
-
-		nodemk := new(hostMock)
-		r.PowerLibrary = nodemk
-
-		req := reconcile.Request{
-			NamespacedName: client.ObjectKey{
-				Name:      tc.profileName,
-				Namespace: IntelPowerNamespace,
-			},
-		}
-
-		_, err = r.Reconcile(context.TODO(), req)
-		assert.ErrorContains(t, err, "max frequency value cannot be lower than the min frequency value")
-	}
-}
-
-func TestPowerProfile_Reconcile_SharedFrequencyValuesLessThanAbsoluteValue(t *testing.T) {
-	tcases := []struct {
-		testCase    string
-		nodeName    string
-		profileName string
-		clientObjs  []runtime.Object
-	}{
-		{
-			testCase:    "Test 1 - Shared Frequency values less than absolute minimum",
-			nodeName:    "TestNode",
-			profileName: "shared",
-			clientObjs: []runtime.Object{
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "shared",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name:   "shared",
-						Max:    100,
-						Min:    100,
-						Shared: true,
-					},
-				},
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "TestNode",
-					},
-					Status: corev1.NodeStatus{
-						Capacity: map[corev1.ResourceName]resource.Quantity{
-							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
-						},
-					},
-				},
-			},
-		},
-	}
-
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
-	// needed to create library using a dummy sysfs as it will call functions that can't be mocked
-	_, teardown, err := fullDummySystem()
-	assert.Nil(t, err)
-	defer teardown()
-	for _, tc := range tcases {
-		t.Setenv("NODE_NAME", tc.nodeName)
-
-		r, err := createProfileReconcilerObject(tc.clientObjs)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error creating the reconciler object", tc.testCase)
-		}
-
-		nodemk := new(hostMock)
-		freqSetmk := new(frequencySetMock)
-		nodemk.On("GetFreqRanges").Return(power.CoreTypeList{freqSetmk})
-		freqSetmk.On("GetMax").Return(uint(9000000))
-		freqSetmk.On("GetMin").Return(uint(1000000))
-		r.PowerLibrary = nodemk
-
-		req := reconcile.Request{
-			NamespacedName: client.ObjectKey{
-				Name:      tc.profileName,
-				Namespace: IntelPowerNamespace,
-			},
-		}
-
-		_, err = r.Reconcile(context.TODO(), req)
-		assert.ErrorContains(t, err, "max and min frequency must be within the range")
-	}
-}
-
-func TestPowerProfile_Reconcile_MaxValueZeroMinValueGreaterThanZero(t *testing.T) {
-	tcases := []struct {
-		testCase    string
-		nodeName    string
-		profileName string
-		clientObjs  []runtime.Object
-	}{
-		{
-			testCase:    "Test 1 - Max value less then Min value",
-			nodeName:    "TestNode",
-			profileName: "user-created",
-			clientObjs: []runtime.Object{
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "user-created",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "user-created",
-						Max:  0,
-						Min:  2800,
-						Epp:  "performance",
-					},
-				},
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "TestNode",
-					},
-					Status: corev1.NodeStatus{
-						Capacity: map[corev1.ResourceName]resource.Quantity{
-							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
-						},
-					},
-				},
-			},
-		},
-	}
-
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
-	_, teardown, err := fullDummySystem()
-	assert.Nil(t, err)
-	defer teardown()
-	for _, tc := range tcases {
-		t.Setenv("NODE_NAME", tc.nodeName)
-
-		r, err := createProfileReconcilerObject(tc.clientObjs)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error creating the reconciler object", tc.testCase)
-		}
-
-		nodemk := new(hostMock)
-		r.PowerLibrary = nodemk
-
-		req := reconcile.Request{
-			NamespacedName: client.ObjectKey{
-				Name:      tc.profileName,
-				Namespace: IntelPowerNamespace,
-			},
-		}
-
-		_, err = r.Reconcile(context.TODO(), req)
-		assert.ErrorContains(t, err, "max frequency value cannot be lower than the min frequency value")
 	}
 }
 

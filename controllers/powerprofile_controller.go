@@ -191,12 +191,6 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	logger.V(5).Info("making sure max value is higher than the min value")
-	if profile.Spec.Max < profile.Spec.Min {
-		maxLowerThanMaxError := errors.NewServiceUnavailable("max frequency value cannot be lower than the min frequency value")
-		logger.Error(maxLowerThanMaxError, fmt.Sprintf("error creating the profile '%s'", profile.Spec.Name))
-		return ctrl.Result{Requeue: false}, maxLowerThanMaxError
-	}
 	absoluteMinimumFrequency, absoluteMaximumFrequency, err := getMaxMinFrequencyValues(r.PowerLibrary)
 	logger.V(5).Info("retrieving the max possible frequency and min possible frequency from the system")
 	if err != nil {
@@ -204,20 +198,34 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		return ctrl.Result{Requeue: false}, err
 	}
 
-	var profileMaxFreq int
-	var profileMinFreq int
-	// check if profile is a default one
+	var profileMaxFreq = profile.Spec.Max
+	var profileMinFreq = profile.Spec.Min
+
+	// Use default hardware limits if not specified
+	if profile.Spec.Max == 0 {
+		profileMaxFreq = absoluteMaximumFrequency
+	}
+	if profile.Spec.Min == 0 {
+		profileMinFreq = absoluteMinimumFrequency
+	}
+
+	// If both max and min are not specified and it's EPP-based profile, override with EPP-based calculation
 	if profile.Spec.Epp != "" && profile.Spec.Max == 0 && profile.Spec.Min == 0 {
 		profileMaxFreq = int(float64(absoluteMaximumFrequency) - (float64((absoluteMaximumFrequency - absoluteMinimumFrequency)) * profilePercentages[profile.Spec.Epp]["difference"]))
 		profileMinFreq = int(profileMaxFreq) - MinFreqOffset
-	} else {
-		profileMaxFreq = profile.Spec.Max
-		profileMinFreq = profile.Spec.Min
 	}
+
+	logger.V(5).Info("making sure max value is greater than or equal to the min value")
+	if profileMaxFreq < profileMinFreq {
+		err = fmt.Errorf("max frequency (%d) cannot be lower than the min frequency (%d)", profileMaxFreq, profileMinFreq)
+		logger.Error(err, fmt.Sprintf("error creating the profile '%s'", profile.Spec.Name))
+		return ctrl.Result{Requeue: false}, err
+	}
+
 	if profileMaxFreq > absoluteMaximumFrequency || profileMinFreq < absoluteMinimumFrequency {
-		InvalidRangeError := fmt.Errorf("max and min frequency must be within the range %d-%d", absoluteMinimumFrequency, absoluteMaximumFrequency)
-		logger.Error(InvalidRangeError, fmt.Sprintf("error creating the profile '%s'", profile.Spec.Name))
-		return ctrl.Result{Requeue: false}, InvalidRangeError
+		err = fmt.Errorf("max and min frequency must be within the range %d-%d", absoluteMinimumFrequency, absoluteMaximumFrequency)
+		logger.Error(err, fmt.Sprintf("error creating the profile '%s'", profile.Spec.Name))
+		return ctrl.Result{Requeue: false}, err
 	}
 	actualEpp := profile.Spec.Epp
 	if !power.IsFeatureSupported(power.EPPFeature) && actualEpp != "" {
@@ -251,7 +259,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 			return ctrl.Result{}, err
 		}
 		if profile.Spec.Shared {
-			logger.V(5).Info(fmt.Sprintf("shared power profile successfully created: name - %s max - %d min - %d EPP - %s", profile.Spec.Name, profile.Spec.Max, profile.Spec.Min, profile.Spec.Epp))
+			logger.V(5).Info(fmt.Sprintf("shared power profile successfully created: name - %s max - %d min - %d EPP - %s", profile.Spec.Name, profileMaxFreq, profileMinFreq, profile.Spec.Epp))
 			workloadName := fmt.Sprintf("shared-%s-workload", nodeName)
 			// check if the current node has a shared workload
 			workload := &powerv1.PowerWorkload{}
