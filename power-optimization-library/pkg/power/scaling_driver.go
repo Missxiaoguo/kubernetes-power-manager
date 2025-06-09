@@ -80,6 +80,7 @@ func isScalingDriverSupported(driver string) bool {
 		"acpi-cpufreq",
 		"amd-pstate",
 		"amd-pstate-epp",
+		"cppc_cpufreq",
 	}
 	for _, s := range supportedDrivers {
 		if driver == s {

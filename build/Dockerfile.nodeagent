@@ -27,6 +27,7 @@ FROM ${BASE_IMAGE}
 WORKDIR /
 COPY LICENSE /licenses/LICENSE
 COPY --from=builder /install_root .
+COPY --from=builder /usr/bin/lscpu /usr/bin/lscpu
 USER 10001
 
 ENTRYPOINT ["/nodeagent"]

@@ -186,6 +186,10 @@ func TestPowerNode_Reconcile(t *testing.T) {
 			},
 		},
 	}
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	dummyFilesystemHost, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
@@ -330,6 +334,10 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 			clientErr: "client update error",
 		},
 	}
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	dummyFilesystemHost, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
@@ -363,6 +371,10 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 
 // go test -fuzz FuzzPowerNodeController -run=FuzzPowerNodeController -parallel=1
 func FuzzPowerNodeController(f *testing.F) {
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	f.Add("TestNode", "some-plugin", "performance", "balance-performance", "balance-power", "perfromance-TestNode", "shared-TestNode", "0-44", "reserved-TestNode")
 	f.Fuzz(func(t *testing.T, nodeName string, devicePlugin string, prof1 string, prof2 string, prof3 string, workload string, sharedPool string, unaffectedCores string, reservedPools string) {
 		nodeName = strings.ReplaceAll(nodeName, " ", "")

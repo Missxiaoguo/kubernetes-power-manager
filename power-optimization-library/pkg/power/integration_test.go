@@ -67,6 +67,10 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 	defer setupCpuScalingTests(cpuConfigAll)()
 	defer setupTopologyTest(cpuTopologyMap)()
 
+	originalGetFromLscpu := GetFromLscpu
+	defer func() { GetFromLscpu = originalGetFromLscpu }()
+	GetFromLscpu = TestGetFromLscpu
+
 	instance, err := CreateInstance("host")
 
 	assert.ErrorContainsf(t, err, "failed to determine driver", "expecting c-states feature error")

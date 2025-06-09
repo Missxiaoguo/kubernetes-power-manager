@@ -74,7 +74,7 @@ func (l *CoreTypeList) appendIfUnique(min uint, max uint) uint {
 var defaultPowerProfile *profileImpl
 
 func isScalingDriverSupported(driver string) bool {
-	for _, s := range []string{"intel_pstate", "intel_cpufreq", "acpi-cpufreq"} {
+	for _, s := range []string{"intel_pstate", "intel_cpufreq", "acpi-cpufreq", "cppc_cpufreq"} {
 		if driver == s {
 			return true
 		}

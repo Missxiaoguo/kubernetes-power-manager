@@ -35,6 +35,14 @@ func (m *mockCpuTopology) getEffectiveUncore() Uncore {
 	return nil
 }
 
+func (m *mockCpuTopology) getArchitecture() string {
+	ret := m.Called()
+	if ret.Get(0) != nil {
+		return ret.Get(0).(string)
+	}
+	return ""
+}
+
 func (m *mockCpuTopology) addCpu(u uint) (Cpu, error) {
 	ret := m.Called(u)
 
@@ -326,7 +334,7 @@ type topologyTestSuite struct {
 	suite.Suite
 	origBasePath         string
 	origGetNumCpus       func() uint
-	origDiscoverTopology func() (Topology, error)
+	origDiscoverTopology func(string) (Topology, error)
 }
 
 func TestTopologyDiscovery(t *testing.T) {
@@ -407,7 +415,7 @@ func (s *topologyTestSuite) TestCpuImpl_discoverTopology() {
 	})
 	defer teardown()
 
-	topology, err := discoverTopology()
+	topology, err := discoverTopology("x86_64")
 	assert.NoError(t, err)
 	topologyObj := topology.(*cpuTopology)
 
@@ -495,9 +503,15 @@ func (s *topologyTestSuite) TestCpuPackage_Getters() {
 func (s *topologyTestSuite) TestCpuPackage_addCpu() {
 	defer setupTopologyTest(map[string]map[string]string{})()
 	// fail to read fs
+	topo := &cpuTopology{
+		packages:     packageList{},
+		allCpus:      make(CpuList, 1),
+		architecture: "x86_64",
+	}
 	pkg := &cpuPackage{
-		dies: dieList{},
-		cpus: make(CpuList, 1),
+		topology: topo,
+		dies:     dieList{},
+		cpus:     make(CpuList, 1),
 	}
 	cpu, err := pkg.addCpu(0)
 	assert.Error(s.T(), err)
@@ -527,9 +541,15 @@ func (s *topologyTestSuite) TestCpuDie_Getters() {
 func (s *topologyTestSuite) TestCpuDie_addCpu() {
 	defer setupTopologyTest(map[string]map[string]string{})()
 	// fail to read fs
+	topo := &cpuTopology{
+		packages:     packageList{},
+		allCpus:      make(CpuList, 1),
+		architecture: "x86_64",
+	}
 	pkg := &cpuPackage{
-		dies: dieList{},
-		cpus: make(CpuList, 1),
+		topology: topo,
+		dies:     dieList{},
+		cpus:     make(CpuList, 1),
 	}
 	cpu, err := pkg.addCpu(0)
 	assert.Error(s.T(), err)

@@ -2,6 +2,8 @@ package power
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -101,8 +103,32 @@ func TestInitialFeatureList(t *testing.T) {
 func TestCreateInstance(t *testing.T) {
 	origFeatureList := featureList
 	featureList = FeatureSet{}
-
 	defer func() { featureList = origFeatureList }()
+
+	originalGetFromLscpu := GetFromLscpu
+	defer func() { GetFromLscpu = originalGetFromLscpu }()
+	GetFromLscpu = TestGetFromLscpu
+
+	tmpDir := t.TempDir()
+	path := fmt.Sprintf("%s/testing/cpus", tmpDir)
+
+	cpudir := filepath.Join(path, "cpu0")
+	err := os.MkdirAll(filepath.Join(cpudir, "topology"), os.ModePerm)
+	if err != nil {
+		panic(err)
+	}
+	err = os.WriteFile(filepath.Join(cpudir, packageIdFile), []byte("128"+"\n"), 0664)
+	if err != nil {
+		panic(err)
+	}
+	err = os.WriteFile(filepath.Join(cpudir, dieIdFile), []byte("0"+"\n"), 0644)
+	if err != nil {
+		panic(err)
+	}
+	err = os.WriteFile(filepath.Join(cpudir, coreIdFile), []byte("0"+"\n"), 0644)
+	if err != nil {
+		panic(err)
+	}
 
 	const machineName = "host1"
 	host, err := CreateInstance(machineName)
@@ -110,7 +136,8 @@ func TestCreateInstance(t *testing.T) {
 	assert.Error(t, err)
 
 	featureList[4] = &featureStatus{initFunc: func() featureStatus { return featureStatus{} }}
-	host, err = CreateInstance(machineName)
+	//host, err = CreateInstance(machineName)
+	host, err = CreateInstanceWithConf(machineName, LibConfig{CpuPath: path, ModulePath: "testing/proc.modules", Cores: uint(1)})
 	assert.NoError(t, err)
 	assert.NotNil(t, host)
 

@@ -441,6 +441,11 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			clientObjs: []runtime.Object{sharedSkeleton, nodeObj},
 		},
 	}
+
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	for _, tc := range tcases {
 		t.Log(tc.testCase)
 		t.Setenv("NODE_NAME", testNode)
@@ -678,6 +683,11 @@ func FuzzPowerWorkloadController(f *testing.F) {
 				},
 			},
 		}
+
+		originalGetFromLscpu := power.GetFromLscpu
+		defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+		power.GetFromLscpu = power.TestGetFromLscpu
+
 		r, err := createWorkloadReconcilerObject(clientObjs)
 		assert.Nil(t, err)
 		host, teardown, err := fullDummySystem()
