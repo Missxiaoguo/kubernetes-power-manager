@@ -331,10 +331,10 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	// Create the extended resources for the profile
-	err = r.createExtendedResources(nodeName, profile.Spec.Name, profile.Spec.Epp, &logger)
+	// Create or update the extended resources for the profile
+	err = r.ensureExtendedResources(nodeName, profile.Spec.Name, profile.Spec.Epp, &logger)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("error creating the extended resources for the base profile: %v", err)
+		return ctrl.Result{}, fmt.Errorf("error creating or updating the extended resources for the base profile: %v", err)
 	}
 
 	// Create the power workload for the profile
@@ -380,7 +380,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 	return ctrl.Result{}, nil
 }
 
-func (r *PowerProfileReconciler) createExtendedResources(nodeName string, profileName string, eppValue string, logger *logr.Logger) error {
+func (r *PowerProfileReconciler) ensureExtendedResources(nodeName string, profileName string, eppValue string, logger *logr.Logger) error {
 	node := &corev1.Node{}
 	err := r.Client.Get(context.TODO(), client.ObjectKey{
 		Name: nodeName,
