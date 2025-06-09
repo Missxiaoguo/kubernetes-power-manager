@@ -3,11 +3,12 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/go-logr/logr"
 	"reflect"
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/go-logr/logr"
 
 	//"k8s.io/apimachinery/pkg/api/errors"
 	"go.uber.org/zap/zapcore"
@@ -399,7 +400,9 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 						Name:      "TestNode",
 						Namespace: IntelPowerNamespace,
 					},
-					Spec: powerv1.PowerNodeSpec{CustomDevices: []string{"device-plugin"}},
+					Status: powerv1.PowerNodeStatus{
+						CustomDevices: []string{"device-plugin"},
+					},
 				},
 				&corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{

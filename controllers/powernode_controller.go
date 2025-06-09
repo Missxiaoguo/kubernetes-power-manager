@@ -81,8 +81,8 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 		return ctrl.Result{RequeueAfter: queuetime}, err
 	}
 
-	if len(powerNode.Spec.CustomDevices) > 0 {
-		logger.V(5).Info("the power node contains the following custom devices.", "Custom Devices", powerNode.Spec.CustomDevices)
+	if len(powerNode.Status.CustomDevices) > 0 {
+		logger.V(5).Info("the power node contains the following custom devices.", "Custom Devices", powerNode.Status.CustomDevices)
 	}
 
 	powerProfiles := &powerv1.PowerProfileList{}
@@ -155,10 +155,10 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 		}
 	}
 
-	logger.V(5).Info("setting the power node spec - profiles, workloads, containers")
-	powerNode.Spec.PowerProfiles = powerProfileStrings
-	powerNode.Spec.PowerWorkloads = powerWorkloadStrings
-	powerNode.Spec.PowerContainers = powerContainers
+	logger.V(5).Info("setting the power node status - profiles, workloads, containers")
+	powerNode.Status.PowerProfiles = powerProfileStrings
+	powerNode.Status.PowerWorkloads = powerWorkloadStrings
+	powerNode.Status.PowerContainers = powerContainers
 
 	logger.V(5).Info("setting the shared pool, shared cores, shared profiles and reserved system CPUs")
 	sharedPool := r.PowerLibrary.GetSharedPool()
@@ -167,28 +167,28 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 	reservedSystemCpus := r.PowerLibrary.GetReservedPool().Cpus().IDs()
 
 	logger.V(5).Info("configurating the cores to the shared pool")
-	powerNode.Spec.PowerContainers = powerContainers
 	if len(sharedCores) > 0 && sharedProfile != nil {
 		cores := prettifyCoreList(sharedCores)
-		powerNode.Spec.SharedPool = fmt.Sprintf("%s || %v || %v || %s", sharedProfile.Name(), sharedProfile.MaxFreq(), sharedProfile.MinFreq(), cores)
+		powerNode.Status.SharedPool = fmt.Sprintf("%s || %v || %v || %s", sharedProfile.Name(), sharedProfile.MaxFreq(), sharedProfile.MinFreq(), cores)
 	} else {
-		powerNode.Spec.SharedPool = ""
+		powerNode.Status.SharedPool = ""
 	}
 	// look for any special reserved pools
 	pools := r.PowerLibrary.GetAllExclusivePools()
-	powerNode.Spec.ReservedPools = []string{}
+	powerNode.Status.ReservedPools = []string{}
 	for _, pool := range *pools {
 		if strings.Contains(pool.Name(), nodeName+"-reserved-") {
 			cores := prettifyCoreList(pool.Cpus().IDs())
-			powerNode.Spec.ReservedPools = append(powerNode.Spec.ReservedPools, fmt.Sprintf("%v || %v || %s", pool.GetPowerProfile().MaxFreq(), pool.GetPowerProfile().MinFreq(), cores))
+			powerNode.Status.ReservedPools = append(powerNode.Status.ReservedPools, fmt.Sprintf("%v || %v || %s", pool.GetPowerProfile().MaxFreq(), pool.GetPowerProfile().MinFreq(), cores))
 		}
 	}
 	logger.V(5).Info("configurating the cores to the reserved pool")
 	cores := prettifyCoreList(reservedSystemCpus)
-	powerNode.Spec.UnaffectedCores = cores
-	err = r.Client.Update(context.TODO(), powerNode)
+	powerNode.Status.UnaffectedCores = cores
+
+	err = r.Client.Status().Update(c, powerNode)
 	if err != nil {
-		return ctrl.Result{RequeueAfter: queuetime}, err
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{RequeueAfter: queuetime}, nil

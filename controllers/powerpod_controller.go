@@ -167,8 +167,8 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 	}
 
 	// Get the Containers of the Pod that are requesting exclusive CPUs or custom devices
-	logger.V(5).Info("retrieving the containers requested for the exclusive CPUs or Custom Resources", "Custom Resources", powernode.Spec.CustomDevices)
-	admissibleContainers := getAdmissibleContainers(pod, powernode.Spec.CustomDevices, r.PodResourcesClient, &logger)
+	logger.V(5).Info("retrieving the containers requested for the exclusive CPUs or Custom Resources", "Custom Resources", powernode.Status.CustomDevices)
+	admissibleContainers := getAdmissibleContainers(pod, powernode.Status.CustomDevices, r.PodResourcesClient, &logger)
 	if len(admissibleContainers) == 0 {
 		logger.Info("no containers are requesting exclusive CPUs or Custom Resources")
 		return ctrl.Result{}, nil
@@ -186,7 +186,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 		logger.Error(err, "error retrieving the power profiles from the cluster")
 		return ctrl.Result{}, err
 	}
-	powerProfilesFromContainers, powerContainers, recoveryErrs := r.getPowerProfileRequestsFromContainers(admissibleContainers, powerProfileCRs.Items, powernode.Spec.CustomDevices, pod, &logger)
+	powerProfilesFromContainers, powerContainers, recoveryErrs := r.getPowerProfileRequestsFromContainers(admissibleContainers, powerProfileCRs.Items, powernode.Status.CustomDevices, pod, &logger)
 	logger.V(5).Info("retrieving the power profiles and cores from the pod requests")
 	for profile, cores := range powerProfilesFromContainers {
 		logger.V(5).Info("retrieving the workload for the power profile")

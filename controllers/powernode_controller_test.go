@@ -44,7 +44,7 @@ func createPowerNodeReconcilerObject(objs []runtime.Object) (*PowerNodeReconcile
 	}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
+	cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).WithStatusSubresource(&powerv1.PowerNode{}).Build()
 	state, err := podstate.NewState()
 	if err != nil {
 		return nil, err
@@ -60,7 +60,8 @@ var defaultNode = &powerv1.PowerNode{
 		Name:      "TestNode",
 		Namespace: IntelPowerNamespace,
 	},
-	Spec: powerv1.PowerNodeSpec{
+	Spec: powerv1.PowerNodeSpec{},
+	Status: powerv1.PowerNodeStatus{
 		CustomDevices: []string{"device-plugin"},
 	},
 }
@@ -169,7 +170,7 @@ func TestPowerNode_Reconcile(t *testing.T) {
 			},
 		},
 		{
-			testCase:      "Test Case 2 - Node not found",
+			testCase:      "Test Case 2 - PowerNode not found (should requeue)",
 			nodeName:      "TestNode",
 			powerNodeName: "TestNode",
 			clientObjs: []runtime.Object{
@@ -289,7 +290,10 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 					*wList = powerv1.PowerWorkloadList{Items: []powerv1.PowerWorkload{*defaultWload}}
 				})
 				mkcl.On("Update", mock.Anything, mock.AnythingOfType("*v1.Pod")).Return(nil)
-				mkcl.On("Update", mock.Anything, mock.Anything).Return(fmt.Errorf("client update error"))
+
+				mkwriter := new(mockResourceWriter)
+				mkwriter.On("Update", mock.Anything, mock.Anything).Return(fmt.Errorf("client update error"))
+				mkcl.On("Status").Return(mkwriter)
 				return mkcl
 			},
 			clientErr: "client update error",
@@ -437,7 +441,7 @@ func FuzzPowerNodeController(f *testing.F) {
 					Name:      nodeName,
 					Namespace: IntelPowerNamespace,
 				},
-				Spec: powerv1.PowerNodeSpec{
+				Status: powerv1.PowerNodeStatus{
 					CustomDevices:   []string{devicePlugin},
 					PowerProfiles:   []string{prof1, prof2, prof3},
 					PowerWorkloads:  []string{workload},
