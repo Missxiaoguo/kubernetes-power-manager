@@ -571,6 +571,10 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyHandling(t *testing.T) {
 		},
 	}
 
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	for _, tc := range tcases {
 		t.Run(tc.testCase, func(t *testing.T) {
 			t.Setenv("NODE_NAME", tc.nodeName)
