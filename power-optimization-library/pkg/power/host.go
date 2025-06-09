@@ -1,6 +1,7 @@
 package power
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
 	"regexp"
@@ -76,7 +77,7 @@ func initHost(nodeName string) (Host, error) {
 		host:  host,
 	}}
 
-	topology, err := discoverTopology()
+	topology, err := discoverTopology(host.architecture)
 	if err != nil {
 		log.Error(err, "failed to discover cpuTopology")
 		return nil, fmt.Errorf("failed to init host: %w", err)
@@ -159,13 +160,18 @@ func (host *hostImpl) GetVendorID() string {
 }
 
 // GetFromLscpu returns the value of a certain key from the lscpu output.
-func GetFromLscpu(regex string) (string, error) {
+var GetFromLscpu = func(regex string) (string, error) {
 	regexp.MustCompile(regex)
 	cmdStr := fmt.Sprintf("lscpu | egrep -w \"%s\" | cut -d ':' -f 2", regex)
 	cmd := exec.Command("bash", "-c", cmdStr)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err
+	}
+	if len(stderr.String()) > 0 {
+		return "", fmt.Errorf("failed to get lscpu info: %s", stderr.String())
 	}
 	re := regexp.MustCompile(`\s+`)
 	finalResult := re.ReplaceAllString(string(output), "")

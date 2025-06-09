@@ -240,6 +240,11 @@ func TestTimeOfDayCronJob_Reconcile_CronProfile(t *testing.T) {
 			Namespace: "intel-power",
 		},
 	}
+
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	nodemk := new(hostMock)
 	poolmk := new(poolMock)
 	poolmk.On("SetPowerProfile", mock.Anything).Return(nil)
@@ -680,6 +685,11 @@ func TestTimeOfDayCronJob_Reconcile_NoExistingWorkload_Lib_Err(t *testing.T) {
 			},
 		},
 	}
+
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
 			Name:      "timeofday-test",
@@ -908,6 +918,10 @@ func TestTimeOfDayCronJob_Reconcile_ErrsSharedPoolExists(t *testing.T) {
 			},
 		},
 	}
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
 			Name:      "timeofday-test",
@@ -1116,6 +1130,10 @@ func TestTimeOfDayCronJob_Reconcile_ErrsPodTuning(t *testing.T) {
 			},
 		},
 	}
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
 			Name:      "timeofday-test",
@@ -1150,9 +1168,14 @@ func TestTimeOfDayCronJob_Reconcile_ErrsPodTuning(t *testing.T) {
 }
 
 func TestTimeOfDayCronJob_Reconcile_InvalidRequests(t *testing.T) {
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	_, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
+
 	// incorrect namespace
 	r, err := createTODCronReconcilerObject([]client.Object{})
 	assert.Nil(t, err)
@@ -1325,6 +1348,10 @@ func TestCronReconcileSetupFail(t *testing.T) {
 
 // go test -fuzz FuzzTimeOfDayCronController -run=FuzzTimeOfDayCronController -parallel=1
 func FuzzTimeOfDayCronController(f *testing.F) {
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	f.Add("Eire", 12, 32, 30, "performance", "balance-power", "shared", "power", "bigger", "C4", "25")
 	f.Fuzz(func(t *testing.T, timeZone string, hr int, min int, sec int, prof1 string, prof2 string, prof3 string, label1 string, label2 string, cstate string, corevalue string) {
 		testNode := "TestNode"

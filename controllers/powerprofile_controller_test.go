@@ -107,6 +107,10 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 		t.Error(err)
 		t.Fatalf("error creating the reconciler object")
 	}
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	host, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
@@ -151,6 +155,10 @@ func TestPowerProfile_Reconcile_SharedPoolCreation(t *testing.T) {
 			},
 		},
 	}
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	// needed to create library using a dummy sysfs as it will call functions that can't be mocked
 	_, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
@@ -279,6 +287,9 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 			},
 		},
 	}
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
 
 	for _, tc := range tcases {
 		t.Setenv("NODE_NAME", tc.nodeName)
@@ -427,6 +438,10 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 			},
 		},
 	}
+
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
 
 	for _, tc := range tcases {
 		t.Setenv("NODE_NAME", tc.nodeName)
@@ -682,6 +697,11 @@ func TestPowerProfile_Reconcile_SharedProfileDoesNotExistInLibrary(t *testing.T)
 			},
 		},
 	}
+
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	for _, tc := range tcases {
 		t.Setenv("NODE_NAME", tc.nodeName)
 
@@ -995,6 +1015,11 @@ func TestPowerProfile_Reconcile_SharedFrequencyValuesLessThanAbsoluteValue(t *te
 			},
 		},
 	}
+
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	// needed to create library using a dummy sysfs as it will call functions that can't be mocked
 	_, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
@@ -1064,6 +1089,11 @@ func TestPowerProfile_Reconcile_MaxValueZeroMinValueGreaterThanZero(t *testing.T
 			},
 		},
 	}
+
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	_, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
@@ -1186,6 +1216,10 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 			},
 		},
 	}
+
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
 
 	for _, tc := range tcases {
 		t.Setenv("NODE_NAME", tc.nodeName)
@@ -1405,6 +1439,11 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 			clientObjs: []runtime.Object{},
 		},
 	}
+
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	_, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
@@ -1641,6 +1680,10 @@ func TestPowerProfile_Reconcile_ClientErrs(t *testing.T) {
 		},
 	}
 
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	dummyFilesystemHost, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
@@ -1734,6 +1777,11 @@ func TestPowerProfile_Reconcile_UnsupportedGovernor(t *testing.T) {
 			},
 		},
 	}
+
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	for _, tc := range tcases {
 		t.Setenv("NODE_NAME", tc.nodeName)
 		r, err := createProfileReconcilerObject(tc.clientObjs)
@@ -1778,6 +1826,10 @@ func TestPowerProfile_Wrong_Namespace(t *testing.T) {
 // go test -fuzz FuzzPowerProfileController -run=FuzzPowerProfileController -parallel=1
 func FuzzPowerProfileController(f *testing.F) {
 	f.Add("TestNode", "performance", 3600, 3200, "performance", "powersave", false)
+	originalGetFromLscpu := power.GetFromLscpu
+	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
+	power.GetFromLscpu = power.TestGetFromLscpu
+
 	f.Fuzz(func(t *testing.T, nodeName, prof string, maxVal int, minVal int, epp string, governor string, shared bool) {
 		nodeName = strings.ReplaceAll(nodeName, " ", "")
 		nodeName = strings.ReplaceAll(nodeName, "\t", "")

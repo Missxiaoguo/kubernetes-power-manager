@@ -121,10 +121,15 @@ func (m *hostMock) GetFreqRanges() CoreTypeList {
 func TestHost_initHost(t *testing.T) {
 	origGetAllCores := discoverTopology
 	defer func() { discoverTopology = origGetAllCores }()
+
+	originalGetFromLscpu := GetFromLscpu
+	defer func() { GetFromLscpu = originalGetFromLscpu }()
+	GetFromLscpu = TestGetFromLscpu
+
 	const hostName = "host"
 
 	// get topology fail
-	discoverTopology = func() (Topology, error) { return new(mockCpuTopology), fmt.Errorf("error") }
+	discoverTopology = func(string) (Topology, error) { return new(mockCpuTopology), fmt.Errorf("error") }
 	host, err := initHost(hostName)
 	assert.Nil(t, host)
 	assert.Error(t, err)
@@ -137,7 +142,7 @@ func TestHost_initHost(t *testing.T) {
 	mockedCores := CpuList{core1, core2}
 	topObj := new(mockCpuTopology)
 	topObj.On("CPUs").Return(&mockedCores)
-	discoverTopology = func() (Topology, error) { return topObj, nil }
+	discoverTopology = func(string) (Topology, error) { return topObj, nil }
 	host, err = initHost(hostName)
 
 	assert.NoError(t, err)
