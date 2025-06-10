@@ -27,37 +27,6 @@ import (
 type PowerNodeSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-
-	// The name of the node
-	NodeName string `json:"nodeName,omitempty"`
-
-	PowerProfiles []string `json:"powerProfiles,omitempty"`
-
-	PowerWorkloads []string `json:"powerWorkloads,omitempty"`
-
-	SharedPool string `json:"sharedPool,omitempty"`
-
-	UnaffectedCores string `json:"unaffectedCores,omitempty"`
-
-	ReservedPools []string `json:"reservedPools,omitempty"`
-
-	// Information about the containers in the cluster utilizing some PowerWorkload
-	PowerContainers []Container `json:"powerContainers,omitempty"`
-
-	// The CustomDevices include alternative devices that represent other resources
-	CustomDevices []string `json:"customDevices,omitempty"`
-
-	// The PowerProfiles in the cluster that are currently being used by Pods
-	//ActiveProfiles map[string]bool `json:"activeProfiles,omitempty"`
-
-	// Information about the active PowerWorkloads in the cluster
-	//ActiveWorkloads []WorkloadInfo `json:"activeWorkloads,omitempty"`
-
-	// Shows what cores are in the Default and Shared Pools
-	//SharedPool SharedPoolInfo `json:"sharedPools,omitempty"`
-
-	// The CPUs that are not effected by any Power Profiles
-	//UneffectedCpus []int `json:"uneffectedCpus,omitempty"`
 }
 
 // PowerNodeStatus defines the observed state of PowerNode
@@ -65,8 +34,26 @@ type PowerNodeStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// The state of the Guaranteed Pods and Shared Pool in a cluster
-	PowerNodeCPUState `json:"powerNodeCPUState,omitempty"`
+	// The power profiles available on this node with their settings
+	PowerProfiles []string `json:"powerProfiles,omitempty"`
+
+	// The power workloads currently configured on this node
+	PowerWorkloads []string `json:"powerWorkloads,omitempty"`
+
+	// The shared pool configuration and cores
+	SharedPool string `json:"sharedPool,omitempty"`
+
+	// Cores are not affected by any Power Profiles
+	UnaffectedCores string `json:"unaffectedCores,omitempty"`
+
+	// Reserved pools with their configurations
+	ReservedPools []string `json:"reservedPools,omitempty"`
+
+	// Information about the containers in the cluster utilizing some PowerWorkload
+	PowerContainers []Container `json:"powerContainers,omitempty"`
+
+	// The CustomDevices include alternative devices that represent other resources
+	CustomDevices []string `json:"customDevices,omitempty"`
 }
 
 type PowerNodeCPUState struct {
@@ -111,22 +98,6 @@ type Container struct {
 
 	// The PowerWorkload that the Container is utilizing
 	Workload string `json:"workload,omitempty"`
-}
-
-type WorkloadInfo struct {
-	// The name of the PowerWorkload
-	Name string `json:"name,omitempty"`
-
-	// The CPUs that are utilizing the PowerWorkload
-	CpuIds []uint `json:"cores,omitempty"`
-}
-
-type SharedPoolInfo struct {
-	// The name or either Default or Shared pool
-	Profile string `json:"name,omitempty"`
-
-	// The cores that are a part of this Shared Pool
-	CpuIds []uint `json:"sharedPoolCpuIds,omitempty"`
 }
 
 // +kubebuilder:object:root=true

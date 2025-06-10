@@ -224,12 +224,6 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 					},
 				}
 
-				powerNodeSpec := &powerv1.PowerNodeSpec{
-					NodeName:      node.Name,
-					CustomDevices: customDevices,
-				}
-
-				powerNode.Spec = *powerNodeSpec
 				err = r.Client.Create(c, powerNode)
 				if err != nil {
 					logger.Error(err, "error creating the power node CRD")
@@ -241,8 +235,8 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 		}
 
 		patch := client.MergeFrom(powerNode.DeepCopy())
-		powerNode.Spec.CustomDevices = customDevices
-		err = r.Client.Patch(c, powerNode, patch)
+		powerNode.Status.CustomDevices = customDevices
+		err = r.Client.Status().Patch(c, powerNode, patch)
 		if err != nil {
 			logger.Error(err, "failed to update power node with custom devices.")
 			return ctrl.Result{}, err

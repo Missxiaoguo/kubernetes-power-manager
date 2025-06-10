@@ -41,7 +41,9 @@ func createConfigReconcilerObject(objs []client.Object) (*PowerConfigReconciler,
 		return nil, err
 	}
 	// Create a fake client to mock API calls.
-	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
+	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).
+		WithStatusSubresource(&powerv1.PowerConfig{}).
+		WithStatusSubresource(&powerv1.PowerNode{}).Build()
 
 	state := state.NewPowerNodeData()
 
@@ -509,8 +511,8 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 		if !reflect.DeepEqual(config.Spec.CustomDevices, tc.expectedCustomDevices) {
 			t.Errorf("%s failed: expected customDevices for the power config object to be %v, got %v", tc.testCase, config.Spec.CustomDevices, tc.expectedCustomDevices)
 		}
-		if !reflect.DeepEqual(powerNode.Spec.CustomDevices, tc.expectedCustomDevices) {
-			t.Errorf("%s failed: expected customDevices for the power node object to be %v, got %v", tc.testCase, powerNode.Spec.CustomDevices, tc.expectedCustomDevices)
+		if !reflect.DeepEqual(powerNode.Status.CustomDevices, tc.expectedCustomDevices) {
+			t.Errorf("%s failed: expected customDevices for the power node object to be %v, got %v", tc.testCase, powerNode.Status.CustomDevices, tc.expectedCustomDevices)
 		}
 	}
 }
@@ -711,8 +713,8 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 		if !reflect.DeepEqual(config.Spec.CustomDevices, tc.expectedCustomDevices) {
 			t.Errorf("%s failed: expected customDevices for the power config object to be %v, got %v", tc.testCase, config.Spec.CustomDevices, tc.expectedCustomDevices)
 		}
-		if !reflect.DeepEqual(powerNode.Spec.CustomDevices, tc.expectedCustomDevices) {
-			t.Errorf("%s failed: expected customDevices for the power node object to be %v, got %v", tc.testCase, powerNode.Spec.CustomDevices, tc.expectedCustomDevices)
+		if !reflect.DeepEqual(powerNode.Status.CustomDevices, tc.expectedCustomDevices) {
+			t.Errorf("%s failed: expected customDevices for the power node object to be %v, got %v", tc.testCase, powerNode.Status.CustomDevices, tc.expectedCustomDevices)
 		}
 	}
 }
