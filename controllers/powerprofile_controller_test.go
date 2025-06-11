@@ -1927,3 +1927,186 @@ func TestPowerProfile_Reconcile_SetupFail(t *testing.T) {
 	assert.Error(t, err)
 
 }
+
+// Test that updating a profile correctly updates all affected pools
+func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
+	// Helper function to verify profile parameters match expected values
+	verifyProfileParameters := func(profile power.Profile,
+		expectedName string,
+		expectedMaxMHz uint,
+		expectedMinMHz uint,
+		expectedGovernor string,
+		expectedEpp string,
+	) {
+		assert.Equal(t, expectedName, profile.Name())
+		assert.Equal(t, expectedMaxMHz*1000, profile.MaxFreq())
+		assert.Equal(t, expectedMinMHz*1000, profile.MinFreq())
+		assert.Equal(t, expectedEpp, profile.Epp())
+		assert.Equal(t, expectedGovernor, profile.Governor())
+		assert.Equal(t, expectedEpp, profile.Epp())
+	}
+
+	type testCase struct {
+		name                     string
+		profileName              string
+		otherProfileName         string
+		setupSharedPoolProfile   string // "" means no profile set on shared pool
+		setupReservedPoolProfile string // "" means no profile set on reserved pool
+		expectSharedUpdate       bool   // whether shared pool should be updated
+		expectReservedUpdate     bool   // whether reserved pool should be updated
+	}
+
+	testCases := []testCase{
+		{
+			name:                     "Update profile - shared pool uses profile",
+			profileName:              "test-profile",
+			setupSharedPoolProfile:   "test-profile",
+			setupReservedPoolProfile: "",
+			expectSharedUpdate:       true,
+			expectReservedUpdate:     false,
+		},
+		{
+			name:                     "Update profile - reserved pool uses profile",
+			profileName:              "test-profile",
+			setupSharedPoolProfile:   "",
+			setupReservedPoolProfile: "test-profile",
+			expectSharedUpdate:       false,
+			expectReservedUpdate:     true,
+		},
+		{
+			name:                     "Update profile - shared & reserved pools use different profile",
+			profileName:              "test-profile",
+			otherProfileName:         "other-profile",
+			setupSharedPoolProfile:   "other-profile",
+			setupReservedPoolProfile: "other-profile",
+			expectSharedUpdate:       false,
+			expectReservedUpdate:     false,
+		},
+		{
+			name:                     "Create profile - no pools affected",
+			profileName:              "test-profile",
+			setupSharedPoolProfile:   "",
+			setupReservedPoolProfile: "",
+			expectSharedUpdate:       false,
+			expectReservedUpdate:     false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			nodeName := "TestNode"
+
+			// Updated profile
+			clientObjs := []runtime.Object{
+				&powerv1.PowerProfile{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      tc.profileName,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerProfileSpec{
+						Name:     tc.profileName,
+						Max:      3600,
+						Min:      3200,
+						Epp:      "performance",
+						Governor: "powersave",
+					},
+				},
+				&corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nodeName,
+					},
+					Status: corev1.NodeStatus{
+						Capacity: map[corev1.ResourceName]resource.Quantity{
+							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
+						},
+					},
+				},
+			}
+
+			t.Setenv("NODE_NAME", nodeName)
+			r, err := createProfileReconcilerObject(clientObjs)
+			assert.Nil(t, err)
+
+			// Use fullDummySystem for a real power library instance
+			host, teardown, err := fullDummySystem()
+			assert.Nil(t, err)
+			defer teardown()
+
+			var sharedPool power.Pool
+			var reservedPool power.Pool
+			var reservedPoolName string
+
+			// Setup exclusive pool
+			_, err = host.AddExclusivePool(tc.profileName)
+			assert.Nil(t, err)
+
+			// Setup initial shared pool profile if specified
+			sharedPool = host.GetSharedPool()
+			if tc.setupSharedPoolProfile != "" {
+				profileName := tc.profileName
+				if tc.setupSharedPoolProfile != tc.profileName {
+					profileName = tc.otherProfileName
+				}
+				initialProfile, err := power.NewPowerProfile(profileName, uint(2000), uint(4000), "powersave", "power")
+				assert.Nil(t, err)
+				err = sharedPool.SetPowerProfile(initialProfile)
+				assert.Nil(t, err)
+			}
+
+			// Setup initial reserved pool profile if specified
+			if tc.setupReservedPoolProfile != "" {
+				reservedPoolName = nodeName + "-reserved-[0,1,2,3]"
+				reservedPool, err = host.AddExclusivePool(reservedPoolName)
+				assert.Nil(t, err)
+				initialProfile, err := power.NewPowerProfile(tc.setupReservedPoolProfile, uint(2000), uint(4000), "powersave", "balance_performance")
+				assert.Nil(t, err)
+				err = reservedPool.SetPowerProfile(initialProfile)
+				assert.Nil(t, err)
+			}
+
+			r.PowerLibrary = host
+
+			req := reconcile.Request{
+				NamespacedName: client.ObjectKey{
+					Name:      tc.profileName,
+					Namespace: IntelPowerNamespace,
+				},
+			}
+
+			// Execute the reconciliation
+			_, err = r.Reconcile(context.TODO(), req)
+			assert.Nil(t, err)
+
+			// Verify expectations
+			exclusivePool := host.GetExclusivePool(tc.profileName)
+			assert.NotNil(t, exclusivePool, "Exclusive pool should be created/updated")
+			currentProfile := exclusivePool.GetPowerProfile()
+			assert.NotNil(t, currentProfile, "Exclusive pool should have a profile")
+			verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200), "powersave", "performance")
+
+			if tc.expectSharedUpdate {
+				currentProfile := sharedPool.GetPowerProfile()
+				assert.NotNil(t, currentProfile, "Shared pool should have the updated profile")
+				verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200), "powersave", "performance")
+			} else if tc.setupSharedPoolProfile == "" {
+				currentProfile := sharedPool.GetPowerProfile()
+				assert.Nil(t, currentProfile, "Shared pool should not have a profile")
+			} else if tc.setupSharedPoolProfile == tc.otherProfileName {
+				currentProfile := sharedPool.GetPowerProfile()
+				assert.NotNil(t, currentProfile, "Shared pool should have the original profile")
+				verifyProfileParameters(currentProfile, tc.otherProfileName, uint(4000), uint(2000), "powersave", "power")
+			}
+
+			if tc.expectReservedUpdate {
+				assert.NotNil(t, reservedPool, "Reserved pool should exist")
+				currentProfile := reservedPool.GetPowerProfile()
+				assert.NotNil(t, currentProfile, "Reserved pool should have the updated profile")
+				verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200), "powersave", "performance")
+			} else if tc.setupReservedPoolProfile != "" {
+				currentProfile := reservedPool.GetPowerProfile()
+				assert.NotNil(t, currentProfile, "Reserved pool should have the updated profile")
+				verifyProfileParameters(currentProfile, tc.setupReservedPoolProfile, uint(4000), uint(2000), "powersave", "balance_performance")
+			}
+		})
+	}
+}
