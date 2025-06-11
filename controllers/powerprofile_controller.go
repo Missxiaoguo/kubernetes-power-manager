@@ -198,15 +198,18 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		return ctrl.Result{Requeue: false}, err
 	}
 
-	var profileMaxFreq = profile.Spec.Max
-	var profileMinFreq = profile.Spec.Min
-
+	var profileMaxFreq int
+	var profileMinFreq int
 	// Use default hardware limits if not specified
 	if profile.Spec.Max == 0 {
 		profileMaxFreq = absoluteMaximumFrequency
+	} else {
+		profileMaxFreq = profile.Spec.Max
 	}
 	if profile.Spec.Min == 0 {
 		profileMinFreq = absoluteMinimumFrequency
+	} else {
+		profileMinFreq = profile.Spec.Min
 	}
 
 	// If both max and min are not specified and it's EPP-based profile, override with EPP-based calculation
