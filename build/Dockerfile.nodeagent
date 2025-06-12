@@ -1,6 +1,9 @@
 
 ARG BASE_IMAGE=gcr.io/distroless/static:nonroot
 
+# Source for the lscpu binary - TARGETPLATFORM architecture
+FROM quay.io/projectquay/golang:1.23 AS lscpu-source
+
 # Build the manager binary
 FROM --platform=$BUILDPLATFORM quay.io/projectquay/golang:1.23 AS builder
 ARG TARGETOS \
@@ -27,7 +30,7 @@ FROM ${BASE_IMAGE}
 WORKDIR /
 COPY LICENSE /licenses/LICENSE
 COPY --from=builder /install_root .
-COPY --from=builder /usr/bin/lscpu /usr/bin/lscpu
+COPY --from=lscpu-source /usr/bin/lscpu /usr/bin/lscpu
 USER 10001
 
 ENTRYPOINT ["/nodeagent"]
