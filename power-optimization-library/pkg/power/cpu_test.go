@@ -2,10 +2,6 @@ package power
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"sync"
 	"testing"
 
@@ -15,10 +11,6 @@ import (
 
 type cpuMock struct {
 	mock.Mock
-}
-
-func (m *cpuMock) SetCStates(cStates CStates) error {
-	return m.Called(cStates).Error(0)
 }
 
 func (m *cpuMock) _setPoolProperty(pool Pool) {
@@ -69,81 +61,6 @@ func (m *mutexMock) Lock() {
 
 func (m *mutexMock) Unlock() {
 	m.Called()
-}
-func setupCpuScalingTests(cpufiles map[string]map[string]string) func() {
-	origBasePath := basePath
-	basePath = "testing/cpus"
-	defaultDefaultPowerProfile := defaultPowerProfile
-	typeCopy := coreTypes
-	referenceCopy := CpuTypeReferences
-	// backup pointer to function that gets all CPUs
-	// replace it with our controlled function
-	origGetNumOfCpusFunc := getNumberOfCpus
-	getNumberOfCpus = func() uint { return uint(len(cpufiles)) }
-
-	// "initialise" P-States feature
-	featureList[FrequencyScalingFeature].err = nil
-
-	// if cpu0 is here we set its values to temporary defaultPowerProfile
-	if cpu0, ok := cpufiles["cpu0"]; ok {
-		defaultPowerProfile = &profileImpl{}
-		if max, ok := cpu0["max"]; ok {
-			max, _ := strconv.Atoi(max)
-			defaultPowerProfile.max = uint(max)
-		}
-		if min, ok := cpu0["min"]; ok {
-			min, _ := strconv.Atoi(min)
-			defaultPowerProfile.min = uint(min)
-		}
-		if governor, ok := cpu0["governor"]; ok {
-			defaultPowerProfile.governor = governor
-		}
-		if epp, ok := cpu0["epp"]; ok {
-			defaultPowerProfile.epp = epp
-		}
-	}
-	for cpuName, cpuDetails := range cpufiles {
-		cpudir := filepath.Join(basePath, cpuName)
-		os.MkdirAll(filepath.Join(cpudir, "cpufreq"), os.ModePerm)
-		os.MkdirAll(filepath.Join(cpudir, "topology"), os.ModePerm)
-		for prop, value := range cpuDetails {
-			switch prop {
-			case "driver":
-				os.WriteFile(filepath.Join(cpudir, pStatesDrvFile), []byte(value+"\n"), 0664)
-			case "max":
-				os.WriteFile(filepath.Join(cpudir, scalingMaxFile), []byte(value+"\n"), 0644)
-				os.WriteFile(filepath.Join(cpudir, cpuMaxFreqFile), []byte(value+"\n"), 0644)
-			case "min":
-				os.WriteFile(filepath.Join(cpudir, scalingMinFile), []byte(value+"\n"), 0644)
-				os.WriteFile(filepath.Join(cpudir, cpuMinFreqFile), []byte(value+"\n"), 0644)
-			case "package":
-				os.WriteFile(filepath.Join(cpudir, packageIdFile), []byte(value+"\n"), 0644)
-			case "die":
-				os.WriteFile(filepath.Join(cpudir, dieIdFile), []byte(value+"\n"), 0644)
-				os.WriteFile(filepath.Join(cpudir, coreIdFile), []byte(cpuName[3:]+"\n"), 0644)
-			case "epp":
-				os.WriteFile(filepath.Join(cpudir, eppFile), []byte(value+"\n"), 0644)
-			case "governor":
-				os.WriteFile(filepath.Join(cpudir, scalingGovFile), []byte(value+"\n"), 0644)
-			case "available_governors":
-				os.WriteFile(filepath.Join(cpudir, availGovFile), []byte(value+"\n"), 0644)
-			}
-		}
-	}
-	return func() {
-		// wipe created cpus dir
-		os.RemoveAll(strings.Split(basePath, "/")[0])
-		// revert cpu /sys path
-		basePath = origBasePath
-		// revert get number of system cpus function
-		getNumberOfCpus = origGetNumOfCpusFunc
-		// revert scaling driver feature to un initialised state
-		featureList[FrequencyScalingFeature].err = uninitialisedErr
-		coreTypes = typeCopy
-		CpuTypeReferences = referenceCopy
-		// revert default powerProfile
-		defaultPowerProfile = defaultDefaultPowerProfile
-	}
 }
 
 func TestNewCore(t *testing.T) {

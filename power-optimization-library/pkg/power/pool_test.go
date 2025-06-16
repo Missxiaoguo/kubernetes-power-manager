@@ -21,14 +21,6 @@ func (m *poolMock) SetCStates(states CStates) error {
 	return m.Called(states).Error(0)
 }
 
-func (m *poolMock) getCStates() *CStates {
-	args := m.Called().Get(0)
-	if args == nil {
-		return nil
-	}
-	return args.(*CStates)
-}
-
 func (m *poolMock) isExclusive() bool {
 	return m.Called().Bool(0)
 }
@@ -240,7 +232,7 @@ func TestPoolImpl_Getters(t *testing.T) {
 	pool := poolImpl{
 		name:         name,
 		cpus:         cores,
-		PowerProfile: powerProfile,
+		powerProfile: powerProfile,
 		host:         host,
 	}
 	assert.Equal(t, name, pool.Name())
@@ -424,7 +416,7 @@ func TestPoolImpl_SetPowerProfile(t *testing.T) {
 	pool := &poolImpl{cpus: cores, mutex: poolMutex}
 	powerProfile := new(profileImpl)
 	assert.NoError(t, pool.SetPowerProfile(powerProfile))
-	assert.True(t, pool.PowerProfile == powerProfile)
+	assert.True(t, pool.powerProfile == powerProfile)
 	poolMutex.AssertExpectations(t)
 	for _, core := range cores {
 		core.(*cpuMock).AssertExpectations(t)

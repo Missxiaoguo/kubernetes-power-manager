@@ -5,10 +5,87 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func setupCpuScalingTests(cpufiles map[string]map[string]string) func() {
+	origBasePath := basePath
+	basePath = "testing/cpus"
+	defaultDefaultPStates := defaultPStates
+	typeCopy := coreTypes
+	referenceCopy := CpuTypeReferences
+	// backup pointer to function that gets all CPUs
+	// replace it with our controlled function
+	origGetNumOfCpusFunc := getNumberOfCpus
+	getNumberOfCpus = func() uint { return uint(len(cpufiles)) }
+
+	// "initialise" P-States feature
+	featureList[FrequencyScalingFeature].err = nil
+
+	// if cpu0 is here we set its values to temporary defaultPStates
+	if cpu0, ok := cpufiles["cpu0"]; ok {
+		defaultPStates = &pstatesImpl{}
+		if max, ok := cpu0["max"]; ok {
+			max, _ := strconv.Atoi(max)
+			defaultPStates.max = uint(max)
+		}
+		if min, ok := cpu0["min"]; ok {
+			min, _ := strconv.Atoi(min)
+			defaultPStates.min = uint(min)
+		}
+		if governor, ok := cpu0["governor"]; ok {
+			defaultPStates.governor = governor
+		}
+		if epp, ok := cpu0["epp"]; ok {
+			defaultPStates.epp = epp
+		}
+	}
+	for cpuName, cpuDetails := range cpufiles {
+		cpudir := filepath.Join(basePath, cpuName)
+		os.MkdirAll(filepath.Join(cpudir, "cpufreq"), os.ModePerm)
+		os.MkdirAll(filepath.Join(cpudir, "topology"), os.ModePerm)
+		for prop, value := range cpuDetails {
+			switch prop {
+			case "driver":
+				os.WriteFile(filepath.Join(cpudir, pStatesDrvFile), []byte(value+"\n"), 0664)
+			case "max":
+				os.WriteFile(filepath.Join(cpudir, scalingMaxFile), []byte(value+"\n"), 0644)
+				os.WriteFile(filepath.Join(cpudir, cpuMaxFreqFile), []byte(value+"\n"), 0644)
+			case "min":
+				os.WriteFile(filepath.Join(cpudir, scalingMinFile), []byte(value+"\n"), 0644)
+				os.WriteFile(filepath.Join(cpudir, cpuMinFreqFile), []byte(value+"\n"), 0644)
+			case "package":
+				os.WriteFile(filepath.Join(cpudir, packageIdFile), []byte(value+"\n"), 0644)
+			case "die":
+				os.WriteFile(filepath.Join(cpudir, dieIdFile), []byte(value+"\n"), 0644)
+				os.WriteFile(filepath.Join(cpudir, coreIdFile), []byte(cpuName[3:]+"\n"), 0644)
+			case "epp":
+				os.WriteFile(filepath.Join(cpudir, eppFile), []byte(value+"\n"), 0644)
+			case "governor":
+				os.WriteFile(filepath.Join(cpudir, scalingGovFile), []byte(value+"\n"), 0644)
+			case "available_governors":
+				os.WriteFile(filepath.Join(cpudir, availGovFile), []byte(value+"\n"), 0644)
+			}
+		}
+	}
+	return func() {
+		// wipe created cpus dir
+		os.RemoveAll(strings.Split(basePath, "/")[0])
+		// revert cpu /sys path
+		basePath = origBasePath
+		// revert get number of system cpus function
+		getNumberOfCpus = origGetNumOfCpusFunc
+		// revert scaling driver feature to un initialised state
+		featureList[FrequencyScalingFeature].err = uninitialisedErr
+		coreTypes = typeCopy
+		CpuTypeReferences = referenceCopy
+		// revert default pstates
+		defaultPStates = defaultDefaultPStates
+	}
+}
 
 func TestIsScalingDriverSupported(t *testing.T) {
 	assert.False(t, isScalingDriverSupported("something"))
@@ -100,7 +177,8 @@ func TestCoreImpl_updateFreqValues(t *testing.T) {
 		pool: pool,
 		core: &cpuCore{coreType: 0},
 	}
-	pool.On("GetPowerProfile").Return(&profileImpl{max: maxFreqToSet, min: minFreqToSet})
+	profile := &profileImpl{pstates: &pstatesImpl{max: maxFreqToSet, min: minFreqToSet}, cstates: cstatesImpl{}}
+	pool.On("GetPowerProfile").Return(profile)
 	pool.On("getHost").Return(host)
 	host.On("NumCoreTypes").Return(uint(1))
 
@@ -108,7 +186,7 @@ func TestCoreImpl_updateFreqValues(t *testing.T) {
 	maxFreqContent, _ := os.ReadFile(filepath.Join(basePath, "cpu0", scalingMaxFile))
 	maxFreqInt, _ := strconv.Atoi(string(maxFreqContent))
 	assert.Equal(t, maxFreqToSet, maxFreqInt)
-	pool.AssertNumberOfCalls(t, "GetPowerProfile", 2)
+	pool.AssertNumberOfCalls(t, "GetPowerProfile", 1)
 
 	// set default power profile
 	pool = new(poolMock)
@@ -158,14 +236,13 @@ func TestCoreImpl_setPstatsValues(t *testing.T) {
 	})
 	defer teardown()
 
-	profile := &profileImpl{
-		name:     "default",
+	pstatesConfig := &pstatesImpl{
 		max:      maxFreqToSet,
 		min:      minFreqToSet,
 		epp:      eppToSet,
 		governor: governorToSet,
 	}
-	assert.NoError(t, core.setDriverValues(profile))
+	assert.NoError(t, core.setDriverValues(pstatesConfig))
 
 	governorFileContent, _ := os.ReadFile(filepath.Join(basePath, "cpu0", scalingGovFile))
 	assert.Equal(t, governorToSet, string(governorFileContent))
@@ -182,8 +259,8 @@ func TestCoreImpl_setPstatsValues(t *testing.T) {
 	assert.Equal(t, maxFreqToSet, minFreqInt)
 
 	// check for empty epp unset
-	profile.epp = ""
-	assert.NoError(t, core.setDriverValues(profile))
+	pstatesConfig.epp = ""
+	assert.NoError(t, core.setDriverValues(pstatesConfig))
 	eppFileContent, _ = os.ReadFile(filepath.Join(basePath, "cpu0", eppFile))
 	assert.Equal(t, eppToSet, string(eppFileContent))
 }

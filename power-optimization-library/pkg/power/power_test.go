@@ -223,13 +223,9 @@ func Fuzz_library(f *testing.F) {
 		governor := governorList[int(governorSeed)%len(governorList)]
 		epp := eppList[int(eppSeed)%len(eppList)]
 		pool, _ := node.AddExclusivePool(poolName)
-		profile, _ := NewEcorePowerProfile(poolName, min, max, emin, emax, governor, epp)
+		cstates := map[string]bool{"C0": true, "C1": false}
+		profile, _ := NewEcorePowerProfile(poolName, min, max, emin, emax, governor, epp, cstates)
 		pool.SetPowerProfile(profile)
-		pool.SetCStates(CStates{"C0": true, "C1": false})
-		states := pool.getCStates()
-		if states != nil {
-			node.ValidateCStates(*states)
-		}
 		node.GetSharedPool().MoveCpuIDs([]uint{1, 3, 5})
 		node.GetExclusivePool(poolName).MoveCpuIDs([]uint{1, 3, 5})
 		node.GetSharedPool().MoveCpuIDs([]uint{3})

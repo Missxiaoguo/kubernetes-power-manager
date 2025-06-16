@@ -18,14 +18,6 @@ func (m *hostMock) Topology() Topology {
 	return m.Called().Get(0).(Topology)
 }
 
-func (m *hostMock) ValidateCStates(states CStates) error {
-	return m.Called(states).Error(0)
-}
-
-func (m *hostMock) AvailableCStates() []string {
-	return m.Called().Get(0).([]string)
-}
-
 func (m *hostMock) GetAllExclusivePools() *PoolList {
 	return m.Called().Get(0).(*PoolList)
 }
@@ -220,7 +212,7 @@ func (s *hostTestsSuite) TestHostImpl_SetReservedPoolCores() {
 	}
 	topology.On("CPUs").Return(&cores)
 	host.reservedPool = &reservedPoolType{poolImpl{host: host, mutex: &sync.Mutex{}, cpus: make(CpuList, 0)}}
-	host.sharedPool = &sharedPoolType{poolImpl{PowerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host, cpus: cores}}
+	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host, cpus: cores}}
 
 	for _, core := range cores {
 		core._setPoolProperty(host.sharedPool)
@@ -237,7 +229,7 @@ func (s *hostTestsSuite) TestAddSharedPool() {
 	cores := make(CpuList, 4)
 	topology := new(mockCpuTopology)
 	host := &hostImpl{topology: topology}
-	host.sharedPool = &sharedPoolType{poolImpl{PowerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host}}
+	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host}}
 	for i := range cores {
 		m := new(mockCpuCore)
 		core, err := newCpu(uint(i), m)
@@ -262,7 +254,7 @@ func (s *hostTestsSuite) TestAddSharedPool() {
 func (s *hostTestsSuite) TestRemoveCoreFromExclusivePool() {
 	pool := &poolImpl{
 		name:         "test",
-		PowerProfile: &profileImpl{},
+		powerProfile: &profileImpl{},
 		mutex:        &sync.Mutex{},
 	}
 	cores := make(CpuList, 4)
@@ -288,7 +280,7 @@ func (s *hostTestsSuite) TestRemoveCoreFromExclusivePool() {
 		core._setPoolProperty(host.exclusivePools[0])
 	}
 
-	host.sharedPool = &sharedPoolType{poolImpl{PowerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host}}
+	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host}}
 
 	coresToRemove := make(CpuList, 2)
 	copy(coresToRemove, cores[0:2])
@@ -310,7 +302,7 @@ func (s *hostTestsSuite) TestAddCoresToExclusivePool() {
 		name:         "test",
 		cpus:         make([]Cpu, 0),
 		mutex:        &sync.Mutex{},
-		PowerProfile: &profileImpl{},
+		powerProfile: &profileImpl{},
 		host:         host,
 	}}}
 	host.name = "test_node"
@@ -323,7 +315,7 @@ func (s *hostTestsSuite) TestAddCoresToExclusivePool() {
 		cores[i] = core
 	}
 	topology.On("CPUs").Return(&cores)
-	host.sharedPool = &sharedPoolType{poolImpl{PowerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host, cpus: cores}}
+	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host, cpus: cores}}
 	for _, core := range cores {
 		core._setPoolProperty(host.sharedPool)
 	}
@@ -342,7 +334,7 @@ func (s *hostTestsSuite) TestAddCoresToExclusivePool() {
 // //
 func (s *hostTestsSuite) TestUpdateProfile() {
 	//pool := new(poolMock)
-	profile := &profileImpl{name: "powah", min: 2500, max: 3200}
+	profile := &profileImpl{name: "powah", pstates: &pstatesImpl{min: 2500, max: 3200}, cstates: cstatesImpl{"C1": true}}
 	//pool.On("GetPowerProfile").Return(profile)
 	//pool.On("SetPowerProfile", mock.Anything).Return(nil)
 	//pool.On("Name").Return("powah")
@@ -362,15 +354,18 @@ func (s *hostTestsSuite) TestUpdateProfile() {
 		},
 	}
 	defer func() { featureList = origFeatureList }()
-	pool := &poolImpl{name: "ex", mutex: &sync.Mutex{}, PowerProfile: profile, host: &host}
+	pool := &poolImpl{name: "ex", mutex: &sync.Mutex{}, powerProfile: profile, host: &host}
 	host.exclusivePools = []Pool{pool}
-	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().MinFreq(), uint(2500))
-	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().MaxFreq(), uint(3200))
+	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetPStates().MinFreq(), uint(2500))
+	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetPStates().MaxFreq(), uint(3200))
+	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetCStates().States(), map[string]bool{"C1": true})
 
-	s.Nil(host.GetExclusivePool("ex").SetPowerProfile(&profileImpl{name: "powah", min: 1200, max: 2500}))
+	newProfile := &profileImpl{name: "powah", pstates: &pstatesImpl{min: 1200, max: 2500}, cstates: cstatesImpl{"C1": false, "C2": true}}
+	s.Nil(host.GetExclusivePool("ex").SetPowerProfile(newProfile))
 
-	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().MinFreq(), uint(1200))
-	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().MaxFreq(), uint(2500))
+	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetPStates().MinFreq(), uint(1200))
+	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetPStates().MaxFreq(), uint(2500))
+	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetCStates().States(), map[string]bool{"C1": false, "C2": true})
 }
 
 func (s *hostTestsSuite) TestRemoveCoresFromSharedPool() {
@@ -380,7 +375,7 @@ func (s *hostTestsSuite) TestRemoveCoresFromSharedPool() {
 		name:         "test",
 		cpus:         make([]Cpu, 0),
 		mutex:        &sync.Mutex{},
-		PowerProfile: &profileImpl{},
+		powerProfile: &profileImpl{},
 		host:         host,
 	}}
 	host.name = "test_node"
@@ -393,7 +388,7 @@ func (s *hostTestsSuite) TestRemoveCoresFromSharedPool() {
 		cores[i] = core
 	}
 	//topology.On("CPUs").Return(cores)
-	host.sharedPool = &sharedPoolType{poolImpl{PowerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host, cpus: cores}}
+	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host, cpus: cores}}
 	host.reservedPool = &reservedPoolType{poolImpl{host: host, mutex: &sync.Mutex{}, cpus: make([]Cpu, 0)}}
 
 	for _, core := range cores {
@@ -431,12 +426,12 @@ func (s *hostTestsSuite) TestGetSharedPool() {
 		sharedPool: &sharedPoolType{poolImpl{
 			name:         sharedPoolName,
 			cpus:         cores,
-			PowerProfile: &profileImpl{},
+			powerProfile: &profileImpl{},
 		}},
 	}
 	sharedPool := node.GetSharedPool().(*sharedPoolType)
 	s.ElementsMatch(cores.IDs(), sharedPool.cpus.IDs())
-	s.Equal(node.sharedPool.(*sharedPoolType).PowerProfile, sharedPool.PowerProfile)
+	s.Equal(node.sharedPool.(*sharedPoolType).powerProfile, sharedPool.powerProfile)
 }
 func (s *hostTestsSuite) TestGetReservedPool() {
 	cores := make(CpuList, 4)
@@ -449,14 +444,14 @@ func (s *hostTestsSuite) TestGetReservedPool() {
 	poolImp := &poolImpl{
 		name:         reservedPoolName,
 		cpus:         cores,
-		PowerProfile: &profileImpl{},
+		powerProfile: &profileImpl{},
 	}
 	node := &hostImpl{
 		reservedPool: poolImp,
 	}
 	reservedPool := node.GetReservedPool()
 	s.ElementsMatch(cores.IDs(), reservedPool.Cpus().IDs())
-	s.Equal(reservedPool.GetPowerProfile(), poolImp.PowerProfile)
+	s.Equal(reservedPool.GetPowerProfile(), poolImp.powerProfile)
 }
 func (s *hostTestsSuite) TestDeleteProfile() {
 	allCores := make(CpuList, 12)
@@ -499,14 +494,14 @@ func (s *hostTestsSuite) TestDeleteProfile() {
 			name:         "pool1",
 			cpus:         p1cores,
 			mutex:        &sync.Mutex{},
-			PowerProfile: &profileImpl{name: "profile1"},
+			powerProfile: &profileImpl{name: "profile1"},
 			host:         host,
 		}},
 		&exclusivePoolType{poolImpl{
 			name:         "pool2",
 			cpus:         p2cores,
 			mutex:        &sync.Mutex{},
-			PowerProfile: &profileImpl{name: "profile2"},
+			powerProfile: &profileImpl{name: "profile2"},
 			host:         host,
 		}},
 	}
@@ -514,7 +509,7 @@ func (s *hostTestsSuite) TestDeleteProfile() {
 		name:         sharedPoolName,
 		cpus:         sharedCores,
 		mutex:        &sync.Mutex{},
-		PowerProfile: &profileImpl{name: sharedPoolName},
+		powerProfile: &profileImpl{name: sharedPoolName},
 		host:         host,
 	}}
 	host.exclusivePools = exclusive
@@ -530,9 +525,8 @@ func (s *hostTestsSuite) TestDeleteProfile() {
 	}
 	s.NoError(host.GetExclusivePool("pool1").Remove())
 	s.Len(host.exclusivePools, 1)
-	s.Equal("profile2", host.exclusivePools[0].(*exclusivePoolType).PowerProfile.(*profileImpl).name)
+	s.Equal("profile2", host.exclusivePools[0].(*exclusivePoolType).powerProfile.(*profileImpl).name)
 	s.ElementsMatch(host.exclusivePools[0].(*exclusivePoolType).cpus, p2copy)
 	newShared := append(sharedCoresCopy, p1copy...)
 	s.ElementsMatch(host.GetSharedPool().Cpus().IDs(), newShared.IDs())
-
 }

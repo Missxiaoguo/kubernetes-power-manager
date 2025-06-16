@@ -147,7 +147,7 @@ func TestCpuImpl_applyCStates(t *testing.T) {
 		"C2": 2,
 		"C0": 0,
 	}
-	err := (&cpuImpl{id: 0}).applyCStates(&CStates{
+	err := (&cpuImpl{id: 0}).applyCStates(cstatesImpl{
 		"C0": false,
 		"C2": true})
 
@@ -179,56 +179,24 @@ func TestValidateCStates(t *testing.T) {
 		"C3": 3,
 	}
 
-	assert.NoError(t, validateCStates(CStates{
+	assert.NoError(t, ValidateCStates(map[string]bool{
 		"C0": true,
 		"C2": false,
 	}))
 
-	assert.ErrorContains(t, validateCStates(CStates{
+	assert.ErrorContains(t, ValidateCStates(map[string]bool{
 		"C9": false,
 	}), "does not exist on this system")
 }
 
-func TestHostImpl_AvailableCStates(t *testing.T) {
+func TestAvailableCStates(t *testing.T) {
 	cStatesNamesMap = map[string]int{
 		"C1": 1,
 		"C2": 2,
 		"C3": 3,
 	}
-	host := &hostImpl{}
-	assert.Empty(t, host.AvailableCStates())
-	defer setupCpuCStatesTests(nil)()
 
-	assert.ElementsMatch(t, host.AvailableCStates(), []string{"C1", "C2", "C3"})
-}
-
-func TestPoolImpl_SetCStates(t *testing.T) {
-	core1 := new(cpuMock)
-	core1.On("consolidate").Return(nil)
-
-	core2 := new(cpuMock)
-	pool := &poolImpl{
-		cpus: CpuList{core1},
-	}
-	// cstates not supported
-	assert.ErrorIs(t, pool.SetCStates(nil), uninitialisedErr)
-	core1.AssertNotCalled(t, "consolidate")
-	core2.AssertNotCalled(t, "consolidate")
-	defer setupCpuCStatesTests(nil)()
-
-	// all good
-	cStatesNamesMap = map[string]int{
-		"C0": 0,
-	}
-	assert.NoError(t, pool.SetCStates(CStates{"C0": true}))
-	core1.AssertExpectations(t)
-	core2.AssertNotCalled(t, "consolidate")
-
-	//consolidate failed
-	core1 = new(cpuMock)
-	pool.cpus = CpuList{core1}
-	core1.On("consolidate").Return(fmt.Errorf("consolidate failed"))
-	assert.ErrorContains(t, pool.SetCStates(CStates{"C0": true}), "failed to apply c-states: consolidate failed")
+	assert.ElementsMatch(t, GetAvailableCStates(), []string{"C1", "C2", "C3"})
 }
 
 func TestCpuImpl_updateCStates(t *testing.T) {
@@ -252,46 +220,23 @@ func TestCpuImpl_updateCStates(t *testing.T) {
 		fmt.Sprintf(cStateDisableFileFmt, 0),
 	)
 
-	// read core property
-	core.cStates = &CStates{"C0": false}
-	assert.NoError(t, core.updateCStates())
-	value, _ := os.ReadFile(stateFilePath)
-	assert.Equal(t, "1", string(value), "expecting cstate to be disabled")
-
 	// read pool property
 	pool := new(poolMock)
-	pool.On("getCStates").Return(&CStates{"C0": true})
+	profile := &profileImpl{cstates: cstatesImpl{"C0": true}}
+	pool.On("GetPowerProfile").Return(profile)
 	core.pool = pool
-	core.cStates = nil
 	assert.NoError(t, core.updateCStates())
-	value, _ = os.ReadFile(stateFilePath)
+	value, _ := os.ReadFile(stateFilePath)
 	assert.Equal(t, "0", string(value), "expecting cstate to be enabled")
 	pool.AssertExpectations(t)
 
-	// default
-	defaultCStates = CStates{"C0": false}
+	// no power profile, use default
+	defaultCStates = cstatesImpl{"C0": false}
 	pool = new(poolMock)
-	pool.On("getCStates").Return(nil)
+	pool.On("GetPowerProfile").Return(nil)
 	core.pool = pool
 	assert.NoError(t, core.updateCStates())
 	value, _ = os.ReadFile(stateFilePath)
 	assert.Equal(t, "1", string(value), "expecting cstate to be disabled")
 	pool.AssertExpectations(t)
-}
-
-func TestCpuImpl_SetCStates(t *testing.T) {
-	pool := new(poolMock)
-	pool.On("getCStates").Return(nil)
-	core := &cpuImpl{
-		id:   0,
-		pool: pool,
-	}
-	assert.ErrorIs(t, core.SetCStates(nil), uninitialisedErr)
-	defer setupCpuCStatesTests(map[string]map[string]map[string]string{
-		"cpu0": {
-			"state0": {"name": "C0", "disable": "0"},
-		},
-	})()
-	assert.NoError(t, core.SetCStates(nil))
-
 }
