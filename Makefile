@@ -291,7 +291,7 @@ gofmt:
 	gofmt -w .
 
 update:
-	sed -i 's/intel\/power-operator.*$$/intel\/power-operator:v$(VERSION)/' config/manager/manager.yaml
-	sed -i 's/intel\/power-operator.*$$/intel\/power-operator_ocp-$(OCP_VERSION):v$(VERSION)/' config/manager/ocp/manager.yaml
-	sed -i 's/intel\/power-node-agent.*$$/intel\/power-node-agent:v$(VERSION)/' build/manifests/power-node-agent-ds.yaml
-	sed -i 's/intel\/power-node-agent.*$$/intel\/power-node-agent_ocp-$(OCP_VERSION):v$(VERSION)/' build/manifests/ocp/power-node-agent-ds.yaml
+	sed -i 's|image: .*|image: $(IMG)|' config/manager/manager.yaml
+	sed -i 's|image: .*|image: $(IMG)|' config/manager/ocp/manager.yaml
+	sed -i 's|image: .*|image: $(IMG_AGENT)|' build/manifests/power-node-agent-ds.yaml
+	sed -i 's|image: .*|image: $(IMG_AGENT)|' build/manifests/ocp/power-node-agent-ds.yaml

@@ -32,14 +32,6 @@ func (m *hostMock) Topology() power.Topology {
 	return m.Called().Get(0).(power.Topology)
 }
 
-func (m *hostMock) ValidateCStates(states power.CStates) error {
-	return m.Called(states).Error(0)
-}
-
-func (m *hostMock) AvailableCStates() []string {
-	return m.Called().Get(0).([]string)
-}
-
 func (m *hostMock) GetAllExclusivePools() *power.PoolList {
 	return m.Called().Get(0).(*power.PoolList)
 }
@@ -470,7 +462,7 @@ func setupDummyFiles(cores int, packages int, diesPerPackage int, cpufiles map[s
 	uncoreInitMinFreqFile := "initial_min_freq_khz"
 	uncoreMaxFreqFile := "max_freq_khz"
 	uncoreMinFreqFile := "min_freq_khz"
-	cstates := []string{"C0", "C1", "C1E", "C2", "C3", "6"}
+	cstates := []string{"C0", "C1", "C1E", "C3"}
 	// if we're setting uncore we need to spoof the module being loaded
 	_, ok := cpufiles["uncore_max"]
 	if ok {
@@ -552,9 +544,13 @@ func setupDummyFiles(cores int, packages int, diesPerPackage int, cpufiles map[s
 
 		}
 	}
+
+	originalGetFromLscpu := power.GetFromLscpu
+	power.GetFromLscpu = power.TestGetFromLscpu
 	host, err := power.CreateInstanceWithConf("test-node", power.LibConfig{CpuPath: "testing/cpus", ModulePath: "testing/proc.modules", Cores: uint(cores)})
 	return host, func() {
 		os.RemoveAll(strings.Split(path, "/")[0])
+		power.GetFromLscpu = originalGetFromLscpu
 	}, err
 }
 

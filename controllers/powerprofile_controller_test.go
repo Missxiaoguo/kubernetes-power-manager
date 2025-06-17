@@ -77,11 +77,13 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 				Namespace: IntelPowerNamespace,
 			},
 			Spec: powerv1.PowerProfileSpec{
-				Name:     "performance",
-				Max:      3600,
-				Min:      3200,
-				Epp:      "performance",
-				Governor: "powersave",
+				Name: "performance",
+				PStates: powerv1.PStatesConfig{
+					Max:      3600,
+					Min:      3200,
+					Epp:      "performance",
+					Governor: "powersave",
+				},
 			},
 		},
 		&corev1.Node{
@@ -107,9 +109,6 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 		t.Error(err)
 		t.Fatalf("error creating the reconciler object")
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	host, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
@@ -138,10 +137,12 @@ func TestPowerProfile_Reconcile_SharedPoolCreation(t *testing.T) {
 			},
 			Spec: powerv1.PowerProfileSpec{
 				Name:   "shared",
-				Max:    3600,
-				Min:    3200,
 				Shared: true,
-				Epp:    "",
+				PStates: powerv1.PStatesConfig{
+					Max: 3600,
+					Min: 3200,
+					Epp: "",
+				},
 			},
 		},
 		&corev1.Node{
@@ -155,10 +156,6 @@ func TestPowerProfile_Reconcile_SharedPoolCreation(t *testing.T) {
 			},
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
 	// needed to create library using a dummy sysfs as it will call functions that can't be mocked
 	_, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
@@ -211,9 +208,11 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "performance",
+						},
 					},
 				},
 				&corev1.Node{
@@ -240,9 +239,11 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
-						Max:  0,
-						Min:  0,
-						Epp:  "performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 0,
+							Min: 0,
+							Epp: "performance",
+						},
 					},
 				},
 				&corev1.Node{
@@ -269,9 +270,11 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "user-created",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "",
+						},
 					},
 				},
 				&corev1.Node{
@@ -287,9 +290,6 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 			},
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	for _, tc := range tcases {
 		t.Setenv("NODE_NAME", tc.nodeName)
@@ -362,9 +362,11 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "performance",
+						},
 					},
 				},
 				&corev1.Node{
@@ -391,9 +393,11 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
-						Max:  0,
-						Min:  0,
-						Epp:  "performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 0,
+							Min: 0,
+							Epp: "performance",
+						},
 					},
 				},
 				&corev1.Node{
@@ -420,9 +424,11 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "user-created",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "",
+						},
 					},
 				},
 				&corev1.Node{
@@ -438,10 +444,6 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 			},
 		},
 	}
-
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	for _, tc := range tcases {
 		t.Setenv("NODE_NAME", tc.nodeName)
@@ -571,10 +573,6 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyHandling(t *testing.T) {
 		},
 	}
 
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
 	for _, tc := range tcases {
 		t.Run(tc.testCase, func(t *testing.T) {
 			t.Setenv("NODE_NAME", tc.nodeName)
@@ -586,11 +584,13 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyHandling(t *testing.T) {
 						Namespace: IntelPowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name:     tc.profileName,
-						Max:      tc.max,
-						Min:      tc.min,
-						Epp:      tc.epp,
-						Governor: tc.governor,
+						Name: tc.profileName,
+						PStates: powerv1.PStatesConfig{
+							Max:      tc.max,
+							Min:      tc.min,
+							Epp:      tc.epp,
+							Governor: tc.governor,
+						},
 					},
 				},
 				&corev1.Node{
@@ -715,11 +715,13 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyValidationErrors(t *testing.T) {
 						Namespace: IntelPowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name:     tc.profileName,
-						Max:      tc.max,
-						Min:      tc.min,
-						Epp:      tc.epp,
-						Governor: tc.governor,
+						Name: tc.profileName,
+						PStates: powerv1.PStatesConfig{
+							Max:      tc.max,
+							Min:      tc.min,
+							Epp:      tc.epp,
+							Governor: tc.governor,
+						},
 					},
 				},
 				&corev1.Node{
@@ -789,9 +791,11 @@ func TestPowerProfile_Reconcile_IncorrectEppValue(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "user-created",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "incorrect",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "incorrect",
+						},
 					},
 				},
 			},
@@ -863,18 +867,16 @@ func TestPowerProfile_Reconcile_SharedProfileDoesNotExistInLibrary(t *testing.T)
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name:   "shared",
-						Max:    800,
-						Min:    800,
 						Shared: true,
+						PStates: powerv1.PStatesConfig{
+							Max: 800,
+							Min: 800,
+						},
 					},
 				},
 			},
 		},
 	}
-
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	for _, tc := range tcases {
 		t.Setenv("NODE_NAME", tc.nodeName)
@@ -912,34 +914,6 @@ func TestPowerProfile_Reconcile_SharedProfileDoesNotExistInLibrary(t *testing.T)
 }
 
 func TestPowerProfile_Reconcile_DeleteProfile(t *testing.T) {
-	cstatedummy := &powerv1.CStates{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "TestNode",
-			Namespace: IntelPowerNamespace,
-		},
-		Spec: powerv1.CStatesSpec{
-			SharedPoolCStates: map[string]bool{
-				"C1": true,
-			},
-			ExclusivePoolCStates: map[string]map[string]bool{
-				"performance": {
-					"C6": false,
-					"1E": true,
-				},
-				"user-created": {
-					"C6":  false,
-					"C1E": true,
-					"C1":  true,
-				},
-			},
-			IndividualCoreCStates: map[string]map[string]bool{
-				"1": {
-					"C1": true,
-				},
-			},
-		},
-		Status: powerv1.CStatesStatus{},
-	}
 	tcases := []struct {
 		testCase    string
 		nodeName    string
@@ -969,7 +943,6 @@ func TestPowerProfile_Reconcile_DeleteProfile(t *testing.T) {
 						},
 					},
 				},
-				cstatedummy,
 			},
 		},
 		{
@@ -994,7 +967,6 @@ func TestPowerProfile_Reconcile_DeleteProfile(t *testing.T) {
 						},
 					},
 				},
-				cstatedummy,
 			},
 		},
 		{
@@ -1065,24 +1037,6 @@ func TestPowerProfile_Reconcile_DeleteProfile(t *testing.T) {
 			t.Fatalf("%s - error retrieving the node object", tc.testCase)
 		}
 
-		if tc.testCase != "Test Case 3 - Profile user-created, ERs not present, workload not present" {
-			cstate := &powerv1.CStates{}
-			err = r.Client.Get(context.TODO(), client.ObjectKey{
-				Name:      tc.nodeName,
-				Namespace: IntelPowerNamespace,
-			}, cstate)
-			if err != nil {
-				t.Error(err)
-				t.Fatalf("%s - error retrieving the cstate object", tc.testCase)
-			}
-			for profile, _ := range cstate.Spec.ExclusivePoolCStates {
-				if profile == tc.profileName {
-					t.Error(err)
-					t.Fatalf("%s - error retrieving the cstate object - profile should be deleted", tc.testCase)
-				}
-			}
-		}
-
 		resourceName := corev1.ResourceName(fmt.Sprintf("%s%s", ExtendedResourcePrefix, tc.profileName))
 		if _, exists := node.Status.Capacity[resourceName]; exists {
 			t.Errorf("%s - failed: expected the extended resource '%s' to have been deleted", tc.testCase, fmt.Sprintf("%s%s", ExtendedResourcePrefix, tc.profileName))
@@ -1109,9 +1063,11 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "performance",
+						},
 					},
 				},
 				&corev1.Node{
@@ -1138,9 +1094,11 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
-						Max:  0,
-						Min:  0,
-						Epp:  "performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 0,
+							Min: 0,
+							Epp: "performance",
+						},
 					},
 				},
 				&corev1.Node{
@@ -1167,9 +1125,11 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "user-created",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "",
+						},
 					},
 				},
 				&corev1.Node{
@@ -1185,10 +1145,6 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 			},
 		},
 	}
-
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	for _, tc := range tcases {
 		t.Setenv("NODE_NAME", tc.nodeName)
@@ -1289,9 +1245,11 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "performance",
+						},
 					},
 				},
 				&corev1.Node{
@@ -1332,9 +1290,11 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "performance",
+						},
 					},
 				},
 				&corev1.Node{
@@ -1409,10 +1369,6 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 		},
 	}
 
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
 	_, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
@@ -1476,10 +1432,12 @@ func TestPowerProfile_Reconcile_FeatureNotSupportedErr(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name:   "shared",
-						Max:    3600,
-						Min:    3200,
 						Shared: true,
-						Epp:    "power",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "power",
+						},
 					},
 				},
 				&corev1.Node{
@@ -1512,9 +1470,11 @@ func TestPowerProfile_Reconcile_FeatureNotSupportedErr(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "power",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "power",
+						},
 					},
 				},
 				&corev1.Node{
@@ -1530,7 +1490,9 @@ func TestPowerProfile_Reconcile_FeatureNotSupportedErr(t *testing.T) {
 			},
 		},
 	}
-	setupDummyFiles(1, 1, 1, map[string]string{})
+	setupDummyFiles(1, 1, 1, map[string]string{
+		"available_governors": "powersave performance",
+	})
 	t.Setenv("NODE_NAME", "TestNode")
 	for _, tc := range tcases {
 		r, err := createProfileReconcilerObject(tc.clientObjs)
@@ -1649,10 +1611,6 @@ func TestPowerProfile_Reconcile_ClientErrs(t *testing.T) {
 		},
 	}
 
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
 	dummyFilesystemHost, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
@@ -1696,11 +1654,13 @@ func TestPowerProfile_Reconcile_UnsupportedGovernor(t *testing.T) {
 						Namespace: IntelPowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name:     "performance",
-						Max:      3600,
-						Min:      3200,
-						Epp:      "performance",
-						Governor: "made up",
+						Name: "performance",
+						PStates: powerv1.PStatesConfig{
+							Max:      3600,
+							Min:      3200,
+							Epp:      "performance",
+							Governor: "made up",
+						},
 					},
 				},
 				&corev1.Node{
@@ -1726,11 +1686,13 @@ func TestPowerProfile_Reconcile_UnsupportedGovernor(t *testing.T) {
 						Namespace: IntelPowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name:     "shared",
-						Max:      1000,
-						Min:      1000,
-						Shared:   true,
-						Governor: "made up",
+						Name:   "shared",
+						Shared: true,
+						PStates: powerv1.PStatesConfig{
+							Max:      1000,
+							Min:      1000,
+							Governor: "made up",
+						},
 					},
 				},
 				&corev1.Node{
@@ -1746,10 +1708,6 @@ func TestPowerProfile_Reconcile_UnsupportedGovernor(t *testing.T) {
 			},
 		},
 	}
-
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	for _, tc := range tcases {
 		t.Setenv("NODE_NAME", tc.nodeName)
@@ -1795,10 +1753,6 @@ func TestPowerProfile_Wrong_Namespace(t *testing.T) {
 // go test -fuzz FuzzPowerProfileController -run=FuzzPowerProfileController -parallel=1
 func FuzzPowerProfileController(f *testing.F) {
 	f.Add("TestNode", "performance", 3600, 3200, "performance", "powersave", false)
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
 	f.Fuzz(func(t *testing.T, nodeName, prof string, maxVal int, minVal int, epp string, governor string, shared bool) {
 		nodeName = strings.ReplaceAll(nodeName, " ", "")
 		nodeName = strings.ReplaceAll(nodeName, "\t", "")
@@ -1815,12 +1769,14 @@ func FuzzPowerProfileController(f *testing.F) {
 					Namespace: IntelPowerNamespace,
 				},
 				Spec: powerv1.PowerProfileSpec{
-					Name:     prof,
-					Max:      maxVal,
-					Min:      minVal,
-					Epp:      epp,
-					Governor: governor,
-					Shared:   shared,
+					Name: prof,
+					PStates: powerv1.PStatesConfig{
+						Max:      maxVal,
+						Min:      minVal,
+						Epp:      epp,
+						Governor: governor,
+					},
+					Shared: shared,
 				},
 			},
 			&corev1.Node{
@@ -1906,13 +1862,15 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 		expectedMinMHz uint,
 		expectedGovernor string,
 		expectedEpp string,
+		expectedCStates map[string]bool,
 	) {
 		assert.Equal(t, expectedName, profile.Name())
-		assert.Equal(t, expectedMaxMHz*1000, profile.MaxFreq())
-		assert.Equal(t, expectedMinMHz*1000, profile.MinFreq())
-		assert.Equal(t, expectedEpp, profile.Epp())
-		assert.Equal(t, expectedGovernor, profile.Governor())
-		assert.Equal(t, expectedEpp, profile.Epp())
+		assert.Equal(t, expectedMaxMHz*1000, profile.GetPStates().MaxFreq())
+		assert.Equal(t, expectedMinMHz*1000, profile.GetPStates().MinFreq())
+		assert.Equal(t, expectedEpp, profile.GetPStates().Epp())
+		assert.Equal(t, expectedGovernor, profile.GetPStates().Governor())
+		assert.Equal(t, expectedEpp, profile.GetPStates().Epp())
+		assert.Equal(t, expectedCStates, profile.GetCStates().States())
 	}
 
 	type testCase struct {
@@ -1973,11 +1931,18 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 						Namespace: IntelPowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name:     tc.profileName,
-						Max:      3600,
-						Min:      3200,
-						Epp:      "performance",
-						Governor: "powersave",
+						Name: tc.profileName,
+						PStates: powerv1.PStatesConfig{
+							Max:      3600,
+							Min:      3200,
+							Epp:      "performance",
+							Governor: "powersave",
+						},
+						CStates: powerv1.CStatesConfig{
+							"C1":  true,
+							"C1E": false,
+							"C3":  false,
+						},
 					},
 				},
 				&corev1.Node{
@@ -2016,7 +1981,9 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 				if tc.setupSharedPoolProfile != tc.profileName {
 					profileName = tc.otherProfileName
 				}
-				initialProfile, err := power.NewPowerProfile(profileName, uint(2000), uint(4000), "powersave", "power")
+				initialProfile, err := power.NewPowerProfile(
+					profileName, uint(2000), uint(4000), "powersave", "power",
+					map[string]bool{"C0": false, "C1": true, "C1E": false, "C3": true})
 				assert.Nil(t, err)
 				err = sharedPool.SetPowerProfile(initialProfile)
 				assert.Nil(t, err)
@@ -2027,7 +1994,9 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 				reservedPoolName = nodeName + "-reserved-[0,1,2,3]"
 				reservedPool, err = host.AddExclusivePool(reservedPoolName)
 				assert.Nil(t, err)
-				initialProfile, err := power.NewPowerProfile(tc.setupReservedPoolProfile, uint(2000), uint(4000), "powersave", "balance_performance")
+				initialProfile, err := power.NewPowerProfile(
+					tc.setupReservedPoolProfile, uint(2000), uint(4000), "powersave", "balance_performance",
+					map[string]bool{"C0": false, "C1": false, "C1E": false, "C3": false})
 				assert.Nil(t, err)
 				err = reservedPool.SetPowerProfile(initialProfile)
 				assert.Nil(t, err)
@@ -2051,30 +2020,35 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 			assert.NotNil(t, exclusivePool, "Exclusive pool should be created/updated")
 			currentProfile := exclusivePool.GetPowerProfile()
 			assert.NotNil(t, currentProfile, "Exclusive pool should have a profile")
-			verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200), "powersave", "performance")
+			verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200),
+				"powersave", "performance", map[string]bool{"C0": false, "C1": true, "C1E": false, "C3": false})
 
 			if tc.expectSharedUpdate {
 				currentProfile := sharedPool.GetPowerProfile()
 				assert.NotNil(t, currentProfile, "Shared pool should have the updated profile")
-				verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200), "powersave", "performance")
+				verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200),
+					"powersave", "performance", map[string]bool{"C0": false, "C1": true, "C1E": false, "C3": false})
 			} else if tc.setupSharedPoolProfile == "" {
 				currentProfile := sharedPool.GetPowerProfile()
 				assert.Nil(t, currentProfile, "Shared pool should not have a profile")
 			} else if tc.setupSharedPoolProfile == tc.otherProfileName {
 				currentProfile := sharedPool.GetPowerProfile()
 				assert.NotNil(t, currentProfile, "Shared pool should have the original profile")
-				verifyProfileParameters(currentProfile, tc.otherProfileName, uint(4000), uint(2000), "powersave", "power")
+				verifyProfileParameters(currentProfile, tc.otherProfileName, uint(4000), uint(2000),
+					"powersave", "power", map[string]bool{"C0": false, "C1": true, "C1E": false, "C3": true})
 			}
 
 			if tc.expectReservedUpdate {
 				assert.NotNil(t, reservedPool, "Reserved pool should exist")
 				currentProfile := reservedPool.GetPowerProfile()
 				assert.NotNil(t, currentProfile, "Reserved pool should have the updated profile")
-				verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200), "powersave", "performance")
+				verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200),
+					"powersave", "performance", map[string]bool{"C0": false, "C1": true, "C1E": false, "C3": false})
 			} else if tc.setupReservedPoolProfile != "" {
 				currentProfile := reservedPool.GetPowerProfile()
-				assert.NotNil(t, currentProfile, "Reserved pool should have the updated profile")
-				verifyProfileParameters(currentProfile, tc.setupReservedPoolProfile, uint(4000), uint(2000), "powersave", "balance_performance")
+				assert.NotNil(t, currentProfile, "Reserved pool should have the original profile")
+				verifyProfileParameters(currentProfile, tc.setupReservedPoolProfile, uint(4000), uint(2000),
+					"powersave", "balance_performance", map[string]bool{"C0": false, "C1": false, "C1E": false, "C3": false})
 			}
 		})
 	}

@@ -72,9 +72,11 @@ var defaultProf = &powerv1.PowerProfile{
 	},
 	Spec: powerv1.PowerProfileSpec{
 		Name: "performance",
-		Epp:  "",
-		Max:  3600,
-		Min:  3200,
+		PStates: powerv1.PStatesConfig{
+			Epp: "",
+			Max: 3600,
+			Min: 3200,
+		},
 	},
 }
 var defaultWload = &powerv1.PowerWorkload{
@@ -187,16 +189,13 @@ func TestPowerNode_Reconcile(t *testing.T) {
 			},
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	dummyFilesystemHost, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
 	pool, err := dummyFilesystemHost.AddExclusivePool("performance-TestNode")
 	assert.Nil(t, err)
-	prof, err := power.NewPowerProfile("performance", 1000, 1000, "powersave", "")
+	prof, err := power.NewPowerProfile("performance", 1000, 1000, "powersave", "", map[string]bool{})
 	assert.Nil(t, err)
 	err = dummyFilesystemHost.GetSharedPool().SetPowerProfile(prof)
 	assert.Nil(t, err)
@@ -338,16 +337,13 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 			clientErr: "client update error",
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	dummyFilesystemHost, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
 	pool, err := dummyFilesystemHost.AddExclusivePool("performance")
 	assert.Nil(t, err)
-	prof, err := power.NewPowerProfile("performance", 10000, 10000, "powersave", "")
+	prof, err := power.NewPowerProfile("performance", 10000, 10000, "powersave", "", map[string]bool{})
 	assert.Nil(t, err)
 	pool.SetPowerProfile(prof)
 	err = dummyFilesystemHost.GetSharedPool().SetPowerProfile(prof)
@@ -375,10 +371,6 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 
 // go test -fuzz FuzzPowerNodeController -run=FuzzPowerNodeController -parallel=1
 func FuzzPowerNodeController(f *testing.F) {
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
 	f.Add("TestNode", "some-plugin", "performance", "balance-performance", "balance-power", "perfromance-TestNode", "shared-TestNode", "0-44", "reserved-TestNode")
 	f.Fuzz(func(t *testing.T, nodeName string, devicePlugin string, prof1 string, prof2 string, prof3 string, workload string, sharedPool string, unaffectedCores string, reservedPools string) {
 		nodeName = strings.ReplaceAll(nodeName, " ", "")
@@ -480,7 +472,7 @@ func FuzzPowerNodeController(f *testing.F) {
 		defer teardown()
 
 		pool, err1 := dummyFilesystemHost.AddExclusivePool(prof1)
-		profile, err2 := power.NewPowerProfile(prof1, 10000, 10000, "powersave", "")
+		profile, err2 := power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{})
 		// continue test without pools
 		if err1 == nil && err2 == nil {
 			pool.SetPowerProfile(profile)
@@ -491,7 +483,7 @@ func FuzzPowerNodeController(f *testing.F) {
 			if err != nil {
 				return
 			}
-			profile, err = power.NewPowerProfile(prof1, 10000, 10000, "powersave", "")
+			profile, err = power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{})
 			if err != nil {
 				return
 			}
@@ -500,7 +492,7 @@ func FuzzPowerNodeController(f *testing.F) {
 			if err != nil {
 				return
 			}
-			profile, err = power.NewPowerProfile(prof1, 10000, 10000, "powersave", "")
+			profile, err = power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{})
 			if err != nil {
 				return
 			}
@@ -558,4 +550,73 @@ func TestPowerNode_Reconcile_SetupFail(t *testing.T) {
 	}).SetupWithManager(mgr)
 	assert.Error(t, err)
 
+}
+
+func TestPrettifyCStatesMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		states   map[string]bool
+		expected string
+	}{
+		{
+			name:     "empty states",
+			states:   map[string]bool{},
+			expected: "",
+		},
+		{
+			name: "only enabled states",
+			states: map[string]bool{
+				"C1":  true,
+				"C1E": true,
+			},
+			expected: "enabled: C1,C1E",
+		},
+		{
+			name: "only disabled states",
+			states: map[string]bool{
+				"C2": false,
+				"C6": false,
+			},
+			expected: "disabled: C2,C6",
+		},
+		{
+			name: "mixed enabled and disabled states",
+			states: map[string]bool{
+				"C1":  true,
+				"C1E": true,
+				"C6":  false,
+			},
+			expected: "enabled: C1,C1E; disabled: C6",
+		},
+		{
+			name: "mixed enabled and disabled states - different order",
+			states: map[string]bool{
+				"C1":  true,
+				"C1E": false,
+				"C6":  true,
+			},
+			expected: "enabled: C1,C6; disabled: C1E",
+		},
+		{
+			name: "single enabled state",
+			states: map[string]bool{
+				"C1": true,
+			},
+			expected: "enabled: C1",
+		},
+		{
+			name: "single disabled state",
+			states: map[string]bool{
+				"C6": false,
+			},
+			expected: "disabled: C6",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := prettifyCStatesMap(tt.states)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

@@ -11,8 +11,12 @@ metadata:
   namespace: intel-power
 spec:
   name: "shared"
-  max: 1000
-  min: 1000
-  epp: "power"
   shared: true
-  governor: "powersave"
+  pstates:
+    max: 1000
+    min: 1000
+    epp: "power"
+    governor: "powersave"
+  cstates:
+    C1: true
+    C6: false

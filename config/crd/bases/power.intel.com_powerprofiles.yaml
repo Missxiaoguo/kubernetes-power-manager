@@ -39,22 +39,31 @@ spec:
           spec:
             description: PowerProfileSpec defines the desired state of PowerProfile
             properties:
-              epp:
-                description: The priority value associated with this Power Profile
-                type: string
-              governor:
-                default: powersave
-                description: Governor to be used
-                type: string
-              max:
-                description: Max frequency cores can run at
-                type: integer
-              min:
-                description: Min frequency cores can run at
-                type: integer
+              cstates:
+                additionalProperties:
+                  type: boolean
+                description: C-states configuration
+                type: object
               name:
                 description: The name of the PowerProfile
                 type: string
+              pstates:
+                description: P-states configuration
+                properties:
+                  epp:
+                    description: The priority value associated with this Power Profile
+                    type: string
+                  governor:
+                    default: powersave
+                    description: Governor to be used
+                    type: string
+                  max:
+                    description: Max frequency cores can run at
+                    type: integer
+                  min:
+                    description: Min frequency cores can run at
+                    type: integer
+                type: object
               shared:
                 type: boolean
             required:

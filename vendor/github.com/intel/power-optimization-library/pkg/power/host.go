@@ -44,8 +44,6 @@ type Host interface {
 	Topology() Topology
 	// returns number of distinct core types
 	NumCoreTypes() uint
-	AvailableCStates() []string
-	ValidateCStates(states CStates) error
 }
 
 // create a pre-populated Host object
@@ -104,10 +102,10 @@ func initHost(nodeName string) (Host, error) {
 	log.Info("discovered cpus", "cpus", len(*topology.CPUs()))
 	// coretypes are populated after default profile is generated so we need to update here
 	if featureList.isFeatureIdSupported(FrequencyScalingFeature) && host.NumCoreTypes() == 2 {
-		defaultPowerProfile.max = coreTypes[CpuTypeReferences.Pcore()].GetMax()
-		defaultPowerProfile.min = coreTypes[CpuTypeReferences.Pcore()].GetMax()
-		defaultPowerProfile.efficientMax = coreTypes[CpuTypeReferences.Ecore()].GetMax()
-		defaultPowerProfile.efficientMin = coreTypes[CpuTypeReferences.Ecore()].GetMax()
+		defaultPStates.max = coreTypes[CpuTypeReferences.Pcore()].GetMax()
+		defaultPStates.min = coreTypes[CpuTypeReferences.Pcore()].GetMax()
+		defaultPStates.efficientMax = coreTypes[CpuTypeReferences.Ecore()].GetMax()
+		defaultPStates.efficientMin = coreTypes[CpuTypeReferences.Ecore()].GetMax()
 	}
 	if host.NumCoreTypes() > numOfSupportedCoreTypes {
 		log.Error(fmt.Errorf("more than %d core types detected. This may result in undefined behavior: %v", numOfSupportedCoreTypes, coreTypes), "topology issues detected")

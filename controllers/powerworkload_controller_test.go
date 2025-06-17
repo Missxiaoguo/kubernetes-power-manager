@@ -442,10 +442,6 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 		},
 	}
 
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
 	for _, tc := range tcases {
 		t.Log(tc.testCase)
 		t.Setenv("NODE_NAME", testNode)
@@ -459,7 +455,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			host, teardown, err := fullDummySystem()
 			assert.Nil(t, err)
 			defer teardown()
-			sharedProf, err := power.NewPowerProfile("shared", 1000, 1000, "powersave", "power")
+			sharedProf, err := power.NewPowerProfile("shared", 1000, 1000, "powersave", "power", map[string]bool{"C1": false})
 			assert.Nil(t, err)
 			assert.Nil(t, host.GetSharedPool().SetPowerProfile(sharedProf))
 			perf, err := host.AddExclusivePool("performance")
@@ -635,12 +631,14 @@ func FuzzPowerWorkloadController(f *testing.F) {
 					Namespace: IntelPowerNamespace,
 				},
 				Spec: powerv1.PowerProfileSpec{
-					Name:     prof,
-					Max:      maxVal,
-					Min:      minVal,
-					Epp:      epp,
-					Governor: governor,
-					Shared:   shared,
+					Name: prof,
+					PStates: powerv1.PStatesConfig{
+						Max:      maxVal,
+						Min:      minVal,
+						Epp:      epp,
+						Governor: governor,
+					},
+					Shared: shared,
 				},
 			},
 			&powerv1.PowerWorkload{
@@ -683,10 +681,6 @@ func FuzzPowerWorkloadController(f *testing.F) {
 				},
 			},
 		}
-
-		originalGetFromLscpu := power.GetFromLscpu
-		defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-		power.GetFromLscpu = power.TestGetFromLscpu
 
 		r, err := createWorkloadReconcilerObject(clientObjs)
 		assert.Nil(t, err)

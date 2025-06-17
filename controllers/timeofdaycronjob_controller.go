@@ -188,14 +188,14 @@ func (r *TimeOfDayCronJobReconciler) Reconcile(c context.Context, req ctrl.Reque
 					logger.Error(err, "error retrieving the frequency values from the node")
 					return ctrl.Result{Requeue: false}, err
 				}
-				if prof.Spec.Epp != "" && prof.Spec.Max == 0 && prof.Spec.Min == 0 {
-					profileMaxFreq = int(float64(absoluteMaximumFrequency) - (float64((absoluteMaximumFrequency - absoluteMinimumFrequency)) * profilePercentages[prof.Spec.Epp]["difference"]))
+				if prof.Spec.PStates.Epp != "" && prof.Spec.PStates.Max == 0 && prof.Spec.PStates.Min == 0 {
+					profileMaxFreq = int(float64(absoluteMaximumFrequency) - (float64((absoluteMaximumFrequency - absoluteMinimumFrequency)) * profilePercentages[prof.Spec.PStates.Epp]["difference"]))
 					profileMinFreq = int(profileMaxFreq) - 200
 				} else {
-					profileMaxFreq = prof.Spec.Max
-					profileMinFreq = prof.Spec.Min
+					profileMaxFreq = prof.Spec.PStates.Max
+					profileMinFreq = prof.Spec.PStates.Min
 				}
-				powerProfile, err := power.NewPowerProfile(prof.Spec.Name, uint(profileMinFreq), uint(profileMaxFreq), prof.Spec.Governor, prof.Spec.Epp)
+				powerProfile, err := power.NewPowerProfile(prof.Spec.Name, uint(profileMinFreq), uint(profileMaxFreq), prof.Spec.PStates.Governor, prof.Spec.PStates.Epp, prof.Spec.CStates)
 				if err != nil {
 					logger.Error(err, "could not set the power profile for the shared pool")
 					return ctrl.Result{Requeue: false}, err

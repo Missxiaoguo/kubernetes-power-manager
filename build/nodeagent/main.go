@@ -94,6 +94,9 @@ func main() {
 		if id == power.FrequencyScalingFeature {
 			govs := power.GetAvailableGovernors()
 			setupLog.Info(fmt.Sprintf("available governors: %v", govs))
+		} else if id == power.CStatesFeature {
+			cstates := power.GetAvailableCStates()
+			setupLog.Info(fmt.Sprintf("available c-states: %v", cstates))
 		}
 	}
 
@@ -146,15 +149,6 @@ func main() {
 		PodResourcesClient: *podResourcesClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PowerPod")
-		os.Exit(1)
-	}
-	if err = (&controllers.CStatesReconciler{
-		Client:       mgr.GetClient(),
-		Log:          ctrl.Log.WithName("controllers").WithName("CState"),
-		Scheme:       mgr.GetScheme(),
-		PowerLibrary: powerLibrary,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "CStates")
 		os.Exit(1)
 	}
 	if err = (&controllers.TimeOfDayReconciler{

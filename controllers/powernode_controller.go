@@ -107,7 +107,10 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 			continue
 		}
 
-		profileString := fmt.Sprintf("%s: %v || %v || %s", profileFromLibrary.Name(), profileFromLibrary.MaxFreq(), profileFromLibrary.MinFreq(), profileFromLibrary.Epp())
+		pstates := profileFromLibrary.GetPStates()
+		cstatesString := prettifyCStatesMap(profileFromLibrary.GetCStates().States())
+		profileString := fmt.Sprintf("%s: %v || %v || %s || %s || %s",
+			profileFromLibrary.Name(), pstates.MaxFreq(), pstates.MinFreq(), pstates.Epp(), pstates.Governor(), cstatesString)
 		powerProfileStrings = append(powerProfileStrings, profileString)
 	}
 
@@ -169,7 +172,9 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 	logger.V(5).Info("configurating the cores to the shared pool")
 	if len(sharedCores) > 0 && sharedProfile != nil {
 		cores := prettifyCoreList(sharedCores)
-		powerNode.Status.SharedPool = fmt.Sprintf("%s || %v || %v || %s", sharedProfile.Name(), sharedProfile.MaxFreq(), sharedProfile.MinFreq(), cores)
+		pstates := sharedProfile.GetPStates()
+		powerNode.Status.SharedPool = fmt.Sprintf("%s || %v || %v || %s",
+			sharedProfile.Name(), pstates.MaxFreq(), pstates.MinFreq(), cores)
 	} else {
 		powerNode.Status.SharedPool = ""
 	}
@@ -179,7 +184,9 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 	for _, pool := range *pools {
 		if strings.Contains(pool.Name(), nodeName+"-reserved-") {
 			cores := prettifyCoreList(pool.Cpus().IDs())
-			powerNode.Status.ReservedPools = append(powerNode.Status.ReservedPools, fmt.Sprintf("%v || %v || %s", pool.GetPowerProfile().MaxFreq(), pool.GetPowerProfile().MinFreq(), cores))
+			pstates := pool.GetPowerProfile().GetPStates()
+			powerNode.Status.ReservedPools = append(powerNode.Status.ReservedPools,
+				fmt.Sprintf("%v || %v || %s", pstates.MaxFreq(), pstates.MinFreq(), cores))
 		}
 	}
 	logger.V(5).Info("configurating the cores to the reserved pool")
@@ -223,6 +230,36 @@ func prettifyCoreList(cores []uint) string {
 	}
 
 	return prettified
+}
+
+// prettifyCStatesMap formats C-states map into a readable string showing enabled/disabled states.
+// Format: "enabled: C1, C1E; disabled: C6"
+func prettifyCStatesMap(states map[string]bool) string {
+	if len(states) == 0 {
+		return ""
+	}
+
+	var enabled, disabled []string
+	for state, isEnabled := range states {
+		if isEnabled {
+			enabled = append(enabled, state)
+		} else {
+			disabled = append(disabled, state)
+		}
+	}
+
+	sort.Strings(enabled)
+	sort.Strings(disabled)
+
+	var parts []string
+	if len(enabled) > 0 {
+		parts = append(parts, "enabled: "+strings.Join(enabled, ","))
+	}
+	if len(disabled) > 0 {
+		parts = append(parts, "disabled: "+strings.Join(disabled, ","))
+	}
+
+	return strings.Join(parts, "; ")
 }
 
 func (r *PowerNodeReconciler) itterPods(nodeName string, workload powerv1.PowerWorkload, poolFromLibrary power.Pool, guaranteedPod powerv1.GuaranteedPod, logger logr.Logger) error {
