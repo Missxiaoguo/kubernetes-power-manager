@@ -59,7 +59,11 @@ func createProfileReconcilerObject(objs []runtime.Object) (*PowerProfileReconcil
 	}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).WithScheme(s).Build()
+	cl := fake.NewClientBuilder().
+		WithScheme(s).
+		WithRuntimeObjects(objs...).
+		WithStatusSubresource(&powerv1.PowerWorkload{}).
+		Build()
 
 	// Create a ReconcileNode object with the scheme and fake client.
 	r := &PowerProfileReconciler{cl, ctrl.Log.WithName("testing"), s, nil}

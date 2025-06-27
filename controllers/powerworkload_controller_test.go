@@ -45,7 +45,11 @@ func createWorkloadReconcilerObject(objs []runtime.Object) (*PowerWorkloadReconc
 	}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).WithScheme(s).Build()
+	cl := fake.NewClientBuilder().
+		WithRuntimeObjects(objs...).
+		WithScheme(s).
+		WithStatusSubresource(&powerv1.PowerWorkload{}).
+		Build()
 
 	// Create a ReconcileNode object with the scheme and fake client.
 	r := &PowerWorkloadReconciler{cl, ctrl.Log.WithName("testing"), s, nil}
@@ -126,7 +130,9 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			AllCores:          false,
 			PowerNodeSelector: map[string]string{"powernode": "selector"},
 			PowerProfile:      "performance",
-			Node: powerv1.WorkloadNode{
+		},
+		Status: powerv1.PowerWorkloadStatus{
+			WorkloadNodes: powerv1.WorkloadNode{
 				Name:   testNode,
 				CpuIds: []uint{4, 5},
 			},
@@ -198,7 +204,9 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 						ReservedCPUs:      []powerv1.ReservedSpec{{Cores: []uint{0, 1}}},
 						PowerNodeSelector: map[string]string{"powernode": "selector"},
 						PowerProfile:      "shared",
-						Node: powerv1.WorkloadNode{
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
 							Name:   testNode,
 							CpuIds: []uint{5, 3},
 						},
@@ -534,7 +542,9 @@ func TestPowerWorkload_Reconcile_ClientErrs(t *testing.T) {
 			ReservedCPUs:      []powerv1.ReservedSpec{{Cores: []uint{0, 1}}},
 			PowerNodeSelector: map[string]string{"powernode": "selector"},
 			PowerProfile:      "shared",
-			Node: powerv1.WorkloadNode{
+		},
+		Status: powerv1.PowerWorkloadStatus{
+			WorkloadNodes: powerv1.WorkloadNode{
 				Name:   testNode,
 				CpuIds: []uint{2, 3},
 			},
@@ -656,7 +666,10 @@ func FuzzPowerWorkloadController(f *testing.F) {
 						},
 					},
 					PowerNodeSelector: map[string]string{"kubernetes.io/hostname": nodeName},
-					Node: powerv1.WorkloadNode{
+					PowerProfile:      prof,
+				},
+				Status: powerv1.PowerWorkloadStatus{
+					WorkloadNodes: powerv1.WorkloadNode{
 						Name: nodeName,
 						Containers: []powerv1.Container{
 							{
@@ -667,7 +680,6 @@ func FuzzPowerWorkloadController(f *testing.F) {
 						},
 						CpuIds: []uint{nCore1, nCore2},
 					},
-					PowerProfile: prof,
 				},
 			},
 			&corev1.Node{

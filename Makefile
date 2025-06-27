@@ -130,6 +130,9 @@ images-ocp: generate manifests
 run: generate fmt vet manifests
 	go run ./build/manager/main.go
 
+run-agent: generate fmt vet manifests
+	go run ./build/nodeagent/main.go
+
 .PHONY: helm-install helm-uninstall 
 helm-install:
 ifeq (true, $(OCP))

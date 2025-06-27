@@ -44,7 +44,11 @@ func createPowerNodeReconcilerObject(objs []runtime.Object) (*PowerNodeReconcile
 	}
 
 	// Create a fake client to mock API calls.
-	cl := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).WithStatusSubresource(&powerv1.PowerNode{}).Build()
+	cl := fake.NewClientBuilder().
+		WithScheme(s).WithRuntimeObjects(objs...).
+		WithStatusSubresource(&powerv1.PowerNode{}).
+		WithStatusSubresource(&powerv1.PowerWorkload{}).
+		Build()
 	state, err := podstate.NewState()
 	if err != nil {
 		return nil, err
@@ -87,7 +91,9 @@ var defaultWload = &powerv1.PowerWorkload{
 	Spec: powerv1.PowerWorkloadSpec{
 		Name:         "performance-TestNode",
 		PowerProfile: "performance",
-		Node: powerv1.WorkloadNode{
+	},
+	Status: powerv1.PowerWorkloadStatus{
+		WorkloadNodes: powerv1.WorkloadNode{
 			Name: "TestNode",
 			Containers: []powerv1.Container{
 				{Name: "fake container"},
@@ -434,10 +440,6 @@ func FuzzPowerNodeController(f *testing.F) {
 				Spec: powerv1.PowerWorkloadSpec{
 					Name:         prof1 + "-" + nodeName,
 					PowerProfile: prof1,
-					Node: powerv1.WorkloadNode{
-						Name:   nodeName,
-						CpuIds: []uint{1, 2, 3},
-					},
 				},
 			},
 			&powerv1.PowerNode{
