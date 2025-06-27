@@ -98,14 +98,16 @@ var defaultSharedWork = &powerv1.PowerWorkload{
 		Namespace: IntelPowerNamespace,
 	},
 	Spec: powerv1.PowerWorkloadSpec{
-		Name:     "shared-TestNode",
-		AllCores: true,
-		Node: powerv1.WorkloadNode{
+		Name:         "shared-TestNode",
+		AllCores:     true,
+		PowerProfile: "shared-TestNode",
+	},
+	Status: powerv1.PowerWorkloadStatus{
+		WorkloadNodes: powerv1.WorkloadNode{
 			Name:       "TestNode",
 			Containers: []powerv1.Container{},
 			CpuIds:     []uint{},
 		},
-		PowerProfile: "shared-TestNode",
 	},
 }
 
@@ -130,7 +132,14 @@ func createTODCronReconcilerObject(objs []client.Object) (*TimeOfDayCronJobRecon
 		return nil, err
 	}
 	// Create a fake client to mock API calls.
-	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).WithStatusSubresource(objs...).Build()
+	cl := fake.
+		NewClientBuilder().
+		WithScheme(s).
+		WithObjects(objs...).
+		WithStatusSubresource(&powerv1.PowerWorkload{}).
+		WithStatusSubresource(&powerv1.TimeOfDayCronJob{}).
+		WithStatusSubresource(&powerv1.PowerProfile{}).
+		Build()
 	// Create a ReconcileNode object with the scheme and fake client.
 	r := &TimeOfDayCronJobReconciler{cl, ctrl.Log.WithName("testing"), s, state, nil}
 
@@ -210,7 +219,9 @@ func TestTimeOfDayCronJob_Reconcile_CronProfile(t *testing.T) {
 			},
 			Spec: powerv1.PowerWorkloadSpec{
 				Name: "performance-TestNode",
-				Node: powerv1.WorkloadNode{
+			},
+			Status: powerv1.PowerWorkloadStatus{
+				WorkloadNodes: powerv1.WorkloadNode{
 					Name:       "TestNode",
 					Containers: []powerv1.Container{},
 					CpuIds:     []uint{},
@@ -320,7 +331,9 @@ func TestTimeOfDayCronJob_Reconcile_CronPods(t *testing.T) {
 			},
 			Spec: powerv1.PowerWorkloadSpec{
 				Name: "balance-performance-TestNode",
-				Node: powerv1.WorkloadNode{
+			},
+			Status: powerv1.PowerWorkloadStatus{
+				WorkloadNodes: powerv1.WorkloadNode{
 					Name:       "TestNode",
 					Containers: []powerv1.Container{},
 					CpuIds:     []uint{},
@@ -347,8 +360,11 @@ func TestTimeOfDayCronJob_Reconcile_CronPods(t *testing.T) {
 				Namespace: IntelPowerNamespace,
 			},
 			Spec: powerv1.PowerWorkloadSpec{
-				Name: "performance-TestNode",
-				Node: powerv1.WorkloadNode{
+				Name:         "performance-TestNode",
+				PowerProfile: "performance",
+			},
+			Status: powerv1.PowerWorkloadStatus{
+				WorkloadNodes: powerv1.WorkloadNode{
 					Name: "TestNode",
 					Containers: []powerv1.Container{
 						{
@@ -358,7 +374,6 @@ func TestTimeOfDayCronJob_Reconcile_CronPods(t *testing.T) {
 					},
 					CpuIds: []uint{3, 4},
 				},
-				PowerProfile: "performance",
 			},
 		},
 		&corev1.Pod{
@@ -436,18 +451,16 @@ func TestTimeOfDayCronJob_Reconcile_CronPods(t *testing.T) {
 	err = r.Client.Get(context.TODO(), performanceReq.NamespacedName, &workload)
 	assert.NoError(t, err)
 	assert.False(t, findPodInWorkload(workload, "test-pod-1"))
-	assert.False(t, findPodInWorkload(workload, "test-pod-1"))
 
 	// ensure new workload has pod
 	workload = powerv1.PowerWorkload{}
 	err = r.Client.Get(context.TODO(), balancePerformanceReq.NamespacedName, &workload)
 	assert.NoError(t, err)
 	assert.True(t, findPodInWorkload(workload, "test-pod-1"))
-
 }
 
 func findPodInWorkload(workload powerv1.PowerWorkload, podName string) bool {
-	for _, container := range workload.Spec.Node.Containers {
+	for _, container := range workload.Status.WorkloadNodes.Containers {
 		if container.Pod == podName {
 			return true
 		}
@@ -815,7 +828,9 @@ func TestTimeOfDayCronJob_Reconcile_ErrsSharedPoolExists(t *testing.T) {
 		},
 		Spec: powerv1.PowerWorkloadSpec{
 			Name: "performance-TestNode",
-			Node: powerv1.WorkloadNode{
+		},
+		Status: powerv1.PowerWorkloadStatus{
+			WorkloadNodes: powerv1.WorkloadNode{
 				Name:       "TestNode",
 				Containers: []powerv1.Container{},
 				CpuIds:     []uint{},
@@ -986,8 +1001,11 @@ func TestTimeOfDayCronJob_Reconcile_ErrsPodTuning(t *testing.T) {
 			Namespace: IntelPowerNamespace,
 		},
 		Spec: powerv1.PowerWorkloadSpec{
-			Name: "performance-TestNode",
-			Node: powerv1.WorkloadNode{
+			Name:         "performance-TestNode",
+			PowerProfile: "performance",
+		},
+		Status: powerv1.PowerWorkloadStatus{
+			WorkloadNodes: powerv1.WorkloadNode{
 				Name: "TestNode",
 				Containers: []powerv1.Container{
 					{
@@ -997,7 +1015,6 @@ func TestTimeOfDayCronJob_Reconcile_ErrsPodTuning(t *testing.T) {
 				},
 				CpuIds: []uint{3, 4},
 			},
-			PowerProfile: "performance",
 		},
 	}
 	pod := &corev1.Pod{
@@ -1042,7 +1059,9 @@ func TestTimeOfDayCronJob_Reconcile_ErrsPodTuning(t *testing.T) {
 			},
 			Spec: powerv1.PowerWorkloadSpec{
 				Name: "balance-performance-TestNode",
-				Node: powerv1.WorkloadNode{
+			},
+			Status: powerv1.PowerWorkloadStatus{
+				WorkloadNodes: powerv1.WorkloadNode{
 					Name:       "TestNode",
 					Containers: []powerv1.Container{},
 					CpuIds:     []uint{},

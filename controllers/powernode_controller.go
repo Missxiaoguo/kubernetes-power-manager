@@ -127,7 +127,7 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 
 	for _, workload := range powerWorkloads.Items {
 		logger.V(5).Info("checking if the workload is shared or on the wrong node")
-		if workload.Spec.AllCores || workload.Spec.Node.Name != nodeName {
+		if workload.Spec.AllCores || workload.Status.WorkloadNodes.Name != nodeName {
 			continue
 		}
 		poolFromLibrary := r.PowerLibrary.GetExclusivePool(workload.Spec.PowerProfile)
@@ -151,7 +151,7 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 		workloadString := fmt.Sprintf("%s: %s || %s", poolFromLibrary.Name(), profile.Name(), cores)
 		powerWorkloadStrings = append(powerWorkloadStrings, workloadString)
 
-		for _, container := range workload.Spec.Node.Containers {
+		for _, container := range workload.Status.WorkloadNodes.Containers {
 			logger.V(5).Info("configuring the power container information")
 			container.Workload = workload.Name
 			powerContainers = append(powerContainers, container)

@@ -24,11 +24,9 @@ import (
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
 type WorkloadNode struct {
-	Name string `json:"name,omitempty"`
-
+	Name       string      `json:"name,omitempty"`
 	Containers []Container `json:"containers,omitempty"`
-
-	CpuIds []uint `json:"cpuIds,omitempty"`
+	CpuIds     []uint      `json:"cpuIds,omitempty"`
 }
 
 // PowerWorkloadSpec defines the desired state of PowerWorkload
@@ -49,11 +47,6 @@ type PowerWorkloadSpec struct {
 	// The labels signifying the nodes the user wants to use
 	PowerNodeSelector map[string]string `json:"powerNodeSelector,omitempty"`
 
-	// Holds the info on the node name and cpu ids for each node
-	//Node NodeInfo `json:"nodeInfo,omitempty"`
-
-	Node WorkloadNode `json:"workloadNodes,omitempty"`
-
 	// PowerProfile is the Profile that this PowerWorkload is based on
 	PowerProfile string `json:"powerProfile,omitempty"`
 }
@@ -65,9 +58,9 @@ type ReservedSpec struct {
 
 // PowerWorkloadStatus defines the observed state of PowerWorkload
 type PowerWorkloadStatus struct {
-	// The Node that this Shared PowerWorkload is associated with
-	Node         string `json:"node:,omitempty"`
-	StatusErrors `json:",inline,omitempty"`
+	// Holds the info on the node name and cpu ids for each node.
+	WorkloadNodes WorkloadNode `json:"workloadNodes,omitempty"`
+	StatusErrors  `json:",inline,omitempty"`
 }
 
 // +kubebuilder:object:root=true

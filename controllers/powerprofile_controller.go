@@ -346,10 +346,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 	if err != nil {
 		if errors.IsNotFound(err) {
 			powerWorkloadSpec := &powerv1.PowerWorkloadSpec{
-				Name: workloadName,
-				Node: powerv1.WorkloadNode{
-					Name: nodeName,
-				},
+				Name:         workloadName,
 				PowerProfile: profile.Spec.Name,
 			}
 

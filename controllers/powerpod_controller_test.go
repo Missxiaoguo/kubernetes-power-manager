@@ -36,6 +36,23 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// Your mock client probably has a status writer struct like this
+type errSubResourceClient struct {
+	*errClient
+}
+
+func (e *errSubResourceClient) Create(ctx context.Context, obj client.Object, subResource client.Object, opts ...client.SubResourceCreateOption) error {
+	return fmt.Errorf("mock client Create error")
+}
+
+func (e *errSubResourceClient) Update(ctx context.Context, obj client.Object, opts ...client.SubResourceUpdateOption) error {
+	return fmt.Errorf("mock client Update error")
+}
+
+func (e *errSubResourceClient) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+	return fmt.Errorf("mock client Patch error")
+}
+
 type fakePodResourcesClient struct {
 	listResponse *podresourcesapi.ListPodResourcesResponse
 }
@@ -79,7 +96,10 @@ func createPodReconcilerObject(objs []runtime.Object, podResourcesClient *podres
 	}
 
 	// create a fake client to mock API calls.
-	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).Build()
+	cl := fake.NewClientBuilder().
+		WithRuntimeObjects(objs...).
+		WithStatusSubresource(&powerv1.PowerWorkload{}).
+		Build()
 	state, err := podstate.NewState()
 	if err != nil {
 		return nil, err
@@ -122,7 +142,9 @@ var defaultWorkload = &powerv1.PowerWorkload{
 	Spec: powerv1.PowerWorkloadSpec{
 		Name:         "performance-TestNode",
 		PowerProfile: "performance",
-		Node: powerv1.WorkloadNode{
+	},
+	Status: powerv1.PowerWorkloadStatus{
+		WorkloadNodes: powerv1.WorkloadNode{
 			Name: "TestNode",
 			Containers: []powerv1.Container{
 				{PowerProfile: "performance"},
@@ -174,7 +196,9 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "performance-TestNode",
 						PowerProfile: "performance",
-						Node: powerv1.WorkloadNode{
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
 							Name: "TestNode",
 						},
 					},
@@ -322,7 +346,9 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "balance-performance-TestNode",
 						PowerProfile: "balance-performance",
-						Node: powerv1.WorkloadNode{
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
 							Name:       "TestNode",
 							Containers: []powerv1.Container{},
 							CpuIds:     []uint{},
@@ -417,7 +443,9 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name: "performance-TestNode",
-						Node: powerv1.WorkloadNode{
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
 							Name: "TestNode",
 							Containers: []powerv1.Container{
 								{
@@ -497,9 +525,9 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 			}, workload)
 			assert.Nil(t, err)
 
-			sortedCpuIds := workload.Spec.Node.CpuIds
-			sort.Slice(workload.Spec.Node.CpuIds, func(i, j int) bool {
-				return workload.Spec.Node.CpuIds[i] < workload.Spec.Node.CpuIds[j]
+			sortedCpuIds := workload.Status.WorkloadNodes.CpuIds
+			sort.Slice(workload.Status.WorkloadNodes.CpuIds, func(i, j int) bool {
+				return workload.Status.WorkloadNodes.CpuIds[i] < workload.Status.WorkloadNodes.CpuIds[j]
 			})
 			if !reflect.DeepEqual(cores, sortedCpuIds) {
 				t.Errorf("%s failed: expected CPU Ids to be %v, got %v", tc.testCase, cores, sortedCpuIds)
@@ -541,7 +569,9 @@ func TestPowerPod_Duplicate_Containers(t *testing.T) {
 			Spec: powerv1.PowerWorkloadSpec{
 				Name:         workloadName,
 				PowerProfile: "performance",
-				Node: powerv1.WorkloadNode{
+			},
+			Status: powerv1.PowerWorkloadStatus{
+				WorkloadNodes: powerv1.WorkloadNode{
 					Name: "TestNode",
 					Containers: []powerv1.Container{
 						{
@@ -607,15 +637,14 @@ func TestPowerPod_Duplicate_Containers(t *testing.T) {
 	}, workload)
 	assert.Nil(t, err)
 
-	for i, con1 := range workload.Spec.Node.Containers {
-		for j := i + 1; j < len(workload.Spec.Node.Containers); j++ {
-			con2 := workload.Spec.Node.Containers[j]
+	for i, con1 := range workload.Status.WorkloadNodes.Containers {
+		for j := i + 1; j < len(workload.Status.WorkloadNodes.Containers); j++ {
+			con2 := workload.Status.WorkloadNodes.Containers[j]
 			if con1.Id == con2.Id && reflect.DeepEqual(con1.ExclusiveCPUs, con2.ExclusiveCPUs) {
 				t.Error("duplicate container not filtered out")
 			}
 		}
 	}
-
 }
 
 // tests where the workload associated with the profile requested does not exist
@@ -996,8 +1025,8 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 			}, workload)
 			assert.Nil(t, err)
 
-			if len(workload.Spec.Node.CpuIds) > 0 {
-				t.Errorf("%s failed: expected the CPU Ids to be empty, got %v", tc.testCase, workload.Spec.Node.CpuIds)
+			if len(workload.Status.WorkloadNodes.CpuIds) > 0 {
+				t.Errorf("%s failed: expected the CPU Ids to be empty, got %v", tc.testCase, workload.Status.WorkloadNodes.CpuIds)
 			}
 		}
 	}
@@ -1238,8 +1267,8 @@ func TestPowerPod_Reconcile_ControllerReturningNil(t *testing.T) {
 			}, workload)
 			assert.Nil(t, err)
 
-			if len(workload.Spec.Node.CpuIds) > 0 {
-				t.Errorf("%s failed: expected the CPU Ids to be empty, got %v", tc.testCase, workload.Spec.Node.CpuIds)
+			if len(workload.Status.WorkloadNodes.CpuIds) > 0 {
+				t.Errorf("%s failed: expected the CPU Ids to be empty, got %v", tc.testCase, workload.Status.WorkloadNodes.CpuIds)
 			}
 		}
 	}
@@ -1287,7 +1316,9 @@ func TestPowerPod_Reconcile_Delete(t *testing.T) {
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "performance-TestNode",
 						PowerProfile: "performance",
-						Node: powerv1.WorkloadNode{
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
 							Name: "TestNode",
 							Containers: []powerv1.Container{
 								{
@@ -1361,8 +1392,10 @@ func TestPowerPod_Reconcile_Delete(t *testing.T) {
 		}, workload)
 		assert.Nil(t, err)
 
-		if len(workload.Spec.Node.CpuIds) != 1 {
-			t.Errorf("%s failed: expected one remaining core in the workload, got %v", tc.testCase, workload.Spec.Node.CpuIds)
+		if len(workload.Status.WorkloadNodes.CpuIds) != 1 {
+			t.Errorf(
+				"%s failed: expected one remaining core in the workload, got %v",
+				tc.testCase, workload.Status.WorkloadNodes.CpuIds)
 		}
 	}
 }
@@ -1436,6 +1469,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 			podName:  "test-pod-1",
 			convertClient: func(c client.Client) client.Client {
 				mkcl := new(errClient)
+				mkcl.On("Status").Return(&errSubResourceClient{mkcl})
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.Pod")).Return(nil).Run(func(args mock.Arguments) {
 					pod := args.Get(2).(*corev1.Pod)
 					*pod = *deletedPod
@@ -1444,10 +1478,9 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 					wload := args.Get(2).(*powerv1.PowerWorkload)
 					*wload = *defaultWload
 				})
-				mkcl.On("Update", mock.Anything, mock.Anything).Return(fmt.Errorf("client update error"))
 				return mkcl
 			},
-			clientErr: "client update error",
+			clientErr: "failed to update status: mock client Update error",
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",

@@ -71,7 +71,19 @@ spec:
                   - cores
                   type: object
                 type: array
+            required:
+            - name
+            type: object
+          status:
+            description: PowerWorkloadStatus defines the observed state of PowerWorkload
+            properties:
+              errors:
+                items:
+                  type: string
+                type: array
               workloadNodes:
+                description: Holds the info on the node name and cpu ids for each
+                  node.
                 properties:
                   containers:
                     items:
@@ -106,20 +118,6 @@ spec:
                   name:
                     type: string
                 type: object
-            required:
-            - name
-            type: object
-          status:
-            description: PowerWorkloadStatus defines the observed state of PowerWorkload
-            properties:
-              errors:
-                items:
-                  type: string
-                type: array
-              'node:':
-                description: The Node that this Shared PowerWorkload is associated
-                  with
-                type: string
             type: object
         type: object
     served: true

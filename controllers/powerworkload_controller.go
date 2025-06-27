@@ -32,7 +32,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -113,6 +112,13 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 		return ctrl.Result{}, err
 	}
 
+	// Set the name of the workload node for non shared PowerWorkloads.
+	workload.Status.WorkloadNodes.Name = nodeName
+	err = r.Client.Status().Update(context.TODO(), workload)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// If there are multiple nodes the shared power workload's node selector satisfies we need to fail here before anything is done
 	logger.V(5).Info("checking the node elector is satisfied with the shared power workload")
 	if workload.Spec.AllCores {
@@ -127,7 +133,7 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 
 		// If there were no nodes that matched the provided labels, check the node info of the workload for a name
 		logger.V(5).Info("checking the node info to see if the node name has been provided")
-		if (len(labelledNodeList.Items) == 0 && workload.Spec.Node.Name != nodeName) || !util.NodeNameInNodeList(nodeName, labelledNodeList.Items) {
+		if (len(labelledNodeList.Items) == 0 && workload.Status.WorkloadNodes.Name != nodeName) || !util.NodeNameInNodeList(nodeName, labelledNodeList.Items) {
 			return ctrl.Result{}, nil
 		}
 
@@ -208,12 +214,12 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 		if wrappedErrs != nil {
 			errString := "error(s) encountered establishing reserved pool"
 			logger.Error(wrappedErrs, errString)
-			return ctrl.Result{Requeue: false}, fmt.Errorf(errString)
+			return ctrl.Result{Requeue: false}, e.New(errString)
 		}
 		return ctrl.Result{}, nil
 	}
 
-	if workload.Spec.Node.Name == nodeName {
+	if workload.Status.WorkloadNodes.Name == nodeName {
 		poolFromLibrary := r.PowerLibrary.GetExclusivePool(workload.Spec.PowerProfile)
 		if poolFromLibrary == nil {
 			poolDoesNotExistError := errors.NewServiceUnavailable(fmt.Sprintf("pool '%s' does not exist in the power library", workload.Spec.PowerProfile))
@@ -223,8 +229,8 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 
 		logger.V(5).Info("updating the CPU list in the power library")
 		cores := poolFromLibrary.Cpus().IDs()
-		coresToRemoveFromLibrary := detectCoresRemoved(cores, workload.Spec.Node.CpuIds, &logger)
-		coresToBeAddedToLibrary := detectCoresAdded(cores, workload.Spec.Node.CpuIds, &logger)
+		coresToRemoveFromLibrary := detectCoresRemoved(cores, workload.Status.WorkloadNodes.CpuIds, &logger)
+		coresToBeAddedToLibrary := detectCoresAdded(cores, workload.Status.WorkloadNodes.CpuIds, &logger)
 
 		if len(coresToRemoveFromLibrary) > 0 {
 			err = r.PowerLibrary.GetSharedPool().MoveCpuIDs(coresToRemoveFromLibrary)
@@ -319,6 +325,5 @@ func createReservedPool(library power.Host, coreConfig powerv1.ReservedSpec, log
 func (r *PowerWorkloadReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&powerv1.PowerWorkload{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
 }

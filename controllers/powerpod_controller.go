@@ -125,16 +125,18 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 				}
 				return ctrl.Result{}, err
 			}
+			// Prepare the PowerWorkload status patch.
+			statusPatch := client.MergeFrom(workload.DeepCopy())
 
 			logger.V(5).Info("updating CPUs workload list with their CPU IDs and the container information")
-			updatedWorkloadCPUList := getNewWorkloadCPUList(cpus, workload.Spec.Node.CpuIds, &logger)
-			workload.Spec.Node.CpuIds = updatedWorkloadCPUList
-			updatedWorkloadContainerList := getNewWorkloadContainerList(workload.Spec.Node.Containers, powerPodState.Containers, &logger)
-			workload.Spec.Node.Containers = updatedWorkloadContainerList
+			updatedWorkloadCPUList := getNewWorkloadCPUList(cpus, workload.Status.WorkloadNodes.CpuIds, &logger)
+			workload.Status.WorkloadNodes.CpuIds = updatedWorkloadCPUList
+			updatedWorkloadContainerList := getNewWorkloadContainerList(workload.Status.WorkloadNodes.Containers, powerPodState.Containers, &logger)
+			workload.Status.WorkloadNodes.Containers = updatedWorkloadContainerList
 
-			err = r.Client.Update(context.TODO(), workload)
-			if err != nil {
-				logger.Error(err, "failed to update the power workload")
+			logger.V(5).Info("updating the PowerWorkload status")
+			if err := r.Status().Patch(context.TODO(), workload, statusPatch); err != nil {
+				logger.Error(err, "failed to update the PowerWorkload status")
 				return ctrl.Result{}, err
 			}
 		}
@@ -205,13 +207,19 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 			recoveryErrs = append(recoveryErrs, err)
 			continue
 		}
+		// Prepare the PowerWorkload status patch.
+		statusPatch := client.MergeFrom(workload.DeepCopy())
 
 		// Power workload already exists so need to update it. If the node already
 		// exists in the workload, we update the node's CPU list, if not we create
 		// the entry for the node
-
-		workload.Spec.Node.CpuIds = appendIfUnique(workload.Spec.Node.CpuIds, cores)
-		sort.Slice(workload.Spec.Node.CpuIds, func(i, j int) bool { return workload.Spec.Node.CpuIds[i] < workload.Spec.Node.CpuIds[j] })
+		workload.Status.WorkloadNodes.CpuIds = appendIfUnique(workload.Status.WorkloadNodes.CpuIds, cores)
+		sort.Slice(
+			workload.Status.WorkloadNodes.CpuIds,
+			func(i, j int) bool {
+				return workload.Status.WorkloadNodes.CpuIds[i] < workload.Status.WorkloadNodes.CpuIds[j]
+			},
+		)
 		containerList := make([]powerv1.Container, 0)
 		for i, container := range powerContainers {
 			if container.PowerProfile == workload.Spec.PowerProfile {
@@ -227,7 +235,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 		for _, newContainer := range containerList {
 			duplicate := false
 			logger.V(5).Info("confirming the containers are not duplicated")
-			for _, oldContainer := range workload.Spec.Node.Containers {
+			for _, oldContainer := range workload.Status.WorkloadNodes.Containers {
 				if newContainer.Id == oldContainer.Id && reflect.DeepEqual(newContainer.ExclusiveCPUs, oldContainer.ExclusiveCPUs) {
 					duplicate = true
 					continue
@@ -237,11 +245,10 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 				newContainerList = append(newContainerList, newContainer)
 			}
 		}
-		workload.Spec.Node.Containers = append(workload.Spec.Node.Containers, newContainerList...)
-		err = r.Client.Update(context.TODO(), workload)
-		logger.V(5).Info("ammending the workload in the container list")
-		if err != nil {
-			logger.Error(err, "error while trying to update the power workload")
+		workload.Status.WorkloadNodes.Containers = append(workload.Status.WorkloadNodes.Containers, newContainerList...)
+		logger.V(5).Info("updating the PowerWorkload status")
+		if err := r.Status().Patch(context.TODO(), workload, statusPatch); err != nil {
+			logger.Error(err, "failed to update the PowerWorkload status")
 			return ctrl.Result{}, err
 		}
 	}

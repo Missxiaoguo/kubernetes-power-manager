@@ -24,6 +24,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/util/retry"
 
 	"time"
 
@@ -161,14 +162,27 @@ func (r *TimeOfDayCronJobReconciler) Reconcile(c context.Context, req ctrl.Reque
 							Name:         workloadName,
 							AllCores:     true,
 							ReservedCPUs: []powerv1.ReservedSpec{{Cores: *cronJob.Spec.ReservedCPUs}},
-							Node: powerv1.WorkloadNode{
-								Name: nodeName,
-							},
 							PowerProfile: *cronJob.Spec.Profile,
 						},
 					}
 					if err = r.Client.Create(context.TODO(), workload); err != nil {
 						logger.Error(err, "error creating workload")
+						return ctrl.Result{}, err
+					}
+
+					workload.Status = powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name: nodeName,
+						},
+					}
+					err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+						if err := r.Client.Status().Update(context.TODO(), workload); err != nil {
+							return fmt.Errorf("failed to update status: %w", err)
+						}
+						return nil
+					})
+
+					if err != nil {
 						return ctrl.Result{}, err
 					}
 					workloadMatch = workload
@@ -316,35 +330,50 @@ func (r *TimeOfDayCronJobReconciler) Reconcile(c context.Context, req ctrl.Reque
 						}
 						var remainingFromContainers []powerv1.Container
 						// getting the indices of containers we need to change
-						for i := 0; i < len(workloadFrom.Spec.Node.Containers); i++ {
-							container := workloadFrom.Spec.Node.Containers[i]
+						for i := 0; i < len(workloadFrom.Status.WorkloadNodes.Containers); i++ {
+							container := workloadFrom.Status.WorkloadNodes.Containers[i]
 							if container.Pod == podName {
 								logger.V(5).Info(fmt.Sprintf("Found %s for tuning", container.Pod))
 								// first we set the profile on the container to its new value
 								container.PowerProfile = podInfo.Target
 								// copying container to its new workload
-								workloadTo.Spec.Node.Containers = append(workloadTo.Spec.Node.Containers, container)
+								workloadTo.Status.WorkloadNodes.Containers = append(workloadTo.Status.WorkloadNodes.Containers, container)
 								//getting cores to be removed from one workload and added to another
-								coresToSwap := workloadFrom.Spec.Node.Containers[i].ExclusiveCPUs
+								coresToSwap := workloadFrom.Status.WorkloadNodes.Containers[i].ExclusiveCPUs
 								// append cores to one workload and shrink the list in the other
-								workloadTo.Spec.Node.CpuIds = append(workloadTo.Spec.Node.CpuIds, coresToSwap...)
-								updatedWorkloadCPUList := getNewWorkloadCPUList(coresToSwap, workloadFrom.Spec.Node.CpuIds, &logger)
-								workloadFrom.Spec.Node.CpuIds = updatedWorkloadCPUList
+								workloadTo.Status.WorkloadNodes.CpuIds = append(workloadTo.Status.WorkloadNodes.CpuIds, coresToSwap...)
+								updatedWorkloadCPUList := getNewWorkloadCPUList(coresToSwap, workloadFrom.Status.WorkloadNodes.CpuIds, &logger)
+								workloadFrom.Status.WorkloadNodes.CpuIds = updatedWorkloadCPUList
 							} else {
 								// take note of containers that should stay in the workload
-								remainingFromContainers = append(remainingFromContainers, workloadFrom.Spec.Node.Containers[i])
+								remainingFromContainers = append(remainingFromContainers, workloadFrom.Status.WorkloadNodes.Containers[i])
 							}
 						}
 						// some containers have moved workload
-						if len(remainingFromContainers) != len(workloadFrom.Spec.Node.Containers) {
-							workloadFrom.Spec.Node.Containers = remainingFromContainers
-							//update both workloads to bring changes into affect
-							if err = r.Client.Update(c, &workloadFrom); err != nil {
-								logger.Error(err, "cannot update the workload")
+						if len(remainingFromContainers) != len(workloadFrom.Status.WorkloadNodes.Containers) {
+							workloadFrom.Status.WorkloadNodes.Containers = remainingFromContainers
+							// Update both workloads to bring changes into affect.
+							// Update workloadFrom.
+							err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+								if err := r.Client.Status().Update(context.TODO(), &workloadFrom); err != nil {
+									return fmt.Errorf("failed to update status: %w", err)
+								}
+								return nil
+							})
+
+							if err != nil {
 								return ctrl.Result{}, err
 							}
-							if err = r.Client.Update(c, &workloadTo); err != nil {
-								logger.Error(err, "cannot update the workload")
+
+							// Update workloadTo.
+							err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
+								if err := r.Client.Status().Update(context.TODO(), &workloadTo); err != nil {
+									return fmt.Errorf("failed to update status: %w", err)
+								}
+								return nil
+							})
+
+							if err != nil {
 								return ctrl.Result{}, err
 							}
 						}
