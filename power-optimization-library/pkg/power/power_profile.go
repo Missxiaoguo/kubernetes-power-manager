@@ -5,125 +5,95 @@ import (
 )
 
 type profileImpl struct {
-	name         string
-	max          uint
-	min          uint
-	efficientMax uint
-	efficientMin uint
-	epp          string
-	governor     string
-	// todo classification
+	name    string
+	pstates PStates
+	cstates CStates
 }
 
-// Profile contains scaling driver information
+// Profile contains both P-states and C-states information
 type Profile interface {
 	Name() string
-	Epp() string
-	MaxFreq() uint
-	EfficientMaxFreq() uint
-	MinFreq() uint
-	EfficientMinFreq() uint
-	Governor() string
-}
-
-var availableGovs []string
-
-// todo add simple constructor that determines frequencies automagically?
-
-// NewPowerProfile creates a power profile,
-func NewPowerProfile(name string, minFreq uint, maxFreq uint, governor string, epp string) (Profile, error) {
-	if !featureList.isFeatureIdSupported(FrequencyScalingFeature) {
-		return nil, featureList.getFeatureIdError(FrequencyScalingFeature)
-	}
-	if len(coreTypes) > 1 {
-		log.Error(fmt.Errorf("creating standard power profile on system with multiple core types"), "undefined behavior expected")
-	}
-	if minFreq > maxFreq {
-		return nil, fmt.Errorf("max Freq can't be lower than min")
-	}
-	if governor == "" {
-		governor = defaultGovernor
-	}
-	if !checkGov(governor) { //todo determine by reading available governors, its different for acpi Driver
-		return nil, fmt.Errorf("governor can only be set to the following %v", availableGovs)
-
-	}
-	if epp != "" && governor == cpuPolicyPerformance && epp != cpuPolicyPerformance {
-		return nil, fmt.Errorf("only '%s' epp can be used with '%s' governor", cpuPolicyPerformance, cpuPolicyPerformance)
-	}
-
-	log.Info("creating powerProfile object", "name", name)
-	return &profileImpl{
-		name:         name,
-		max:          maxFreq * 1000,
-		min:          minFreq * 1000,
-		efficientMax: maxFreq * 1000,
-		efficientMin: minFreq * 1000,
-		epp:          epp,
-		governor:     governor,
-	}, nil
-}
-
-// creates a Power Profile for efficient and performant cores
-func NewEcorePowerProfile(name string, minFreq uint, maxFreq uint, emin uint, emax uint, governor string, epp string) (Profile, error) {
-	if !featureList.isFeatureIdSupported(FrequencyScalingFeature) {
-		return nil, featureList.getFeatureIdError(FrequencyScalingFeature)
-	}
-	if minFreq > maxFreq {
-		return nil, fmt.Errorf("max Freq can't be lower than min")
-	}
-	if emin > emax {
-		return nil, fmt.Errorf("max Freq can't be lower than min")
-	}
-	if governor == "" {
-		governor = defaultGovernor
-	}
-	if !checkGov(governor) { //todo determine by reading available governors, its different for acpi Driver
-		return nil, fmt.Errorf("governor can only be set to the following %v", availableGovs)
-
-	}
-	if epp != "" && governor == cpuPolicyPerformance && epp != cpuPolicyPerformance {
-		return nil, fmt.Errorf("only '%s' epp can be used with '%s' governor", cpuPolicyPerformance, cpuPolicyPerformance)
-	}
-
-	log.Info("creating powerProfile object", "name", name)
-	return &profileImpl{
-		name:         name,
-		max:          maxFreq * 1000,
-		min:          minFreq * 1000,
-		efficientMax: emax * 1000,
-		efficientMin: emin * 1000,
-		epp:          epp,
-		governor:     governor,
-	}, nil
-}
-
-func (p *profileImpl) Epp() string {
-	return p.epp
-}
-
-func (p *profileImpl) MaxFreq() uint {
-	return p.max
-}
-
-func (p *profileImpl) MinFreq() uint {
-	return p.min
-}
-
-func (p *profileImpl) EfficientMaxFreq() uint {
-	return p.efficientMax
-}
-
-func (p *profileImpl) EfficientMinFreq() uint {
-	return p.efficientMin
+	GetPStates() PStates
+	GetCStates() CStates
 }
 
 func (p *profileImpl) Name() string {
 	return p.name
 }
 
-func (p *profileImpl) Governor() string {
-	return p.governor
+func (p *profileImpl) GetPStates() PStates {
+	return p.pstates
+}
+
+func (p *profileImpl) GetCStates() CStates {
+	return p.cstates
+}
+
+// NewPowerProfile creates a new power profile
+func NewPowerProfile(name string, minFreq, maxFreq uint, governor, epp string, cstates map[string]bool) (Profile, error) {
+	if !featureList.isFeatureIdSupported(FrequencyScalingFeature) {
+		return nil, featureList.getFeatureIdError(FrequencyScalingFeature)
+	}
+
+	if err := ValidatePStates(minFreq, maxFreq, 0, 0, governor, epp); err != nil {
+		return nil, fmt.Errorf("invalid P-states configuration: %w", err)
+	}
+
+	if !featureList.isFeatureIdSupported(CStatesFeature) {
+		return nil, featureList.getFeatureIdError(CStatesFeature)
+	}
+
+	if err := ValidateCStates(cstates); err != nil {
+		return nil, fmt.Errorf("invalid C-states configuration: %w", err)
+	}
+
+	log.Info("creating powerProfile object", "name", name)
+	return &profileImpl{
+		name: name,
+		pstates: &pstatesImpl{
+			max:          maxFreq * 1000,
+			min:          minFreq * 1000,
+			efficientMax: maxFreq * 1000,
+			efficientMin: minFreq * 1000,
+			epp:          epp,
+			governor:     governor,
+		},
+		cstates: cstatesImpl(cstates),
+	}, nil
+}
+
+// creates a Power Profile for efficient and performant cores
+// Note: this is not being used by KPM controller, KPM is not supporting E-cores and P-cores
+func NewEcorePowerProfile(name string, minFreq, maxFreq, efficientMinFreq, efficientMaxFreq uint, governor, epp string, cstates map[string]bool) (Profile, error) {
+	if !featureList.isFeatureIdSupported(FrequencyScalingFeature) {
+		return nil, featureList.getFeatureIdError(FrequencyScalingFeature)
+	}
+
+	if err := ValidatePStates(minFreq, maxFreq, efficientMinFreq, efficientMaxFreq, governor, epp); err != nil {
+		return nil, fmt.Errorf("invalid P-states configuration: %w", err)
+	}
+
+	if !featureList.isFeatureIdSupported(CStatesFeature) {
+		return nil, featureList.getFeatureIdError(CStatesFeature)
+	}
+
+	if err := ValidateCStates(cstates); err != nil {
+		return nil, fmt.Errorf("invalid C-states configuration: %w", err)
+	}
+
+	log.Info("creating powerProfile object", "name", name)
+	return &profileImpl{
+		name: name,
+		pstates: &pstatesImpl{
+			max:          maxFreq * 1000,
+			min:          minFreq * 1000,
+			efficientMax: efficientMaxFreq * 1000,
+			efficientMin: efficientMinFreq * 1000,
+			epp:          epp,
+			governor:     governor,
+		},
+		cstates: cstatesImpl(cstates),
+	}, nil
 }
 
 func checkGov(governor string) bool {
@@ -133,4 +103,36 @@ func checkGov(governor string) bool {
 		}
 	}
 	return false
+}
+
+func ValidatePStates(minFreq, maxFreq, eMinFreq, eMaxFreq uint, governor, epp string) error {
+	if maxFreq < minFreq {
+		return fmt.Errorf("max frequency (%d) cannot be lower than the min frequency (%d)", maxFreq, minFreq)
+	}
+
+	if eMaxFreq < eMinFreq {
+		return fmt.Errorf("max frequency (%d) cannot be lower than the min frequency (%d)", eMaxFreq, eMinFreq)
+	}
+
+	if governor == "" {
+		governor = defaultGovernor
+	}
+	if !checkGov(governor) {
+		return fmt.Errorf("governor %s is not supported, please use one of the following: %v", governor, availableGovs)
+	}
+
+	if epp != "" && governor == cpuPolicyPerformance && epp != cpuPolicyPerformance {
+		return fmt.Errorf("'%s' epp can be used with '%s' governor", cpuPolicyPerformance, cpuPolicyPerformance)
+	}
+
+	return nil
+}
+
+func ValidateCStates(states map[string]bool) error {
+	for name := range states {
+		if _, exists := cStatesNamesMap[name]; !exists {
+			return fmt.Errorf("c-state %s does not exist on this system", name)
+		}
+	}
+	return nil
 }

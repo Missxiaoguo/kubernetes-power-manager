@@ -39,8 +39,6 @@ type Cpu interface {
 	consolidate() error
 	consolidate_unsafe() error
 	GetCore() Core
-	// C-States stuff
-	SetCStates(cStates CStates) error
 
 	// used only to set initial pool when creating core instance
 	_setPoolProperty(pool Pool)
@@ -51,8 +49,6 @@ type cpuImpl struct {
 	mutex sync.Locker
 	pool  Pool
 	core  Core
-	// C-States properties
-	cStates *CStates
 }
 
 func newCpu(coreID uint, core Core) (Cpu, error) {
@@ -79,9 +75,11 @@ func (cpu *cpuImpl) consolidate() error {
 	return cpu.consolidate_unsafe()
 }
 func (cpu *cpuImpl) consolidate_unsafe() error {
+	// Apply P-states configuration
 	if err := cpu.updateFrequencies(); err != nil {
 		return err
 	}
+	// Apply C-states configuration
 	if err := cpu.updateCStates(); err != nil {
 		return err
 	}
@@ -208,7 +206,7 @@ func readCpuStringProperty(cpuID uint, file string) (string, error) {
 	path := filepath.Join(basePath, fmt.Sprint("cpu", cpuID), file)
 	value, err := readStringFromFile(path)
 	if err != nil {
-		return "", fmt.Errorf("failed to read cpuCore %d string property: %w", cpuID, err)
+		return "", err
 	}
 	value = strings.TrimSuffix(value, "\n")
 	return value, nil

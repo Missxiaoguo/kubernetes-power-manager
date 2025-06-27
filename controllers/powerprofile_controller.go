@@ -126,25 +126,6 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 				return ctrl.Result{}, nil
 			}
 
-			// To get current cstate obj matching node name and removing powerprofile entry
-			currentNodeCStates := &powerv1.CStates{}
-			err = r.Client.Get(c, client.ObjectKey{Name: nodeName, Namespace: IntelPowerNamespace}, currentNodeCStates)
-			// if we're unsuccessful trying to fetch the cStates coresponding to the current power profile
-			if err != nil && !errors.IsNotFound(err) {
-				logger.Error(err, fmt.Sprintf("unable to retrieve the cState object from the library for %s", nodeName))
-				return ctrl.Result{}, err
-			}
-			// we make changes to the cStates object only if an exclusive pool set-up exists for this c-state
-			// and the corresponding node configuration for exclusive pool is not empty
-			if len(currentNodeCStates.Spec.ExclusivePoolCStates) != 0 && currentNodeCStates.Spec.ExclusivePoolCStates[req.Name] != nil {
-				delete(currentNodeCStates.Spec.ExclusivePoolCStates, req.Name) //req.name current profile
-				err = r.Update(c, currentNodeCStates)
-				if err != nil {
-					logger.Error(err, fmt.Sprintf("error updating the current cState object: %v", currentNodeCStates))
-					return ctrl.Result{}, err
-				}
-			}
-
 			powerWorkloadName := fmt.Sprintf("%s-%s", req.NamespacedName.Name, nodeName)
 			powerWorkload := &powerv1.PowerWorkload{}
 			err = r.Client.Get(context.TODO(), client.ObjectKey{
@@ -179,13 +160,13 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 
 	// Make sure the EPP value is one of the four correct ones or empty in the case of a user-created profile
 	logger.V(5).Info("confirming EPP value is one of the correct values")
-	if _, exists := profilePercentages[profile.Spec.Epp]; !exists {
-		incorrectEppErr := errors.NewServiceUnavailable(fmt.Sprintf("EPP value not allowed: %v - deleting the power profile CRD", profile.Spec.Epp))
+	if _, exists := profilePercentages[profile.Spec.PStates.Epp]; !exists {
+		incorrectEppErr := errors.NewServiceUnavailable(fmt.Sprintf("EPP value not allowed: %v - deleting the power profile CRD", profile.Spec.PStates.Epp))
 		logger.Error(incorrectEppErr, "error reconciling the power profile")
 
 		err = r.Client.Delete(context.TODO(), profile)
 		if err != nil {
-			logger.Error(err, fmt.Sprintf("error deleting the power profile %s with the incorrect EPP value %s", profile.Spec.Name, profile.Spec.Epp))
+			logger.Error(err, fmt.Sprintf("error deleting the power profile %s with the incorrect EPP value %s", profile.Spec.Name, profile.Spec.PStates.Epp))
 			return ctrl.Result{}, err
 		}
 
@@ -202,28 +183,21 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 	var profileMaxFreq int
 	var profileMinFreq int
 	// Use default hardware limits if not specified
-	if profile.Spec.Max == 0 {
+	if profile.Spec.PStates.Max == 0 {
 		profileMaxFreq = absoluteMaximumFrequency
 	} else {
-		profileMaxFreq = profile.Spec.Max
+		profileMaxFreq = profile.Spec.PStates.Max
 	}
-	if profile.Spec.Min == 0 {
+	if profile.Spec.PStates.Min == 0 {
 		profileMinFreq = absoluteMinimumFrequency
 	} else {
-		profileMinFreq = profile.Spec.Min
+		profileMinFreq = profile.Spec.PStates.Min
 	}
 
 	// If both max and min are not specified and it's EPP-based profile, override with EPP-based calculation
-	if profile.Spec.Epp != "" && profile.Spec.Max == 0 && profile.Spec.Min == 0 {
-		profileMaxFreq = int(float64(absoluteMaximumFrequency) - (float64((absoluteMaximumFrequency - absoluteMinimumFrequency)) * profilePercentages[profile.Spec.Epp]["difference"]))
+	if profile.Spec.PStates.Epp != "" && profile.Spec.PStates.Max == 0 && profile.Spec.PStates.Min == 0 {
+		profileMaxFreq = int(float64(absoluteMaximumFrequency) - (float64((absoluteMaximumFrequency - absoluteMinimumFrequency)) * profilePercentages[profile.Spec.PStates.Epp]["difference"]))
 		profileMinFreq = int(profileMaxFreq) - MinFreqOffset
-	}
-
-	logger.V(5).Info("making sure max value is greater than or equal to the min value")
-	if profileMaxFreq < profileMinFreq {
-		err = fmt.Errorf("max frequency (%d) cannot be lower than the min frequency (%d)", profileMaxFreq, profileMinFreq)
-		logger.Error(err, fmt.Sprintf("error creating the profile '%s'", profile.Spec.Name))
-		return ctrl.Result{Requeue: false}, err
 	}
 
 	if profileMaxFreq > absoluteMaximumFrequency || profileMinFreq < absoluteMinimumFrequency {
@@ -231,20 +205,27 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		logger.Error(err, fmt.Sprintf("error creating the profile '%s'", profile.Spec.Name))
 		return ctrl.Result{Requeue: false}, err
 	}
-	actualEpp := profile.Spec.Epp
+	actualEpp := profile.Spec.PStates.Epp
 	if !power.IsFeatureSupported(power.EPPFeature) && actualEpp != "" {
 		err = fmt.Errorf("EPP is not supported but %s provides one, setting EPP to ''", profile.Name)
 		logger.Error(err, "invalid EPP")
 		actualEpp = ""
 	}
 
-	if !checkGovs(profile.Spec.Governor) {
-		err = fmt.Errorf("governor %s is not supported, please use one of the following %v''", profile.Spec.Governor, power.GetAvailableGovernors())
-		logger.Error(err, "invalid governor")
-		return ctrl.Result{Requeue: false}, err
+	// Use default hardware C-states if not specified
+	profileCStates := make(map[string]bool)
+	for cname, isEnabled := range power.GetDefaultCStates() {
+		if _, exists := profile.Spec.CStates[cname]; !exists {
+			profileCStates[cname] = isEnabled
+		} else {
+			profileCStates[cname] = profile.Spec.CStates[cname]
+		}
 	}
 
-	powerProfile, err := power.NewPowerProfile(profile.Spec.Name, uint(profileMinFreq), uint(profileMaxFreq), profile.Spec.Governor, actualEpp)
+	// Create and validate power profile in the power library
+	powerProfile, err := power.NewPowerProfile(
+		profile.Spec.Name, uint(profileMinFreq), uint(profileMaxFreq),
+		profile.Spec.PStates.Governor, actualEpp, profileCStates)
 	if err != nil {
 		logger.Error(err, "could not create the power profile")
 		return ctrl.Result{Requeue: false}, err
@@ -270,7 +251,9 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		//      3. Shared workload naming is not guaranteed to follow the shared-<NodeName>-workload format
 		// TODO: Remove this workaround and implement proper webhook validation to reject workload creation if referenced profile is not found
 		if profile.Spec.Shared {
-			logger.V(5).Info(fmt.Sprintf("shared power profile successfully created: name - %s max - %d min - %d EPP - %s", profile.Spec.Name, profileMaxFreq, profileMinFreq, profile.Spec.Epp))
+			logger.V(5).Info(fmt.Sprintf(
+				"shared power profile successfully created: name - %s max - %d min - %d EPP - %s",
+				profile.Spec.Name, profileMaxFreq, profileMinFreq, actualEpp))
 			workloadName := fmt.Sprintf("shared-%s-workload", nodeName)
 			// check if the current node has a shared workload
 			workload := &powerv1.PowerWorkload{}
@@ -298,7 +281,9 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 			return ctrl.Result{}, nil
 		}
 
-		logger.V(5).Info(fmt.Sprintf("power profile successfully created: name - %s max - %d min - %d EPP - %s", profile.Spec.Name, profileMaxFreq, profileMinFreq, profile.Spec.Epp))
+		logger.V(5).Info(fmt.Sprintf(
+			"power profile successfully created: name - %s max - %d min - %d EPP - %s",
+			profile.Spec.Name, profileMaxFreq, profileMinFreq, actualEpp))
 	} else {
 		// Exclusive pool for this profile already exists, update it and all the other pools that use this profile
 		err = r.PowerLibrary.GetExclusivePool(profile.Spec.Name).SetPowerProfile(powerProfile)
@@ -334,7 +319,9 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 			}
 		}
 
-		logger.V(5).Info(fmt.Sprintf("power profile successfully updated: name - %s max - %d min - %d EPP - %s", profile.Spec.Name, profileMaxFreq, profileMinFreq, profile.Spec.Epp))
+		logger.V(5).Info(fmt.Sprintf(
+			"power profile successfully updated: name - %s max - %d min - %d EPP - %s",
+			profile.Spec.Name, profileMaxFreq, profileMinFreq, actualEpp))
 	}
 
 	if profile.Spec.Shared {
@@ -343,7 +330,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 	}
 
 	// Create or update the extended resources for the profile
-	err = r.ensureExtendedResources(nodeName, profile.Spec.Name, profile.Spec.Epp, &logger)
+	err = r.ensureExtendedResources(nodeName, profile.Spec.Name, profile.Spec.PStates.Epp, &logger)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error creating or updating the extended resources for the base profile: %v", err)
 	}
@@ -463,16 +450,4 @@ func (r *PowerProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&powerv1.PowerProfile{}).
 		WithEventFilter(predicate.GenerationChangedPredicate{}).
 		Complete(r)
-}
-
-func checkGovs(profileGovernor string) bool {
-	if profileGovernor == "" {
-		return true
-	}
-	for _, gov := range power.GetAvailableGovernors() {
-		if gov == profileGovernor {
-			return true
-		}
-	}
-	return false
 }

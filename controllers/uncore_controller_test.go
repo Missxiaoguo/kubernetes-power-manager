@@ -66,9 +66,6 @@ func TestUncore_Reconcile_SystemUncore(t *testing.T) {
 			},
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	r, err := createUncoreReconcilerObject(clientObjs)
 	assert.Nil(t, err)
@@ -111,9 +108,6 @@ func TestUncore_Reconcile_TestDieTuning(t *testing.T) {
 			},
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	r, err := createUncoreReconcilerObject(clientObjs)
 	assert.Nil(t, err)
@@ -156,9 +150,6 @@ func TestUncore_Reconcile_PackageTuning(t *testing.T) {
 			},
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	r, err := createUncoreReconcilerObject(clientObjs)
 	assert.Nil(t, err)
@@ -193,9 +184,6 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 			Namespace: "intel-power",
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	r, err := createUncoreReconcilerObject([]runtime.Object{})
 	assert.Nil(t, err)
@@ -510,9 +498,6 @@ func TestUncore_Reconcile_InvalidFileSystem(t *testing.T) {
 			},
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	r, err := createUncoreReconcilerObject(clientObjs)
 	assert.Nil(t, err)
@@ -537,9 +522,6 @@ func TestUncore_Reconcile_UnexpectedClientErr(t *testing.T) {
 			Namespace: "intel-power",
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	r, err := createUncoreReconcilerObject([]runtime.Object{})
 	assert.Nil(t, err)
@@ -596,10 +578,6 @@ func TestUncore_Reconcile_SetupFail(t *testing.T) {
 
 // fuzzing function for uncore
 func FuzzUncoreReconciler(f *testing.F) {
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
 	hostmk := new(hostMock)
 	mocktop := new(mockCpuTopology)
 	mockpkg := new(mockCpuPackage)

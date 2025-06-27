@@ -268,7 +268,9 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 				epp := strings.Replace(profile, "-", "_", 1)
 				powerProfileSpec := &powerv1.PowerProfileSpec{
 					Name: profile,
-					Epp:  epp,
+					PStates: powerv1.PStatesConfig{
+						Epp: epp,
+					},
 				}
 				powerProfile := &powerv1.PowerProfile{
 					ObjectMeta: metav1.ObjectMeta{

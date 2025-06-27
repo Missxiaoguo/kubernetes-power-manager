@@ -47,6 +47,7 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 	cpuConfigAll := map[string]map[string]string{}
 
 	cpuTopologyMap := map[string]map[string]string{}
+	cpuCstatesMap := map[string]map[string]map[string]string{}
 	for i := 0; i < numCpus; i++ {
 		// set e cores
 		if i > numCpus/2 {
@@ -55,6 +56,16 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 			// set p cores
 			cpuConfigAll[fmt.Sprint("cpu", i)] = cpuConfig
 		}
+
+		// set c-states
+		cpuCstatesMap[fmt.Sprint("cpu", i)] = map[string]map[string]string{
+			"state0": {"name": "POLL", "disable": "0"},
+			"state1": {"name": "C1", "disable": "0"},
+			"state2": {"name": "C1E", "disable": "0"},
+			"state3": {"name": "C6", "disable": "0"},
+		}
+		cpuCstatesMap["Driver"] = map[string]map[string]string{"intel_idle\n": nil}
+
 		// for this test we don't care about topology, so we just emulate 1 pkg, 1 die, numCpus cores, no hyperthreading
 		cpuTopologyMap[fmt.Sprint("cpu", i)] = map[string]string{
 			"pkg":  "0",
@@ -62,7 +73,9 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 			"core": fmt.Sprint(i),
 		}
 	}
-	defer setupCpuCStatesTests(map[string]map[string]map[string]string{})()
+
+	// Setup features except for uncore
+	defer setupCpuCStatesTests(cpuCstatesMap)()
 	defer setupUncoreTests(map[string]map[string]string{}, "")()
 	defer setupCpuScalingTests(cpuConfigAll)()
 	defer setupTopologyTest(cpuTopologyMap)()
@@ -73,7 +86,6 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 
 	instance, err := CreateInstance("host")
 
-	assert.ErrorContainsf(t, err, "failed to determine driver", "expecting c-states feature error")
 	assert.ErrorContainsf(t, err, "intel_uncore_frequency not loaded", "expecting uncore feature error")
 	assert.NotNil(t, instance)
 
@@ -81,7 +93,7 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 	assert.ElementsMatch(t, *instance.GetReservedPool().Cpus(), *instance.GetAllCpus())
 	assert.Empty(t, *instance.GetSharedPool().Cpus())
 
-	profile, err := NewEcorePowerProfile("pwr", 100, 1000, 100, 500, "performance", "performance")
+	powerProfile, err := NewPowerProfile("pwr", 100, 1000, "performance", "performance", map[string]bool{"C1": true, "C6": false})
 	assert.NoError(t, err)
 
 	moveCoresErrChan := make(chan error)
@@ -94,7 +106,7 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 	go func(instance Host, profile Profile, errChannel chan error) {
 		time.Sleep(5 * time.Millisecond)
 		errChannel <- instance.GetSharedPool().SetPowerProfile(profile)
-	}(instance, profile, setPowerProfileErrChan2)
+	}(instance, powerProfile, setPowerProfileErrChan2)
 
 	assert.NoError(t, <-moveCoresErrChan)
 	close(moveCoresErrChan)
@@ -102,10 +114,10 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 	assert.NoError(t, <-setPowerProfileErrChan2)
 	close(setPowerProfileErrChan2)
 
-	assert.Equal(t, profile, instance.GetSharedPool().GetPowerProfile())
+	assert.Equal(t, powerProfile, instance.GetSharedPool().GetPowerProfile())
 	assert.ElementsMatch(t, *instance.GetAllCpus(), *instance.GetSharedPool().Cpus())
 	for i := uint(0); i < numCpus; i++ {
-		assert.NoError(t, verifyPowerProfile(i, profile), "cpuid", i)
+		assert.NoError(t, verifyPowerProfile(i, powerProfile), "cpuid", i)
 	}
 }
 
@@ -115,29 +127,40 @@ func verifyPowerProfile(cpuId uint, profile Profile) error {
 	var allerrs []error
 	var err error
 
+	pstates := profile.GetPStates()
 	governor, err := readCpuStringProperty(cpuId, scalingGovFile)
 	allerrs = append(allerrs, err)
-	if governor != profile.Governor() {
-		allerrs = append(allerrs, fmt.Errorf("governor mismatch expected : %s, current %s", profile.Governor(), governor))
+	if governor != pstates.Governor() {
+		allerrs = append(allerrs, fmt.Errorf("governor mismatch expected : %s, current %s", pstates.Governor(), governor))
 	}
 
-	if profile.Epp() != "" {
+	if pstates.Epp() != "" {
 		epp, err := readCpuStringProperty(cpuId, eppFile)
 		allerrs = append(allerrs, err)
-		if governor != profile.Epp() {
-			allerrs = append(allerrs, fmt.Errorf("epp mismatch expected : %s, current %s", profile.Epp(), epp))
+		if epp != pstates.Epp() {
+			allerrs = append(allerrs, fmt.Errorf("epp mismatch expected : %s, current %s", pstates.Epp(), epp))
 		}
 	}
 
 	maxFreq, err := readCpuUintProperty(cpuId, scalingMaxFile)
 	allerrs = append(allerrs, err)
-	if maxFreq != profile.MaxFreq() && maxFreq != profile.EfficientMaxFreq() {
-		allerrs = append(allerrs, fmt.Errorf("maxFreq mismatch expected %d, current %d", profile.MaxFreq(), maxFreq))
+	if maxFreq != pstates.MaxFreq() && maxFreq != pstates.EfficientMaxFreq() {
+		allerrs = append(allerrs, fmt.Errorf("maxFreq mismatch expected %d, current %d", pstates.MaxFreq(), maxFreq))
 	}
 	minFreq, err := readCpuUintProperty(cpuId, scalingMinFile)
 	allerrs = append(allerrs, err)
-	if minFreq != profile.MinFreq() && minFreq != profile.EfficientMinFreq() {
-		allerrs = append(allerrs, fmt.Errorf("minFreq mismatch expected %d, current %d", profile.MinFreq(), minFreq))
+	if minFreq != pstates.MinFreq() && minFreq != pstates.EfficientMinFreq() {
+		allerrs = append(allerrs, fmt.Errorf("minFreq mismatch expected %d, current %d", pstates.MinFreq(), minFreq))
 	}
+
+	for stateName, expected := range profile.GetCStates().States() {
+		actual, err := readCpuStringProperty(cpuId, fmt.Sprintf(cStateDisableFileFmt, cStatesNamesMap[stateName]))
+		allerrs = append(allerrs, err)
+
+		if expected != (actual == "0") {
+			allerrs = append(allerrs, fmt.Errorf("c-state %s mismatch expected %t, current %t", stateName, expected, actual == "0"))
+		}
+	}
+
 	return errors.Join(allerrs...)
 }

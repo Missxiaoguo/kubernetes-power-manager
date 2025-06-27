@@ -10,13 +10,23 @@ import (
 )
 
 const (
-	cStatesDir           = "cpuidle"
-	cStateDisableFileFmt = cStatesDir + "/state%d/disable"
-	cStateNameFileFmt    = cStatesDir + "/state%d/name"
-	cStatesDrvPath       = cStatesDir + "/current_driver"
+	cStatesDir                  = "cpuidle"
+	cStateDisableFileFmt        = cStatesDir + "/state%d/disable"
+	cStateNameFileFmt           = cStatesDir + "/state%d/name"
+	cStatesDefaultStatusFileFmt = cStatesDir + "/state%d/default_status"
+	cStatesDrvPath              = cStatesDir + "/current_driver"
 )
 
-type CStates map[string]bool
+type cstatesImpl map[string]bool
+
+// CStates provides access to CPU C-state configuration
+type CStates interface {
+	States() map[string]bool
+}
+
+func (c cstatesImpl) States() map[string]bool {
+	return c
+}
 
 func isSupportedCStatesDriver(driver string) bool {
 	for _, s := range []string{"intel_idle", "acpi_idle"} {
@@ -32,7 +42,7 @@ func isSupportedCStatesDriver(driver string) bool {
 var cStatesNamesMap = map[string]int{}
 
 // populated when mapping CStates
-var defaultCStates = CStates{}
+var defaultCStates = cstatesImpl{}
 
 func initCStates() featureStatus {
 	feature := featureStatus{
@@ -80,28 +90,24 @@ func mapAvailableCStates() error {
 		}
 
 		cStatesNamesMap[stateName] = stateNumber
+
+		// Get default c-state status from default_status sysfs file if it exists, otherwise set to true
 		defaultCStates[stateName] = true
+		defaultStatus, err := readCpuStringProperty(0, fmt.Sprintf(cStatesDefaultStatusFileFmt, stateNumber))
+		if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("could not read C-State %d default status file: %w", stateNumber, err)
+		}
+		defaultCStates[stateName] = defaultStatus == "enabled"
 	}
 	log.V(3).Info("mapped C-states", "map", cStatesNamesMap)
 	return nil
 }
 
-func validateCStates(states CStates) error {
-	for name := range states {
-		if _, exists := cStatesNamesMap[name]; !exists {
-			return fmt.Errorf("c-state %s does not exist on this system", name)
-		}
-	}
-	return nil
-}
-func (host *hostImpl) ValidateCStates(states CStates) error {
-	return validateCStates(states)
+func GetDefaultCStates() map[string]bool {
+	return defaultCStates
 }
 
-func (host *hostImpl) AvailableCStates() []string {
-	if !featureList.isFeatureIdSupported(CStatesFeature) {
-		return []string{}
-	}
+func GetAvailableCStates() []string {
 	cStatesList := make([]string, 0)
 	for name := range cStatesNamesMap {
 		cStatesList = append(cStatesList, name)
@@ -109,52 +115,22 @@ func (host *hostImpl) AvailableCStates() []string {
 	return cStatesList
 }
 
-func (pool *poolImpl) SetCStates(states CStates) error {
-	if !IsFeatureSupported(CStatesFeature) {
-		return featureList.getFeatureIdError(CStatesFeature)
-	}
-	// check if requested states are on the system
-	if err := validateCStates(states); err != nil {
-		return err
-	}
-	pool.CStatesProfile = &states
-	for _, cpu := range pool.cpus {
-		if err := cpu.consolidate(); err != nil {
-			return fmt.Errorf("failed to apply c-states: %w", err)
-		}
-	}
-	return nil
-}
-
-func (pool *poolImpl) getCStates() *CStates {
-	return pool.CStatesProfile
-}
-
-func (cpu *cpuImpl) SetCStates(cStates CStates) error {
-	if !IsFeatureSupported(CStatesFeature) {
-		return featureList.getFeatureIdError(CStatesFeature)
-	}
-	if err := validateCStates(cStates); err != nil {
-		return err
-	}
-	cpu.cStates = &cStates
-	return cpu.updateCStates()
-}
 func (cpu *cpuImpl) updateCStates() error {
 	if !IsFeatureSupported(CStatesFeature) {
 		return nil
 	}
-	if cpu.cStates != nil && *cpu.cStates != nil {
-		return cpu.applyCStates(cpu.cStates)
+
+	// Get cstates config from profile
+	profile := cpu.pool.GetPowerProfile()
+	if profile != nil {
+		return cpu.applyCStates(profile.GetCStates())
 	}
-	if cpu.pool.getCStates() != nil {
-		return cpu.applyCStates(cpu.pool.getCStates())
-	}
-	return cpu.applyCStates(&defaultCStates)
+
+	return cpu.applyCStates(defaultCStates)
 }
 
-func (cpu *cpuImpl) applyCStates(desiredCStates *CStates) error {
-	for state, enabled := range *desiredCStates {
+func (cpu *cpuImpl) applyCStates(desiredCStates CStates) error {
+	for state, enabled := range desiredCStates.States() {
 		stateFilePath := filepath.Join(
 			basePath,
 			fmt.Sprint("cpu", cpu.id),

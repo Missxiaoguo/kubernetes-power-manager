@@ -6,14 +6,11 @@ import (
 )
 
 type poolImpl struct {
-	name  string
-	cpus  CpuList
-	mutex sync.Locker
-	host  Host
-	// Scaling-Driver
-	PowerProfile Profile
-	// C-States
-	CStatesProfile *CStates
+	name         string
+	cpus         CpuList
+	mutex        sync.Locker
+	host         Host
+	powerProfile Profile
 }
 
 type Pool interface {
@@ -34,9 +31,6 @@ type Pool interface {
 
 	poolMutex() sync.Locker
 
-	// c-states
-	SetCStates(states CStates) error
-	getCStates() *CStates
 	// private interface members
 	getHost() Host
 	isExclusive() bool
@@ -82,7 +76,7 @@ func (pool *poolImpl) poolMutex() sync.Locker {
 func (pool *poolImpl) SetPowerProfile(profile Profile) error {
 	log.V(4).Info("SetPowerProfile mutex lock", "pool", pool.name)
 	pool.mutex.Lock()
-	pool.PowerProfile = profile
+	pool.powerProfile = profile
 	defer func() {
 		pool.mutex.Unlock()
 		log.V(4).Info("SetPowerProfile mutex unlock", "pool", pool.name)
@@ -97,7 +91,7 @@ func (pool *poolImpl) SetPowerProfile(profile Profile) error {
 }
 
 func (pool *poolImpl) GetPowerProfile() Profile {
-	return pool.PowerProfile
+	return pool.powerProfile
 }
 
 func (pool *poolImpl) getHost() Host {

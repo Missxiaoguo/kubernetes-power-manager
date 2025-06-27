@@ -28,6 +28,16 @@ type PowerProfileSpec struct {
 	Name string `json:"name"`
 
 	Shared bool `json:"shared,omitempty"`
+
+	// P-states configuration
+	PStates PStatesConfig `json:"pstates,omitempty"`
+
+	// C-states configuration
+	CStates CStatesConfig `json:"cstates,omitempty"`
+}
+
+// PStatesConfig defines the CPU P-states configuration
+type PStatesConfig struct {
 	// Max frequency cores can run at
 	Max int `json:"max,omitempty"`
 
@@ -41,6 +51,11 @@ type PowerProfileSpec struct {
 	//+kubebuilder:default=powersave
 	Governor string `json:"governor,omitempty"`
 }
+
+// CStatesConfig defines the CPU C-states configuration.
+// The map key represents the C-state name (e.g., "C1", "C1E", "C6" etc.).
+// The map value represents whether the C-state should be enabled (true) or disabled (false).
+type CStatesConfig map[string]bool
 
 // PowerProfileStatus defines the observed state of PowerProfile
 type PowerProfileStatus struct {

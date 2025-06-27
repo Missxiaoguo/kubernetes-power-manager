@@ -33,6 +33,49 @@ const (
 	cpuPolicyConservative = "conservative"
 )
 
+type pstatesImpl struct {
+	max          uint
+	min          uint
+	efficientMax uint
+	efficientMin uint
+	epp          string
+	governor     string
+}
+
+// PStates provides access to CPU P-state configuration
+type PStates interface {
+	MinFreq() uint
+	MaxFreq() uint
+	EfficientMinFreq() uint
+	EfficientMaxFreq() uint
+	Governor() string
+	Epp() string
+}
+
+func (p *pstatesImpl) MinFreq() uint {
+	return p.min
+}
+
+func (p *pstatesImpl) MaxFreq() uint {
+	return p.max
+}
+
+func (p *pstatesImpl) EfficientMinFreq() uint {
+	return p.efficientMin
+}
+
+func (p *pstatesImpl) EfficientMaxFreq() uint {
+	return p.efficientMax
+}
+
+func (p *pstatesImpl) Governor() string {
+	return p.governor
+}
+
+func (p *pstatesImpl) Epp() string {
+	return p.epp
+}
+
 type (
 	CpuFrequencySet struct {
 		min uint
@@ -71,7 +114,9 @@ func (l *CoreTypeList) appendIfUnique(min uint, max uint) uint {
 	return uint(len(coreTypes) - 1)
 }
 
-var defaultPowerProfile *profileImpl
+// set during library initialization
+var defaultPStates *pstatesImpl
+var availableGovs []string
 
 func isScalingDriverSupported(driver string) bool {
 	supportedDrivers := []string{
@@ -112,7 +157,7 @@ func initScalingDriver() featureStatus {
 		pStates.err = fmt.Errorf("%s - failed to determine driver: %w", pStates.name, err)
 	}
 	if pStates.err == nil {
-		if err := generateDefaultProfile(); err != nil {
+		if err := generateDefaultPStates(); err != nil {
 			pStates.err = fmt.Errorf("failed to read default frequenices: %w", err)
 		}
 	}
@@ -137,10 +182,12 @@ func initAvailableGovernors() ([]string, error) {
 	}
 	return strings.Split(govs, " "), nil
 }
+
 func GetAvailableGovernors() []string {
 	return availableGovs
 }
-func generateDefaultProfile() error {
+
+func generateDefaultPStates() error {
 	maxFreq, err := readCpuUintProperty(0, cpuMaxFreqFile)
 	if err != nil {
 		return err
@@ -155,8 +202,7 @@ func generateDefaultProfile() error {
 	if os.IsNotExist(errors.Unwrap(err)) {
 		epp = ""
 	}
-	defaultPowerProfile = &profileImpl{
-		name:         "default",
+	defaultPStates = &pstatesImpl{
 		max:          maxFreq,
 		min:          minFreq,
 		efficientMax: 0,
@@ -171,27 +217,29 @@ func (cpu *cpuImpl) updateFrequencies() error {
 	if !IsFeatureSupported(FrequencyScalingFeature) {
 		return nil
 	}
-	if cpu.pool.GetPowerProfile() != nil {
-		return cpu.setDriverValues(cpu.pool.GetPowerProfile())
+
+	profile := cpu.pool.GetPowerProfile()
+	if profile != nil {
+		return cpu.setDriverValues(profile.GetPStates())
 	}
-	return cpu.setDriverValues(defaultPowerProfile)
+	return cpu.setDriverValues(defaultPStates)
 }
 
 // setDriverValues is an entrypoint to power governor feature consolidation
-func (cpu *cpuImpl) setDriverValues(powerProfile Profile) error {
-	if err := cpu.writeGovernorValue(powerProfile.Governor()); err != nil {
+func (cpu *cpuImpl) setDriverValues(pstates PStates) error {
+	if err := cpu.writeGovernorValue(pstates.Governor()); err != nil {
 		return fmt.Errorf("failed to set governor for cpu %d: %w", cpu.id, err)
 	}
-	if powerProfile.Epp() != "" {
-		if err := cpu.writeEppValue(powerProfile.Epp()); err != nil {
+	if pstates.Epp() != "" {
+		if err := cpu.writeEppValue(pstates.Epp()); err != nil {
 			return fmt.Errorf("failed to set EPP value for cpu %d: %w", cpu.id, err)
 		}
 	}
-	minFreq, maxFreq := cpu.getFreqsToScale(powerProfile)
+	minFreq, maxFreq := cpu.getFreqsToScale(pstates)
 	absMin, absMax := cpu.GetAbsMinMax()
 	if maxFreq > absMax || minFreq < absMin {
 		return fmt.Errorf("setting frequency %d-%d aborted as frequency range is min: %d max: %d. resetting to default",
-			powerProfile.MinFreq(), powerProfile.MaxFreq(), absMin, absMax)
+			pstates.MinFreq(), pstates.MaxFreq(), absMin, absMax)
 	}
 	if err := cpu.writeScalingMaxFreq(maxFreq); err != nil {
 		return fmt.Errorf("failed to set MaxFreq value for cpu %d: %w", cpu.id, err)
@@ -203,15 +251,15 @@ func (cpu *cpuImpl) setDriverValues(powerProfile Profile) error {
 
 }
 
-func (cpu *cpuImpl) getFreqsToScale(profile Profile) (uint, uint) {
+func (cpu *cpuImpl) getFreqsToScale(pstates PStates) (uint, uint) {
 	switch cpu.GetCore().GetType() {
 	case CpuTypeReferences.Pcore():
-		return profile.MinFreq(), profile.MaxFreq()
+		return pstates.MinFreq(), pstates.MaxFreq()
 	case CpuTypeReferences.Ecore():
-		return profile.EfficientMinFreq(), profile.EfficientMaxFreq()
+		return pstates.EfficientMinFreq(), pstates.EfficientMaxFreq()
 	default:
 		// something went wrong. default to these values which will likely result in error
-		return profile.MinFreq(), profile.MaxFreq()
+		return pstates.MinFreq(), pstates.MaxFreq()
 	}
 }
 

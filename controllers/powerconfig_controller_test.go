@@ -768,9 +768,11 @@ func TestPowerConfig_Reconcile_ProfilesNoLongerRequested(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "performance",
+						},
 					},
 				},
 			},
@@ -821,9 +823,11 @@ func TestPowerConfig_Reconcile_ProfilesNoLongerRequested(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "balance-performance",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "balance-performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "balance-performance",
+						},
 					},
 				},
 			},
@@ -874,9 +878,11 @@ func TestPowerConfig_Reconcile_ProfilesNoLongerRequested(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "balance-performance",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "balance-performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "balance-performance",
+						},
 					},
 				},
 				&powerv1.PowerProfile{
@@ -886,9 +892,11 @@ func TestPowerConfig_Reconcile_ProfilesNoLongerRequested(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "balance-power",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "balance-power",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "balance-power",
+						},
 					},
 				},
 			},
@@ -993,9 +1001,11 @@ func TestPowerConfig_Reconcile_Deletion(t *testing.T) {
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
-						Max:  3600,
-						Min:  3200,
-						Epp:  "performance",
+						PStates: powerv1.PStatesConfig{
+							Max: 3600,
+							Min: 3200,
+							Epp: "performance",
+						},
 					},
 				},
 				&powerv1.PowerWorkload{

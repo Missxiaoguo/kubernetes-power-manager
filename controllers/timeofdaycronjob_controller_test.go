@@ -84,9 +84,11 @@ var defaultSharedProf = &powerv1.PowerProfile{
 	},
 	Spec: powerv1.PowerProfileSpec{
 		Name: "shared-TestNode",
-		Epp:  "power",
-		Max:  1000,
-		Min:  1000,
+		PStates: powerv1.PStatesConfig{
+			Epp: "power",
+			Max: 1000,
+			Min: 1000,
+		},
 	},
 }
 
@@ -196,7 +198,9 @@ func TestTimeOfDayCronJob_Reconcile_CronProfile(t *testing.T) {
 			},
 			Spec: powerv1.PowerProfileSpec{
 				Name: "performance",
-				Epp:  "performance",
+				PStates: powerv1.PStatesConfig{
+					Epp: "performance",
+				},
 			},
 		},
 		&powerv1.PowerWorkload{
@@ -240,10 +244,6 @@ func TestTimeOfDayCronJob_Reconcile_CronProfile(t *testing.T) {
 			Namespace: "intel-power",
 		},
 	}
-
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	nodemk := new(hostMock)
 	poolmk := new(poolMock)
@@ -308,7 +308,9 @@ func TestTimeOfDayCronJob_Reconcile_CronPods(t *testing.T) {
 			},
 			Spec: powerv1.PowerProfileSpec{
 				Name: "balance-performance",
-				Epp:  "balance-performance",
+				PStates: powerv1.PStatesConfig{
+					Epp: "balance-performance",
+				},
 			},
 		},
 		&powerv1.PowerWorkload{
@@ -334,7 +336,9 @@ func TestTimeOfDayCronJob_Reconcile_CronPods(t *testing.T) {
 			},
 			Spec: powerv1.PowerProfileSpec{
 				Name: "performance",
-				Epp:  "performance",
+				PStates: powerv1.PStatesConfig{
+					Epp: "performance",
+				},
 			},
 		},
 		&powerv1.PowerWorkload{
@@ -652,9 +656,11 @@ func TestTimeOfDayCronJob_Reconcile_NoExistingWorkload_Lib_Err(t *testing.T) {
 			},
 			Spec: powerv1.PowerProfileSpec{
 				Name: "balance-performance",
-				Epp:  "balance-performance",
-				Max:  3300,
-				Min:  3000,
+				PStates: powerv1.PStatesConfig{
+					Epp: "balance-performance",
+					Max: 3300,
+					Min: 3000,
+				},
 			},
 		},
 		defaultSharedProf,
@@ -665,9 +671,11 @@ func TestTimeOfDayCronJob_Reconcile_NoExistingWorkload_Lib_Err(t *testing.T) {
 			},
 			Spec: powerv1.PowerProfileSpec{
 				Name: "performance",
-				Epp:  "performance",
-				Max:  3700,
-				Min:  3500,
+				PStates: powerv1.PStatesConfig{
+					Epp: "performance",
+					Max: 3700,
+					Min: 3500,
+				},
 			},
 		},
 		&powerv1.TimeOfDayCronJob{
@@ -685,10 +693,6 @@ func TestTimeOfDayCronJob_Reconcile_NoExistingWorkload_Lib_Err(t *testing.T) {
 			},
 		},
 	}
-
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
@@ -838,9 +842,11 @@ func TestTimeOfDayCronJob_Reconcile_ErrsSharedPoolExists(t *testing.T) {
 			},
 			Spec: powerv1.PowerProfileSpec{
 				Name: "performance",
-				Epp:  "performance",
-				Max:  3500,
-				Min:  3200,
+				PStates: powerv1.PStatesConfig{
+					Epp: "performance",
+					Max: 3500,
+					Min: 3200,
+				},
 			},
 		},
 		performanceWorkload,
@@ -918,9 +924,6 @@ func TestTimeOfDayCronJob_Reconcile_ErrsSharedPoolExists(t *testing.T) {
 			},
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
@@ -1027,7 +1030,9 @@ func TestTimeOfDayCronJob_Reconcile_ErrsPodTuning(t *testing.T) {
 			},
 			Spec: powerv1.PowerProfileSpec{
 				Name: "balance-performance",
-				Epp:  "balance-performance",
+				PStates: powerv1.PStatesConfig{
+					Epp: "balance-performance",
+				},
 			},
 		},
 		&powerv1.PowerWorkload{
@@ -1051,7 +1056,9 @@ func TestTimeOfDayCronJob_Reconcile_ErrsPodTuning(t *testing.T) {
 			},
 			Spec: powerv1.PowerProfileSpec{
 				Name: "performance",
-				Epp:  "performance",
+				PStates: powerv1.PStatesConfig{
+					Epp: "performance",
+				},
 			},
 		},
 		performanceWorkload,
@@ -1130,9 +1137,6 @@ func TestTimeOfDayCronJob_Reconcile_ErrsPodTuning(t *testing.T) {
 			},
 		},
 	}
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
 
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
@@ -1168,10 +1172,6 @@ func TestTimeOfDayCronJob_Reconcile_ErrsPodTuning(t *testing.T) {
 }
 
 func TestTimeOfDayCronJob_Reconcile_InvalidRequests(t *testing.T) {
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
 	_, teardown, err := fullDummySystem()
 	assert.Nil(t, err)
 	defer teardown()
@@ -1348,10 +1348,6 @@ func TestCronReconcileSetupFail(t *testing.T) {
 
 // go test -fuzz FuzzTimeOfDayCronController -run=FuzzTimeOfDayCronController -parallel=1
 func FuzzTimeOfDayCronController(f *testing.F) {
-	originalGetFromLscpu := power.GetFromLscpu
-	defer func() { power.GetFromLscpu = originalGetFromLscpu }()
-	power.GetFromLscpu = power.TestGetFromLscpu
-
 	f.Add("Eire", 12, 32, 30, "performance", "balance-power", "shared", "power", "bigger", "C4", "25")
 	f.Fuzz(func(t *testing.T, timeZone string, hr int, min int, sec int, prof1 string, prof2 string, prof3 string, label1 string, label2 string, cstate string, corevalue string) {
 		testNode := "TestNode"
