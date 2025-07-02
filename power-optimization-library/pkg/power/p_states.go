@@ -252,15 +252,11 @@ func (cpu *cpuImpl) setDriverValues(pstates PStates) error {
 }
 
 func (cpu *cpuImpl) getFreqsToScale(pstates PStates) (uint, uint) {
-	switch cpu.GetCore().GetType() {
-	case CpuTypeReferences.Pcore():
-		return pstates.MinFreq(), pstates.MaxFreq()
-	case CpuTypeReferences.Ecore():
-		return pstates.EfficientMinFreq(), pstates.EfficientMaxFreq()
-	default:
-		// something went wrong. default to these values which will likely result in error
-		return pstates.MinFreq(), pstates.MaxFreq()
-	}
+	// E-cores and P-cores are not currently exposed in any of the CRDs, so just return
+	// the default mininum and maximum frequencies. This ensures the proper functionality
+	// on both ARM and x86.
+	// Update this when the operator will expose E/P cores.
+	return pstates.MinFreq(), pstates.MaxFreq()
 }
 
 func (cpu *cpuImpl) writeGovernorValue(governor string) error {
