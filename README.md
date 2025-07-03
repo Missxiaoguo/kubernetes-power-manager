@@ -332,7 +332,9 @@ metadata:
     namespace: intel-power
 spec:
    name: "performance-example-node-workload"
-   nodeInfo:
+   powerProfile: "performance-example-node"
+status:
+   workloadNodes:
      containers:
      - exclusiveCPUs:
        - 2
@@ -349,7 +351,6 @@ spec:
      - 3
      - 66
      - 67
-   powerProfile: "performance-example-node"
 ````
 
 This workload assigns the “performance” PowerProfile to cores 2, 3, 66, and 67 on the node “example-node”
@@ -443,9 +444,10 @@ metadata:
   name: performance-example-node
 spec:
   name: "performance-example-node"
-  max: 3700
-  min: 3300
-  epp: "performance"
+  pstates:
+    max: 3700
+    min: 3300
+    epp: "performance"
 ````
 
 The Shared PowerProfile must be created by the user and does not require a Base PowerProfile. This allows the user to
@@ -461,11 +463,12 @@ metadata:
   name: shared-example-node1
 spec:
   name: "shared-example-node1"
-  max: 1500
-  min: 1000
   shared: true
-  epp: "power"
-  governor: "powersave"
+  pstates:
+    max: 1500
+    min: 1000
+    epp: "power"
+    governor: "powersave"
 ````
 
 ````yaml
@@ -475,95 +478,55 @@ metadata:
   name: shared-example-node2
 spec:
   name: "shared-example-node2"
-  max: 2000
-  min: 1500
   shared: true
-  governor: "powersave"
+  pstates:
+    max: 2000
+    min: 1500
+    governor: "powersave"
 
 ````
 
 ### PowerNode Controller
 
-The PowerNode controller provides a window into the cluster's operations.
-It exposes the workloads that are now being used, the profiles that are being used, the cores that are being used, and
-the containers that those cores are associated to. Moreover, it informs the user of which Shared Pool is in use. The
-Default Pool or the Shared Pool can be one of the two shared pools. The Default Pool will hold all the cores in the "
-shared pool," none of which will have their frequencies set to a lower value, if there is no Shared PowerProfile
-associated with the Node. The cores in the "shared pool"—apart from those reserved for Kubernetes processes (
-reservedCPUs)—will be assigned to the Shared Pool and have their cores tuned by the Intel Power Optimization Library if
-a Shared PowerProfile is associated with the Node.
+The PowerNode controller provides observability into the node's power management operations. It displays the current
+state of power profiles, workloads, core assignments, and guaranteed pod containers.
 
-#### Example
+#### Example Status
 
-````
-activeProfiles:
-    performance-example-node: true
-  activeWorkloads:
-  - cores:
-    - 2
-    - 3
-    - 8
-    - 9
-    name: performance-example-node-workload
-  nodeName: example-node
+````yaml
+status:
   powerContainers:
   - exclusiveCpus:
     - 2
-    - 3
-    - 8
-    - 9
-    id: c392f492e05fc245f77eba8a90bf466f70f19cb48767968f3bf44d7493e18e5b
+    - 26
+    id: cri-o://e91dca501a08c343bb18e42e86d3d6c9e146db50782fe56ec5fe776160dc43dc
     name: example-container
     pod: example-pod
-    powerProfile: performance-example-node
+    powerProfile: balance-performance
     workload: performance-example-node-workload
-  sharedPools:
-  - name: Default
-    sharedPoolCpuIds:
-    - 0
-    - 1
-    - 4
-    - 5
-    - 6
-    - 7
-    - 10
+  powerProfiles:
+  - 'balance-performance: 2900000 || 2700000 || balance_performance || powersave ||
+    enabled: C1,C1E,POLL; disabled: C6'
+  - 'balance-power: 2200000 || 2000000 || balance_power || powersave || enabled: C1,C1E,POLL;
+    disabled: C6'
+  - 'performance: 3600000 || 3400000 || performance || powersave || enabled: C1,C1E,POLL;
+    disabled: C6'
+  - 'shared-power-saving: 1800000 || 800000 || power || powersave || enabled: C1,C1E,C6,POLL'
+  powerWorkloads:
+  - 'balance-power: balance-power || '
+  - 'performance: performance || '
+  - 'balance-performance: balance-performance || 2,26'
+  reservedPools:
+  - 3600000 || 3400000 || 0-1,24-25
+  sharedPool: shared-power-saving || 1800000 || 800000 || 3-23,27-47
 ````
 
-````
-activeProfiles:
-    performance-example-node: true
-  activeWorkloads:
-  - cores:
-    - 2
-    - 3
-    - 8
-    - 9
-    name: performance-example-node-workload
-  nodeName: example-node
-  powerContainers:
-  - exclusiveCpus:
-    - 2
-    - 3
-    - 8
-    - 9
-    id: c392f492e05fc245f77eba8a90bf466f70f19cb48767968f3bf44d7493e18e5b
-    name: example-container
-    pod: example-pod
-    powerProfile: performance-example-node
-    workload: performance-example-node-workload
-  sharedPools:
-  - name: Default
-    sharedPoolCpuIds:
-    - 0
-    - 1
-- name: Shared
-    sharedPoolCpuIds:
-    - 4
-    - 5
-    - 6
-    - 7
-    - 10
-````
+The status shows:
+- **powerProfiles**: Available profiles with frequencies, EPP, governor, and C-state configuration
+- **powerWorkloads**: Active workloads with their assigned cores  
+- **powerContainers**: Guaranteed pod containers with exclusive core assignments
+- **sharedPool**: Shared pool profile and core assignments
+- **reservedPools**: Reserved platform cores with custom profiles
 
 ### C-States
 
@@ -596,26 +559,6 @@ C4E/C5  Enhanced Deeper Sleep
 C6      Deep Power Down
 ````
 
-#### Example
-
-````yaml
-apiVersion: power.intel.com/v1
-kind: CStates
-metadata:
-  # Replace <NODE_NAME> with the name of the node to configure the C-States on that node
-  name: <NODE_NAME>
-spec:
-  sharedPoolCStates:
-    C1: true
-  exclusivePoolCStates:
-    performance:
-      C1: false
-  individualCoreCStates:
-    "3":
-      C1: true
-      C6: false
-````
-
 ### intel-pstate CPU Performance Scaling Driver
   The intel_pstate is a part of the CPU performance scaling subsystem in the Linux kernel (CPUFreq).
 
@@ -636,75 +579,6 @@ spec:
   It operates in a similar fashion to the P-state driver but offers a different set of governors which can be seen [here](https://www.kernel.org/doc/html/v4.12/admin-guide/pm/cpufreq.html).
   One notable difference between the P-state and acpi-cpufreq driver is that the afformentioned scaling_max_freq value is limited to base clock frequencies rather than turbo frequencies.
   When turbo is enabled the core frequency will still be capable of exceeding base clock frequencies and the value of scaling_max_freq.
-
-### Time Of Day
-
-The TIme Of Day feature allows users to change the configuration of their system at a given time each day. This is done
-through the use of a `timeofdaycronjob`
-which schedules itself for a specific time each day and gives users the option of tuning cstates, the shared pool
-profile as well as the profile used by individual pods.
-
-#### Example
-
-```yaml
-apiVersion: power.intel.com/v1
-kind: TimeOfDay
-metadata:
-  # Replace <NODE_NAME> with the name of the node to use TOD on
-  name: <NODE_NAME>
-  namespace: intel-power
-spec:
-  timeZone: "Eire"
-  schedule:
-    - time: "14:56"
-      # this sets the profile for the shared pool
-      powerProfile: balance-power
-      # this transitions exclusive pods matching a given label from one profile to another
-      # please ensure that only pods to be used by power manager have this label
-      pods:
-        - labels:
-            matchLabels:
-              power: "true"
-          target: balance-performance
-        - labels:
-            matchLabels:
-              special: "false"
-          target: balance-performance
-      # this field simply takes a cstate spec
-      cState:
-        sharedPoolCStates:
-          C1: false
-          C6: true
-    - time: "23:57"
-      powerProfile: shared
-      cState:
-        sharedPoolCStates:
-          C1: true
-          C6: false
-      pods:
-      - labels:
-          matchLabels:
-            power: "true"
-        target: performance
-      - labels:
-          matchLabels:
-            special: "false"
-        target: balance-power
-    - time: "14:35"
-      powerProfile: balance-power
-  reservedCPUs: [ 0,1 ]
-
-```
-The `TimeOfDay` object is deployed on a per-node basis and should have the same name as the node it's deployed on.
-When applying changes to the shared pool, users must specify the CPUs reserved by the system. Additionally the user must
-specify a timezone to schedule with.
-The configuration for Time Of Day consists of a schedule list. Each item in the list consists of a time and any desired
-changes to the system.
-The `profile` field specifies the desired profile for the shared pool.
-The `pods` field is used to change the profile associated with a specific pod.
-To change the profile of specific pods users must provide a set of labels and profiles. When a pod matching a label is found it will be placed in a workload that matches the requested profile.
-Please note that all pods matching a provided label must be configured for use with the power manager by requesting an intial profile and dedicated cores.
-Finally the `cState` field accepts the spec values from a CStates configuration and applies them to the system.
 
 ### Uncore Frequency
 
@@ -736,21 +610,20 @@ spec:
 - PowerWorkload CRD
 - PowerProfile CRD
 - PowerNode CRD
-- C-State CRD
 
 If any error occurs it will be displayed in the status field of the custom resource, eg.
 ````yaml
 apiVersion: power.intel.com/v1
-kind: CStates
+kind: PowerProfile
   ...
 status:
   errors:
-  - the C-States CRD name must match name of one of the power nodes
+  - the PowerProfile CRD name must match name of one of the power nodes
 ````
 If no errors occurred or were corrected, the list will be empty
 ````yaml
 apiVersion: power.intel.com/v1
-kind: CStates
+kind: PowerProfile
   ...
 status:
   errors: []
@@ -910,11 +783,15 @@ metadata:
   namespace: intel-power
 spec:
   name: "shared"
-  max: 1000
-  min: 1000
-  epp: "power"
   shared: true
-  governor: "powersave"
+  pstates:
+    max: 1000
+    min: 1000
+    epp: "power"
+    governor: "powersave"
+  cstates:
+    C1: true
+    C6: false
 ````
 
 Apply the Profile:

@@ -147,7 +147,7 @@ note right #Orange: <color #black>examples/example-timeofday</color>
 
 autonumber stop
 
-== P-State ==
+== C-state & P-State ==
 autonumber
 
 kubelet -> agent: Deploy Controller Manager
@@ -156,7 +156,7 @@ note right #Orange: <color #black>apply config/manager/manager.yaml</color>
 powerOperator -> library: Deploy the config
 note right #Orange: <color #black>examples/example-powerconfig.yaml</color>
 
-agent -> library: Set Shared Profile \nand configure the P-State governor
+agent -> library: Set Shared Profile \nand configure the C-State and P-State
 note right #Orange: <color #black>examples/example-shared-profile.yaml</color>
 
 agent -> library: Deploy th Workload
@@ -166,45 +166,6 @@ agent -> library: Deploy Pod
 note right #Orange: <color #black>examples/example-pod.yaml</color>
 
 autonumber stop
-
-== C-State ==
-kubelet -> agent: Deploy Controller Manager
-note right #Orange: <color #black>apply config/manager/manager.yaml</color>
-
-powerOperator -> library: Deploy the config
-note right #Orange: <color #black>examples/example-powerconfig.yaml</color>
-
-agent -> library: Set Shared Profile 
-note right #Orange: <color #black>examples/example-shared-profile.yaml</color>
-
-agent -> library: Deploy th Workload
-note right #Orange: <color #black>examples/example-shared-workload.yaml</color>
-
-agent -> library: Deploy Pod 
-note right #Orange: <color #black>examples/example-pod.yaml</color>
-
-agent -> library: Set C-State functionality 
-note right #Orange: <color #black>examples/example-cstates</color>
-
-== Time of Day ==
-
-kubelet -> agent: Deploy Controller Manager
-note right #Orange: <color #black>apply config/manager/manager.yaml</color>
-
-powerOperator -> library: Deploy the config
-note right #Orange: <color #black>examples/example-powerconfig.yaml</color>
-
-agent -> library: Set Shared Profile 
-note right #Orange: <color #black>examples/example-shared-profile.yaml</color>
-
-agent -> library: Deploy th Workload
-note right #Orange: <color #black>examples/example-shared-workload.yaml</color>
-
-agent -> library: Deploy Pod 
-note right #Orange: <color #black>examples/example-pod.yaml</color>
-
-agent -> library: Set Time of Day functionality 
-note right #Orange: <color #black>examples/example-timeofday</color>
 
 
 @enduml

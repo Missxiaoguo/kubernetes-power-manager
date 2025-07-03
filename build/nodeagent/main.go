@@ -151,24 +151,6 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PowerPod")
 		os.Exit(1)
 	}
-	if err = (&controllers.TimeOfDayReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("TimeOfDay"),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "TimeOfDay")
-		os.Exit(1)
-	}
-	if err = (&controllers.TimeOfDayCronJobReconciler{
-		Client:       mgr.GetClient(),
-		Log:          ctrl.Log.WithName("controllers").WithName("TimeOfDayCronJob"),
-		Scheme:       mgr.GetScheme(),
-		State:        powerNodeState,
-		PowerLibrary: powerLibrary,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "TimeOfDayCronJob")
-		os.Exit(1)
-	}
 	if err = (&controllers.UncoreReconciler{
 		Client:       mgr.GetClient(),
 		Log:          ctrl.Log.WithName("controllers").WithName("Uncore"),

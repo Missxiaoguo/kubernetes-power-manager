@@ -37,22 +37,7 @@ rules:
     verbs:
       - get
       - update
-  - apiGroups:
-      - power.intel.com
-    resources:
-      - powerpods
-    verbs:
-      - get
-      - list
-      - update
-      - watch
-  - apiGroups:
-      - power.intel.com
-    resources:
-      - powerpods/status
-    verbs:
-      - get
-      - update
+
   - apiGroups:
       - power.intel.com
     resources:
@@ -82,22 +67,6 @@ rules:
       - power.intel.com
     resources:
       - powerworkloads/status
-    verbs:
-      - get
-      - update
-  - apiGroups:
-      - power.intel.com
-    resources:
-      - timeofdays
-    verbs:
-      - get
-      - list
-      - update
-      - watch
-  - apiGroups:
-      - power.intel.com
-    resources:
-      - timeofdays/status
     verbs:
       - get
       - update

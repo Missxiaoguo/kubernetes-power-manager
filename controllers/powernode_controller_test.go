@@ -327,7 +327,7 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 							Annotations: map[string]string{"PM-updated": "0"},
 						},
 					}
-					orphanedPods[guaranteedPod.Name] = *pod
+					orphanedPods[nodeGuaranteedPod.Name] = *pod
 				})
 				mkcl.On("List", mock.Anything, mock.AnythingOfType("*v1.PowerProfileList")).Return(nil).Run(func(args mock.Arguments) {
 					profList := args.Get(1).(*powerv1.PowerProfileList)

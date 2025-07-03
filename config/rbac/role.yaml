@@ -5,15 +5,20 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - power.intel.com
   resources:
-  - cstates
   - powerconfigs
   - powernodes
-  - powerpods
   - powerprofiles
   - powerworkloads
-  - timeofdays
   - uncores
   verbs:
   - create
@@ -26,13 +31,10 @@ rules:
 - apiGroups:
   - power.intel.com
   resources:
-  - cstates/status
   - powerconfigs/status
   - powernodes/status
-  - powerpods/status
   - powerprofiles/status
   - powerworkloads/status
-  - timeofdays/status
   - uncores/status
   verbs:
   - get

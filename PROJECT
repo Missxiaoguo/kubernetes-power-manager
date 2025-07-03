@@ -18,30 +18,17 @@ resources:
   version: v1
 - domain: intel.com
   group: power
-  kind: PowerPod
+  kind: PowerConfig
   path: github.com/intel/kubernetes-power-manager/api/v1
   version: v1
 - domain: intel.com
   group: power
-  kind: PowerConfig
+  kind: PowerWorkload
   path: github.com/intel/kubernetes-power-manager/api/v1
   version: v1
-- api:
-    crdVersion: v1beta1
-    namespaced: true
-  controller: true
-  domain: intel.com
+- domain: intel.com
   group: power
-  kind: Time
-  path: github.com/intel/kubernetes-power-manager/api/v1
-  version: v1
-- api:
-    crdVersion: v1beta1
-    namespaced: true
-  controller: true
-  domain: intel.com
-  group: power
-  kind: TimeOfDay
+  kind: Uncore
   path: github.com/intel/kubernetes-power-manager/api/v1
   version: v1
 version: "3"

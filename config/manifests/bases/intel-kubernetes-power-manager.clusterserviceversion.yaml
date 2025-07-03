@@ -6,37 +6,6 @@ metadata:
       [
         {
           "apiVersion": "power.intel.com/v1",
-          "kind": "CStates",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/created-by": "kubernetes-power-manager",
-              "app.kubernetes.io/instance": "\u003cNODE_NAME\u003e",
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "CStates",
-              "app.kubernetes.io/part-of": "kubernetes-power-manager"
-            },
-            "name": "\u003cNODE_NAME\u003e",
-            "namespace": "intel-power"
-          },
-          "spec": {
-            "exclusivePoolCStates": {
-              "performance": {
-                "C1": false
-              }
-            },
-            "individualCoreCStates": {
-              "5": {
-                "C1": true,
-                "C6": false
-              }
-            },
-            "sharedPoolCStates": {
-              "C1": true
-            }
-          }
-        },
-        {
-          "apiVersion": "power.intel.com/v1",
           "kind": "PowerConfig",
           "metadata": {
             "labels": {
@@ -75,11 +44,17 @@ metadata:
             "namespace": "intel-power"
           },
           "spec": {
-            "epp": "power",
-            "governor": "powersave",
-            "max": 1000,
-            "min": 1000,
+            "cstates": {
+              "C1": true,
+              "C6": false
+            },
             "name": "shared",
+            "pstates": {
+              "epp": "power",
+              "governor": "powersave",
+              "max": 1000,
+              "min": 1000
+            },
             "shared": true
           }
         },
@@ -108,90 +83,6 @@ metadata:
               0,
               1
             ]
-          }
-        },
-        {
-          "apiVersion": "power.intel.com/v1",
-          "kind": "TimeOfDay",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/created-by": "kubernetes-power-manager",
-              "app.kubernetes.io/instance": "timeofday-sample",
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "TimeOfDay",
-              "app.kubernetes.io/part-of": "kubernetes-power-manager"
-            },
-            "name": "timeofday-sample",
-            "namespace": "intel-power"
-          },
-          "spec": {
-            "reservedCPUs": [
-              0,
-              1
-            ],
-            "schedule": [
-              {
-                "cState": {
-                  "sharedPoolCStates": {
-                    "C1": false,
-                    "C6": true
-                  }
-                },
-                "pods": [
-                  {
-                    "labels": {
-                      "matchLabels": {
-                        "power": "true"
-                      }
-                    },
-                    "target": "performance"
-                  },
-                  {
-                    "labels": {
-                      "matchLabels": {
-                        "special": "false"
-                      }
-                    },
-                    "target": "balance-performance"
-                  }
-                ],
-                "powerProfile": "balance-power",
-                "time": "10:04"
-              },
-              {
-                "cState": {
-                  "sharedPoolCStates": {
-                    "C1": true,
-                    "C6": false
-                  }
-                },
-                "pods": [
-                  {
-                    "labels": {
-                      "matchLabels": {
-                        "power": "true"
-                      }
-                    },
-                    "target": "performance"
-                  },
-                  {
-                    "labels": {
-                      "matchLabels": {
-                        "special": "false"
-                      }
-                    },
-                    "target": "balance-power"
-                  }
-                ],
-                "powerProfile": "shared",
-                "time": "14:48:00"
-              },
-              {
-                "powerProfile": "balance-power",
-                "time": "14:35"
-              }
-            ],
-            "timeZone": "Eire"
           }
         },
         {
@@ -239,20 +130,20 @@ spec:
       kind: PowerNode
       name: powernodes.power.intel.com
       version: v1
-    - description: PowerPod is the Schema for the powerpods API
-      displayName: Power Pod
-      kind: PowerPod
-      name: powerpods.power.intel.com
-      version: v1
     - description: PowerProfile is the Schema for the powerprofiles API
       displayName: Power Profile
       kind: PowerProfile
       name: powerprofiles.power.intel.com
       version: v1
-    - description: TimeOfDay is the Schema for the timeofdays API
-      displayName: Time Of Day
-      kind: TimeOfDay
-      name: timeofdays.power.intel.com
+    - description: PowerWorkload is the Schema for the powerworkloads API
+      displayName: Power Workload
+      kind: PowerWorkload
+      name: powerworkloads.power.intel.com
+      version: v1
+    - description: Uncore is the Schema for the uncores API
+      displayName: Uncore
+      kind: Uncore
+      name: uncores.power.intel.com
       version: v1
   description: The Kubernetes Power Manager bridges the gap between the container
     orchestration layer and hardware feature enablement, specifically Intel SST.
