@@ -9,10 +9,8 @@ resources:
   # - auth_proxy_role_binding.yaml
   # - auth_proxy_client_clusterrole.yaml
   - user_role_binding.yaml
-  - cstates_editor_role.yaml
   # we're adding the namespace in the config/default/kustomize.yaml
   # - namespace.yaml
   - uncore_editor_role.yaml
   - user_role.yaml
-  - cstates_viewer_role.yaml
   - uncore_viewer_role.yaml

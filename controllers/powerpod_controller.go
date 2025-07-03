@@ -50,7 +50,7 @@ const (
 	PowerNamespace         = "intel-power"
 )
 
-// PowerPodReconciler reconciles a PowerPod object
+// PowerPodReconciler reconciles a Pod object
 type PowerPodReconciler struct {
 	client.Client
 	Log                logr.Logger
@@ -59,8 +59,10 @@ type PowerPodReconciler struct {
 	PodResourcesClient podresourcesclient.PodResourcesClient
 }
 
-// +kubebuilder:rbac:groups=power.intel.com,resources=powerpods,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=power.intel.com,resources=powerpods/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=power.intel.com,resources=powerworkloads/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=power.intel.com,resources=powerprofiles,verbs=get;list;watch
+// +kubebuilder:rbac:groups=power.intel.com,resources=powernodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=privileged,verbs=use
 
 func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctrl.Result, error) {

@@ -43,7 +43,7 @@ func Test_writeStatusErrors(t *testing.T) {
 	assert.Nil(t, writeUpdatedStatusErrsIfRequired(ctx, nil, object, nil), "invalid object should return nil without doing anything")
 
 	deletionTimestamp := v1.Now()
-	object = &powerv1.CStates{
+	object = &powerv1.PowerProfile{
 		ObjectMeta: v1.ObjectMeta{
 			DeletionTimestamp: &deletionTimestamp,
 		},
@@ -81,7 +81,7 @@ func Test_writeStatusErrors(t *testing.T) {
 	errorList = fmt.Errorf("err1")
 	assert.Nil(t, writeUpdatedStatusErrsIfRequired(ctx, clientStatusWriter, object, errorList), "API should get updated with object with errors")
 
-	object = &powerv1.TimeOfDay{
+	object = &powerv1.PowerWorkload{
 		ObjectMeta: v1.ObjectMeta{
 			UID: "not empty",
 		},
