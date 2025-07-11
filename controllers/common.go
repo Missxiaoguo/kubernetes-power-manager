@@ -16,12 +16,15 @@ package controllers
 import (
 	"context"
 	"reflect"
+	"time"
 
 	"github.com/go-logr/logr"
 	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
 	"github.com/intel/kubernetes-power-manager/pkg/util"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+const queuetime = time.Second * 5
 
 // write errors to the status filed, pass nil to clear errors, will only do update resource is valid and not being deleted
 // if object already has the correct errors it will not be updated in the API

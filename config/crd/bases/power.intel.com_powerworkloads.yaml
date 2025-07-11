@@ -54,6 +54,7 @@ spec:
               powerProfile:
                 description: PowerProfile is the Profile that this PowerWorkload is
                   based on
+                minLength: 1
                 type: string
               reservedCPUs:
                 description: |-
@@ -73,6 +74,7 @@ spec:
                 type: array
             required:
             - name
+            - powerProfile
             type: object
           status:
             description: PowerWorkloadStatus defines the observed state of PowerWorkload
