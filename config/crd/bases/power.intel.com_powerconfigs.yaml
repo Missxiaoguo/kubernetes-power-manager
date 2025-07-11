@@ -51,11 +51,6 @@ spec:
                 description: The label on the Nodes you the Operator will look for
                   to deploy the Node Agent
                 type: object
-              powerProfiles:
-                description: The PowerProfiles that will be created by the Operator
-                items:
-                  type: string
-                type: array
             type: object
           status:
             description: PowerConfigStatus defines the observed state of PowerConfig

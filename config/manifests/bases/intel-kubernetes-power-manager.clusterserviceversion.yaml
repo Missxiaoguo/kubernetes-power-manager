@@ -22,11 +22,6 @@ metadata:
             "powerNodeSelector": {
               "feature.node.kubernetes.io/power-node": "true"
             },
-            "powerProfiles": [
-              "balance-performance",
-              "balance-power",
-              "performance"
-            ]
           }
         },
         {

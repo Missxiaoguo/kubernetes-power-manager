@@ -71,57 +71,98 @@ func createProfileReconcilerObject(objs []runtime.Object) (*PowerProfileReconcil
 	return r, nil
 }
 
-// basic exclusive pool scenario
 func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 	nodeName := "TestNode"
-	clientObjs := []runtime.Object{
-		&powerv1.PowerProfile{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "performance",
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nodeName,
+		},
+		Status: corev1.NodeStatus{
+			Capacity: map[corev1.ResourceName]resource.Quantity{
+				CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
+			},
+		},
+	}
+
+	testCases := []struct {
+		name        string
+		profileName string
+		clientObjs  []runtime.Object
+	}{
+		{
+			name:        "Exclusive pool creation",
+			profileName: "performance",
+			clientObjs: []runtime.Object{
+				node,
+				&powerv1.PowerProfile{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "performance",
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerProfileSpec{
+						Name: "performance",
+						PStates: powerv1.PStatesConfig{
+							Max:      3600,
+							Min:      3200,
+							Epp:      "performance",
+							Governor: "powersave",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("NODE_NAME", nodeName)
+
+			req := reconcile.Request{
+				NamespacedName: client.ObjectKey{
+					Name:      tc.profileName,
+					Namespace: IntelPowerNamespace,
+				},
+			}
+
+			r, err := createProfileReconcilerObject(tc.clientObjs)
+			if err != nil {
+				t.Error(err)
+				t.Fatalf("error creating the reconciler object")
+			}
+
+			host, teardown, err := fullDummySystem()
+			if err != nil {
+				t.Error(err)
+				t.Fatalf("error setting up dummy system: %v", err)
+			}
+			defer teardown()
+			r.PowerLibrary = host
+
+			_, err = r.Reconcile(context.TODO(), req)
+			assert.Nil(t, err)
+
+			exPool := host.GetExclusivePool(tc.profileName)
+			assert.NotNil(t, exPool, "Exclusive pool should be created")
+			assert.Equal(t, tc.profileName, exPool.GetPowerProfile().Name(), "pool should have the correct name")
+
+			// Check extended resource creation on node
+			updatedNode := &corev1.Node{}
+			err = r.Client.Get(context.TODO(), client.ObjectKey{Name: nodeName}, updatedNode)
+			assert.NoError(t, err)
+			extendedResourceName := corev1.ResourceName(fmt.Sprintf("%s%s", ExtendedResourcePrefix, tc.profileName))
+			_, exists := updatedNode.Status.Capacity[extendedResourceName]
+			assert.True(t, exists, "Extended resource should be created")
+
+			// Check power workload creation on node
+			workload := &powerv1.PowerWorkload{}
+			wErr := r.Client.Get(context.TODO(), client.ObjectKey{
+				Name:      fmt.Sprintf("%s-%s", tc.profileName, nodeName),
 				Namespace: IntelPowerNamespace,
-			},
-			Spec: powerv1.PowerProfileSpec{
-				Name: "performance",
-				PStates: powerv1.PStatesConfig{
-					Max:      3600,
-					Min:      3200,
-					Epp:      "performance",
-					Governor: "powersave",
-				},
-			},
-		},
-		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: nodeName,
-			},
-			Status: corev1.NodeStatus{
-				Capacity: map[corev1.ResourceName]resource.Quantity{
-					CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
-				},
-			},
-		},
+			}, workload)
+			assert.NoError(t, wErr, "power workload should be created")
+			assert.Equal(t, workload.Name, fmt.Sprintf("%s-%s", tc.profileName, nodeName), "power workload should have the correct name")
+		})
 	}
-	req := reconcile.Request{
-		NamespacedName: client.ObjectKey{
-			Name:      "performance",
-			Namespace: IntelPowerNamespace,
-		},
-	}
-	t.Setenv("NODE_NAME", nodeName)
-	r, err := createProfileReconcilerObject(clientObjs)
-	if err != nil {
-		t.Error(err)
-		t.Fatalf("error creating the reconciler object")
-	}
-
-	host, teardown, err := fullDummySystem()
-	assert.Nil(t, err)
-	defer teardown()
-	r.PowerLibrary = host
-	host.AddExclusivePool("performance")
-	_, err = r.Reconcile(context.TODO(), req)
-	assert.Nil(t, err)
-
 }
 
 // basic shared pool scenario
@@ -1496,6 +1537,7 @@ func TestPowerProfile_Reconcile_FeatureNotSupportedErr(t *testing.T) {
 	}
 	setupDummyFiles(1, 1, 1, map[string]string{
 		"available_governors": "powersave performance",
+		"epp":                 "performance",
 	})
 	t.Setenv("NODE_NAME", "TestNode")
 	for _, tc := range tcases {

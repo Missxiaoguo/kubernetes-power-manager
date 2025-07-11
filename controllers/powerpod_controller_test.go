@@ -1480,7 +1480,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 				})
 				return mkcl
 			},
-			clientErr: "failed to update status: mock client Update error",
+			clientErr: "client Patch error",
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
