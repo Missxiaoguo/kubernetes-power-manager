@@ -48,7 +48,8 @@ type PowerWorkloadSpec struct {
 	PowerNodeSelector map[string]string `json:"powerNodeSelector,omitempty"`
 
 	// PowerProfile is the Profile that this PowerWorkload is based on
-	PowerProfile string `json:"powerProfile,omitempty"`
+	// +kubebuilder:validation:MinLength=1
+	PowerProfile string `json:"powerProfile"`
 }
 
 type ReservedSpec struct {

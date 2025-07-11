@@ -39,8 +39,6 @@ import (
 	"github.com/intel/power-optimization-library/pkg/power"
 )
 
-const queuetime = time.Second * 5
-
 // PowerNodeReconciler reconciles a PowerNode object
 type PowerNodeReconciler struct {
 	client.Client
