@@ -206,11 +206,6 @@ func (in *PowerConfigSpec) DeepCopyInto(out *PowerConfigSpec) {
 			(*out)[key] = val
 		}
 	}
-	if in.PowerProfiles != nil {
-		in, out := &in.PowerProfiles, &out.PowerProfiles
-		*out = make([]string, len(*in))
-		copy(*out, *in)
-	}
 	if in.CustomDevices != nil {
 		in, out := &in.CustomDevices, &out.CustomDevices
 		*out = make([]string, len(*in))

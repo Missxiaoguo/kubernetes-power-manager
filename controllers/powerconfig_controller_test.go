@@ -54,16 +54,14 @@ func createConfigReconcilerObject(objs []client.Object) (*PowerConfigReconciler,
 
 func TestPowerConfig_Reconcile_Creation(t *testing.T) {
 	tcases := []struct {
-		testCase                 string
-		nodeName                 string
-		configName               string
-		clientObjs               []client.Object
-		profileNames             []string
-		expectedNumberOfProfiles int
-		expectedCustomDevices    []string
+		testCase              string
+		nodeName              string
+		configName            string
+		clientObjs            []client.Object
+		expectedCustomDevices []string
 	}{
 		{
-			testCase:   "Test Case 1 - profiles: performance",
+			testCase:   "basic config creation",
 			nodeName:   "TestNode",
 			configName: "test-config",
 			clientObjs: []client.Object{
@@ -75,9 +73,6 @@ func TestPowerConfig_Reconcile_Creation(t *testing.T) {
 					Spec: powerv1.PowerConfigSpec{
 						PowerNodeSelector: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
-						},
-						PowerProfiles: []string{
-							"performance",
 						},
 						CustomDevices: []string{"device-plugin"},
 					},
@@ -96,95 +91,7 @@ func TestPowerConfig_Reconcile_Creation(t *testing.T) {
 					},
 				},
 			},
-			profileNames: []string{
-				"performance",
-			},
-			expectedNumberOfProfiles: 1,
-			expectedCustomDevices:    []string{"device-plugin"},
-		},
-		{
-			testCase:   "Test Case 2 - profiles: performance, balance-performance",
-			nodeName:   "TestNode",
-			configName: "test-config",
-			clientObjs: []client.Object{
-				&powerv1.PowerConfig{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerConfigSpec{
-						PowerNodeSelector: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-						PowerProfiles: []string{
-							"performance",
-							"balance-performance",
-						},
-					},
-				},
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "TestNode",
-						Namespace: IntelPowerNamespace,
-						Labels: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-					},
-					Status: corev1.NodeStatus{
-						Capacity: map[corev1.ResourceName]resource.Quantity{
-							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
-						},
-					},
-				},
-			},
-			profileNames: []string{
-				"performance",
-				"balance-performance",
-			},
-			expectedNumberOfProfiles: 2,
-		},
-		{
-			testCase:   "Test Case 3 - profiles: performance, balance-performance, balance-power",
-			nodeName:   "TestNode",
-			configName: "test-config",
-			clientObjs: []client.Object{
-				&powerv1.PowerConfig{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerConfigSpec{
-						PowerNodeSelector: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-						PowerProfiles: []string{
-							"performance",
-							"balance-performance",
-							"balance-power",
-						},
-					},
-				},
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "TestNode",
-						Namespace: IntelPowerNamespace,
-						Labels: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-					},
-					Status: corev1.NodeStatus{
-						Capacity: map[corev1.ResourceName]resource.Quantity{
-							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
-						},
-					},
-				},
-			},
-			profileNames: []string{
-				"performance",
-				"balance-performance",
-				"balance-power",
-			},
-			expectedNumberOfProfiles: 3,
+			expectedCustomDevices: []string{"device-plugin"},
 		},
 	}
 	for _, tc := range tcases {
@@ -210,28 +117,6 @@ func TestPowerConfig_Reconcile_Creation(t *testing.T) {
 			t.Fatalf("%s - error reconciling object", tc.testCase)
 		}
 
-		for _, profile := range tc.profileNames {
-			p := &powerv1.PowerProfile{}
-			err = r.Client.Get(context.TODO(), client.ObjectKey{
-				Name:      profile,
-				Namespace: IntelPowerNamespace,
-			}, p)
-			if err != nil {
-				t.Errorf("%s failed: expected power profile '%s' to have been created", tc.testCase, profile)
-			}
-		}
-
-		profiles := &powerv1.PowerProfileList{}
-		err = r.Client.List(context.TODO(), profiles)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving the power profile objects", tc.testCase)
-		}
-
-		if len(profiles.Items) != tc.expectedNumberOfProfiles {
-			t.Errorf("%s failed: expected number of power profile objects to be %v, got %v", tc.testCase, tc.expectedNumberOfProfiles, len(profiles.Items))
-		}
-
 		ds := &appsv1.DaemonSet{}
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      NodeAgentDSName,
@@ -240,108 +125,14 @@ func TestPowerConfig_Reconcile_Creation(t *testing.T) {
 		if err != nil {
 			t.Errorf("%s failed: expected daemonSet '%s' to have been created", tc.testCase, NodeAgentDSName)
 		}
-	}
-}
 
-func TestPowerConfig_Reconcile_Exists(t *testing.T) {
-	tcases := []struct {
-		testCase                 string
-		nodeName                 string
-		configName               string
-		clientObjs               []client.Object
-		expectedNumberOfProfiles int
-		expectedNumberOfConfigs  int
-	}{
-		{
-			testCase:   "Test Case 1 - profiles: performance",
-			nodeName:   "TestNode",
-			configName: "test-config",
-			clientObjs: []client.Object{
-				&powerv1.PowerConfig{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerConfigSpec{
-						PowerNodeSelector: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-						PowerProfiles: []string{
-							"performance",
-						},
-					},
-				},
-				&powerv1.PowerConfig{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-config2",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerConfigSpec{
-						PowerNodeSelector: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-						PowerProfiles: []string{
-							"performance",
-						},
-					},
-				},
-			},
-			expectedNumberOfProfiles: 0,
-			expectedNumberOfConfigs:  1,
-		},
-	}
-	for _, tc := range tcases {
-		t.Setenv("NODE_NAME", tc.nodeName)
-		NodeAgentDaemonSetPath = "../build/manifests/power-node-agent-ds.yaml"
-
-		r, err := createConfigReconcilerObject(tc.clientObjs)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error creating the reconciler object", tc.testCase)
-		}
-
-		req := reconcile.Request{
-			NamespacedName: client.ObjectKey{
-				Name:      tc.configName,
-				Namespace: IntelPowerNamespace,
-			},
-		}
-
-		_, err = r.Reconcile(context.TODO(), req)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error reconciling object", tc.testCase)
-		}
-
-		config := &powerv1.PowerConfig{}
+		powerNode := &powerv1.PowerNode{}
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
-			Name:      tc.configName,
+			Name:      tc.nodeName,
 			Namespace: IntelPowerNamespace,
-		}, config)
-		if err == nil {
-			t.Errorf("%s failed: expected power config object '%s' to have been deleted", tc.testCase, tc.configName)
-		}
-
-		configs := &powerv1.PowerConfigList{}
-		err = r.Client.List(context.TODO(), configs)
+		}, powerNode)
 		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving the power config objects", tc.testCase)
-		}
-
-		if len(configs.Items) != tc.expectedNumberOfConfigs {
-			t.Errorf("%s failed: expected number of power config objects to be %v, got %v", tc.testCase, tc.expectedNumberOfConfigs, len(configs.Items))
-		}
-
-		profiles := &powerv1.PowerProfileList{}
-		err = r.Client.List(context.TODO(), profiles)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving the power profile objects", tc.testCase)
-		}
-
-		if len(profiles.Items) != tc.expectedNumberOfProfiles {
-			t.Errorf("%s failed: expected number of power profile objects to be %v, got %v", tc.testCase, tc.expectedNumberOfProfiles, len(profiles.Items))
+			t.Errorf("%s failed: expected power node object '%s' to have been created", tc.testCase, tc.nodeName)
 		}
 	}
 }
@@ -368,9 +159,6 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 					Spec: powerv1.PowerConfigSpec{
 						PowerNodeSelector: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
-						},
-						PowerProfiles: []string{
-							"performance",
 						},
 						CustomDevices: []string{"device-plugin"},
 					},
@@ -406,9 +194,6 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 						PowerNodeSelector: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
 						},
-						PowerProfiles: []string{
-							"performance",
-						},
 						CustomDevices: []string{},
 					},
 				},
@@ -442,9 +227,6 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 					Spec: powerv1.PowerConfigSpec{
 						PowerNodeSelector: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
-						},
-						PowerProfiles: []string{
-							"performance",
 						},
 					},
 				},
@@ -540,9 +322,6 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 						PowerNodeSelector: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
 						},
-						PowerProfiles: []string{
-							"performance",
-						},
 						CustomDevices: []string{"device-plugin"},
 					},
 				},
@@ -578,9 +357,6 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 						PowerNodeSelector: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
 						},
-						PowerProfiles: []string{
-							"performance",
-						},
 						CustomDevices: []string{"device-plugin-1", "device-plugin-2"},
 					},
 				},
@@ -615,9 +391,6 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 					Spec: powerv1.PowerConfigSpec{
 						PowerNodeSelector: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
-						},
-						PowerProfiles: []string{
-							"performance",
 						},
 						CustomDevices: []string{},
 					},
@@ -715,255 +488,6 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 		}
 		if !reflect.DeepEqual(powerNode.Status.CustomDevices, tc.expectedCustomDevices) {
 			t.Errorf("%s failed: expected customDevices for the power node object to be %v, got %v", tc.testCase, powerNode.Status.CustomDevices, tc.expectedCustomDevices)
-		}
-	}
-}
-
-func TestPowerConfig_Reconcile_ProfilesNoLongerRequested(t *testing.T) {
-	tcases := []struct {
-		testCase                 string
-		nodeName                 string
-		configName               string
-		clientObjs               []client.Object
-		profilesDeleted          []string
-		profileNames             []string
-		expectedNumberOfProfiles int
-	}{
-		{
-			testCase:   "Test Case 1 - profiles to remove: performance",
-			nodeName:   "TestNode",
-			configName: "test-config",
-			clientObjs: []client.Object{
-				&powerv1.PowerConfig{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerConfigSpec{
-						PowerNodeSelector: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-						PowerProfiles: []string{
-							"balance-performance",
-						},
-					},
-				},
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "TestNode",
-						Labels: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-					},
-					Status: corev1.NodeStatus{
-						Capacity: map[corev1.ResourceName]resource.Quantity{
-							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
-						},
-					},
-				},
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "performance",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
-						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
-							Epp: "performance",
-						},
-					},
-				},
-			},
-			profilesDeleted: []string{
-				"performance",
-			},
-			profileNames: []string{
-				"balance-performance",
-			},
-			expectedNumberOfProfiles: 1,
-		},
-		{
-			testCase:   "Test Case 2 - profiles to remove: balance-performance",
-			nodeName:   "TestNode",
-			configName: "test-config",
-			clientObjs: []client.Object{
-				&powerv1.PowerConfig{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerConfigSpec{
-						PowerNodeSelector: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-						PowerProfiles: []string{
-							"performance",
-						},
-					},
-				},
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "TestNode",
-						Labels: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-					},
-					Status: corev1.NodeStatus{
-						Capacity: map[corev1.ResourceName]resource.Quantity{
-							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
-						},
-					},
-				},
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "balance-performance",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "balance-performance",
-						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
-							Epp: "balance-performance",
-						},
-					},
-				},
-			},
-			profilesDeleted: []string{
-				"balance-performance",
-			},
-			profileNames: []string{
-				"performance",
-			},
-			expectedNumberOfProfiles: 1,
-		},
-		{
-			testCase:   "Test Case 2 - profiles to remove: balance-performance",
-			nodeName:   "TestNode",
-			configName: "test-config",
-			clientObjs: []client.Object{
-				&powerv1.PowerConfig{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerConfigSpec{
-						PowerNodeSelector: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-						PowerProfiles: []string{
-							"performance",
-						},
-					},
-				},
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "TestNode",
-						Labels: map[string]string{
-							"feature.node.kubernetes.io/power-node": "true",
-						},
-					},
-					Status: corev1.NodeStatus{
-						Capacity: map[corev1.ResourceName]resource.Quantity{
-							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
-						},
-					},
-				},
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "balance-performance",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "balance-performance",
-						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
-							Epp: "balance-performance",
-						},
-					},
-				},
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "balance-power",
-						Namespace: IntelPowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "balance-power",
-						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
-							Epp: "balance-power",
-						},
-					},
-				},
-			},
-			profilesDeleted: []string{
-				"balance-performance",
-				"balance-power",
-			},
-			profileNames: []string{
-				"performance",
-			},
-			expectedNumberOfProfiles: 1,
-		},
-	}
-	for _, tc := range tcases {
-		t.Setenv("NODE_NAME", tc.nodeName)
-		NodeAgentDaemonSetPath = "../build/manifests/power-node-agent-ds.yaml"
-
-		r, err := createConfigReconcilerObject(tc.clientObjs)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error creating the reconciler object", tc.testCase)
-		}
-
-		req := reconcile.Request{
-			NamespacedName: client.ObjectKey{
-				Name:      tc.configName,
-				Namespace: IntelPowerNamespace,
-			},
-		}
-
-		_, err = r.Reconcile(context.TODO(), req)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error reconciling object", tc.testCase)
-		}
-
-		profiles := &powerv1.PowerProfileList{}
-		err = r.Client.List(context.TODO(), profiles)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving the power profile objects", tc.testCase)
-		}
-
-		if len(profiles.Items) != tc.expectedNumberOfProfiles {
-			t.Errorf("%s failed: expected number of power profile objects is %v, got %v", tc.testCase, tc.expectedNumberOfProfiles, len(profiles.Items))
-		}
-
-		for _, profile := range tc.profilesDeleted {
-			deletedProfile := &powerv1.PowerProfile{}
-			err = r.Client.Get(context.TODO(), client.ObjectKey{
-				Name:      profile,
-				Namespace: IntelPowerNamespace,
-			}, deletedProfile)
-			if err == nil {
-				t.Errorf("%s failed: expected power profile object '%s' to have been deleted", tc.testCase, profile)
-			}
-		}
-
-		for _, profile := range tc.profileNames {
-			createdProfile := &powerv1.PowerProfile{}
-			err = r.Client.Get(context.TODO(), client.ObjectKey{
-				Name:      profile,
-				Namespace: IntelPowerNamespace,
-			}, createdProfile)
-			if err != nil {
-				t.Errorf("%s failed: expected power profile object '%s' to have been created", tc.testCase, profile)
-			}
 		}
 	}
 }
@@ -1112,9 +636,6 @@ func FuzzPowerConfigController(f *testing.F) {
 				Spec: powerv1.PowerConfigSpec{
 					PowerNodeSelector: map[string]string{
 						label: "true",
-					},
-					PowerProfiles: []string{
-						prof,
 					},
 					CustomDevices: []string{devicePlugin},
 				},

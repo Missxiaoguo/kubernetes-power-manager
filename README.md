@@ -273,18 +273,16 @@ frequencies of the cores designated to the Pod.
 
 ### Config Controller
 
-The Kubernetes Power Manager will wait for the PowerConfig to be created by the user, in which the desired PowerProfiles
-will be specified. The PowerConfig holds different values: what image is required, what Nodes the user wants to place
-the node agent on and what PowerProfiles are required.
+The Kubernetes Power Manager will wait for the PowerConfig to be created by the user to initiate the deployment of the node agent.
+The PowerConfig specifies what Nodes the user wants to place the node agent on.
 
 * powerNodeSelector: This is a key/value map used for defining a list of node labels that a node must satisfy in order
   for the Power Node Agent to be deployed.
-* powerProfiles: The list of PowerProfiles that the user wants available on the nodes.
 
 Once the Config Controller sees that the PowerConfig is created, it reads the values and then deploys the node agent on
-to each of the Nodes that are specified. It then creates the PowerProfiles and extended resources. Extended resources
-are resources created in the cluster that can be requested in the PodSpec. The Kubelet can then keep track of these
-requests. It is important to use as it can specify how many cores on the system can be run at a higher frequency before
+to each of the Nodes that are specified. PowerProfiles should be created separately by the user and are advertised as
+extended resources that can be requested in the PodSpec. The Kubelet can then keep track of these requests.
+It is important to use as it can specify how many cores on the system can be run at a higher frequency before
 hitting the heat threshold.
 
 Note: Only one PowerConfig can be present in a cluster. The Config Controller will ignore and delete and subsequent
@@ -301,10 +299,6 @@ metadata:
 spec:
   powerNodeSelector:
     feature.node.kubernetes.io/power-node: "true"
-  powerProfiles:
-    - "performance"
-    - "balance-performance"
-    - "balance-power"
 ````
 
 ### Workload Controller
@@ -408,32 +402,7 @@ We aim to fix this issue in the next release of the Kubernetes Power Manager.
 
 The Profile Controller holds values for specific SST settings which are then applied to cores at host level by the
 Kubernetes Power Manager as requested. Power Profiles are advertised as extended resources and can be requested via the
-PodSpec. The Config controller creates the requested high-performance PowerProfiles depending on which are requested in
-the PowerConfig created by the user.
-
-There are two kinds of PowerProfiles:
-
-- Base PowerProfiles
-- Extended PowerProfiles
-
-A Base PowerProfile can be one of three values:
-
-- performance
-- balance-performance
-- balance-power
-
-These correspond to three of the EPP values associated with SST-CP. Base PowerProfiles are used to tell the Profile
-controller that the specified profile is being requested for the cluster. The Profile controller takes the created
-Profile and further creates an Extended PowerProfile. An Extended PowerProfile is Node-specific. The reason behind this
-is that different Nodes in your cluster may have different maximum frequency limitations. For example, one Node may have
-the maximum limitation of 3700GHz, while another may only be able to reach frequency levels of 3200GHz. An Extended
-PowerProfile queries the Node that it is running on to obtain this maximum limitation and sets the Max and Min values of
-the profile accordingly. An Extended PowerProfile’s name has the following form:
-
-BASE_PROFILE_NAME-NODE_NAME - for example: “performance-example-node”.
-
-Either the Base PowerProfile or the Extended PowerProfile can be requested in the PodSpec, as the Workload controller
-can determine the correct PowerProfile to use from the Base PowerProfile.
+PodSpec. PowerProfiles must be created explicitly by the user.
 
 #### Example
 
@@ -758,8 +727,6 @@ metadata:
 spec:
   powerNodeSelector:
     feature.node.kubernetes.io/power-node: "true"
-  powerProfiles:
-    - "performance"
  ````
 
 Apply the Config:
@@ -768,8 +735,7 @@ Apply the Config:
 Once deployed the controller-manager pod will see it via the Config controller and create a Node Agent instance on nodes
 specified with the ‘feature.node.kubernetes.io/power-node: "true"’ label.
 
-The power-node-agent DaemonSet will be created, managing the Power Node Agent Pods. The controller-manager will finally
-create the PowerProfiles that were requested on each Node.
+The power-node-agent DaemonSet will be created, managing the Power Node Agent Pods.
 
 - **Shared Profile**
 
@@ -869,7 +835,7 @@ Replace the placeholder values with the PowerProfile you require and apply the P
 
 `kubectl apply -f examples/example-pod.yaml`
 
-At this point, if only the ‘performance’ PowerProfile was selected in the PowerConfig, the user’s cluster will contain
+At this point, if only the ‘performance’ PowerProfile has been created by the user, the user’s cluster will contain
 three PowerProfiles and two PowerWorkloads:
 
 `kubectl get powerprofiles -n intel-power`
@@ -877,7 +843,6 @@ three PowerProfiles and two PowerWorkloads:
 ````
 NAME                          AGE
 performance                   59m
-performance-<NODE_NAME>       58m
 shared-<NODE_NAME>            60m
 ````
 

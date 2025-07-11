@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"reflect"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -37,7 +36,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/intel/kubernetes-power-manager/pkg/state"
-	"github.com/intel/kubernetes-power-manager/pkg/util"
 )
 
 const (
@@ -250,70 +248,6 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 	if err != nil {
 		logger.Error(err, "failed to update the power config")
 		return ctrl.Result{}, err
-	}
-
-	// Create the power profiles that were requested in the power config if it doesn't exist
-	// Delete any power profiles that are not being requested but exist
-	for _, profile := range config.Spec.PowerProfiles {
-		logger.V(5).Info(fmt.Sprintf("checking if the power profile exists %s", profile))
-		profileFromCluster := &powerv1.PowerProfile{}
-		err = r.Client.Get(c, client.ObjectKey{
-			Name:      profile,
-			Namespace: IntelPowerNamespace,
-		}, profileFromCluster)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				// Power profile does not exist, so we need to create it
-				logger.V(5).Info(fmt.Sprintf("creating power profile %s", profile))
-				epp := strings.Replace(profile, "-", "_", 1)
-				powerProfileSpec := &powerv1.PowerProfileSpec{
-					Name: profile,
-					PStates: powerv1.PStatesConfig{
-						Epp: epp,
-					},
-				}
-				powerProfile := &powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: IntelPowerNamespace,
-						Name:      profile,
-					},
-				}
-				powerProfile.Spec = *powerProfileSpec
-				err = r.Client.Create(c, powerProfile)
-				if err != nil {
-					logger.Error(err, fmt.Sprintf("error creating power profile '%s'", profile))
-					return ctrl.Result{}, err
-				}
-			} else {
-				logger.Error(err, fmt.Sprintf("error retrieving power profile '%s'", profile))
-				return ctrl.Result{}, err
-			}
-		}
-
-		// If the power profile/workload was successfull retrieved, we don't need to do anything
-	}
-
-	powerProfiles := &powerv1.PowerProfileList{}
-	logger.V(5).Info("retrieving the list of power profiles")
-	err = r.Client.List(c, powerProfiles)
-	if err != nil {
-		logger.Error(err, "error retrieving the power profile list")
-		return ctrl.Result{}, err
-	}
-
-	// Check power profiles for any that are no longer requested; only check base profiles
-	for _, profile := range powerProfiles.Items {
-		logger.V(5).Info("checking if the power profile exists and is not requested")
-		convertedName := strings.Replace(profile.Spec.Name, "-", "_", 1)
-		if _, exists := profilePercentages[convertedName]; exists {
-			if !util.StringInStringList(profile.Spec.Name, config.Spec.PowerProfiles) {
-				err = r.Client.Delete(c, &profile)
-				if err != nil {
-					logger.Error(err, fmt.Sprintf("error deleting power profile '%s'", profile.Spec.Name))
-					return ctrl.Result{}, err
-				}
-			}
-		}
 	}
 
 	return ctrl.Result{RequeueAfter: time.Second * 5}, nil
