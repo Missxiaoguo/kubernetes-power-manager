@@ -224,7 +224,7 @@ func Fuzz_library(f *testing.F) {
 		epp := eppList[int(eppSeed)%len(eppList)]
 		pool, _ := node.AddExclusivePool(poolName)
 		cstates := map[string]bool{"C0": true, "C1": false}
-		profile, _ := NewEcorePowerProfile(poolName, min, max, emin, emax, governor, epp, cstates)
+		profile, _ := NewEcorePowerProfile(poolName, min, max, emin, emax, governor, epp, cstates, nil)
 		pool.SetPowerProfile(profile)
 		node.GetSharedPool().MoveCpuIDs([]uint{1, 3, 5})
 		node.GetExclusivePool(poolName).MoveCpuIDs([]uint{1, 3, 5})

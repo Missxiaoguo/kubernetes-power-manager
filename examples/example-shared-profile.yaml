@@ -12,5 +12,8 @@ spec:
     epp: "power"
     governor: "powersave"
   cstates:
-    C1: true
-    C6: false
+    # Configure C-states using either 'maxLatencyUs' or 'names', but not both
+    maxLatencyUs: 1
+    #names:
+    #  C1: true
+    #  C6: false

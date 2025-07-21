@@ -2,6 +2,7 @@ package power
 
 import (
 	"fmt"
+	"slices"
 )
 
 type profileImpl struct {
@@ -29,8 +30,9 @@ func (p *profileImpl) GetCStates() CStates {
 	return p.cstates
 }
 
-// NewPowerProfile creates a new power profile
-func NewPowerProfile(name string, minFreq, maxFreq uint, governor, epp string, cstates map[string]bool) (Profile, error) {
+// NewPowerProfile creates a new power profile with both P-states and C-states configuration
+// C-states can be configured either with explicit names or latency-based filtering
+func NewPowerProfile(name string, minFreq, maxFreq uint, governor, epp string, cstates map[string]bool, maxLatencyUs *int) (Profile, error) {
 	if !featureList.isFeatureIdSupported(FrequencyScalingFeature) {
 		return nil, featureList.getFeatureIdError(FrequencyScalingFeature)
 	}
@@ -43,7 +45,7 @@ func NewPowerProfile(name string, minFreq, maxFreq uint, governor, epp string, c
 		return nil, featureList.getFeatureIdError(CStatesFeature)
 	}
 
-	if err := ValidateCStates(cstates); err != nil {
+	if err := ValidateCStates(cstates, maxLatencyUs); err != nil {
 		return nil, fmt.Errorf("invalid C-states configuration: %w", err)
 	}
 
@@ -58,13 +60,13 @@ func NewPowerProfile(name string, minFreq, maxFreq uint, governor, epp string, c
 			epp:          epp,
 			governor:     governor,
 		},
-		cstates: cstatesImpl(cstates),
+		cstates: cstatesImpl{states: cstates, maxLatencyUs: maxLatencyUs},
 	}, nil
 }
 
 // creates a Power Profile for efficient and performant cores
 // Note: this is not being used by KPM controller, KPM is not supporting E-cores and P-cores
-func NewEcorePowerProfile(name string, minFreq, maxFreq, efficientMinFreq, efficientMaxFreq uint, governor, epp string, cstates map[string]bool) (Profile, error) {
+func NewEcorePowerProfile(name string, minFreq, maxFreq, efficientMinFreq, efficientMaxFreq uint, governor, epp string, cstates map[string]bool, maxLatencyUs *int) (Profile, error) {
 	if !featureList.isFeatureIdSupported(FrequencyScalingFeature) {
 		return nil, featureList.getFeatureIdError(FrequencyScalingFeature)
 	}
@@ -77,7 +79,7 @@ func NewEcorePowerProfile(name string, minFreq, maxFreq, efficientMinFreq, effic
 		return nil, featureList.getFeatureIdError(CStatesFeature)
 	}
 
-	if err := ValidateCStates(cstates); err != nil {
+	if err := ValidateCStates(cstates, maxLatencyUs); err != nil {
 		return nil, fmt.Errorf("invalid C-states configuration: %w", err)
 	}
 
@@ -92,7 +94,7 @@ func NewEcorePowerProfile(name string, minFreq, maxFreq, efficientMinFreq, effic
 			epp:          epp,
 			governor:     governor,
 		},
-		cstates: cstatesImpl(cstates),
+		cstates: cstatesImpl{states: cstates, maxLatencyUs: maxLatencyUs},
 	}, nil
 }
 
@@ -128,11 +130,20 @@ func ValidatePStates(minFreq, maxFreq, eMinFreq, eMaxFreq uint, governor, epp st
 	return nil
 }
 
-func ValidateCStates(states map[string]bool) error {
-	for name := range states {
-		if _, exists := cStatesNamesMap[name]; !exists {
-			return fmt.Errorf("c-state %s does not exist on this system", name)
+func ValidateCStates(states map[string]bool, maxLatencyUs *int) error {
+	if len(states) > 0 && maxLatencyUs != nil {
+		return fmt.Errorf("cannot specify both explicit C-state names and latency-based configuration")
+	}
+
+	if maxLatencyUs != nil && *maxLatencyUs < 0 {
+		return fmt.Errorf("maxLatencyUs must be a non-negative integer, got %d", *maxLatencyUs)
+	} else if len(states) > 0 {
+		for name := range states {
+			if !slices.Contains(GetAvailableCStates(), name) {
+				return fmt.Errorf("c-state %s does not exist on this system", name)
+			}
 		}
 	}
+
 	return nil
 }

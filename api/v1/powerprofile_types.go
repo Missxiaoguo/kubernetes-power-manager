@@ -53,9 +53,20 @@ type PStatesConfig struct {
 }
 
 // CStatesConfig defines the CPU C-states configuration.
-// The map key represents the C-state name (e.g., "C1", "C1E", "C6" etc.).
-// The map value represents whether the C-state should be enabled (true) or disabled (false).
-type CStatesConfig map[string]bool
+// +kubebuilder:validation:XValidation:rule="!(has(self.names) && has(self.maxLatencyUs))",message="Specify either 'names' or 'maxLatencyUs' for C-state configuration, but not both"
+type CStatesConfig struct {
+	// Names defines explicit C-state configuration.
+	// The map key represents the C-state name (e.g., "C1", "C1E", "C6" etc.).
+	// The map value represents whether the C-state should be enabled (true) or disabled (false).
+	// This field is mutually exclusive with 'maxLatencyUs' — only one of 'names' or 'maxLatencyUs' may be set.
+	Names map[string]bool `json:"names,omitempty"`
+
+	// MaxLatencyUs defines the maximum latency threshold in microseconds.
+	// C-states with latency higher than this threshold will be disabled.
+	// This field is mutually exclusive with 'names' — only one of 'names' or 'maxLatencyUs' may be set.
+	// +kubebuilder:validation:Minimum=0
+	MaxLatencyUs *int `json:"maxLatencyUs,omitempty"`
+}
 
 // PowerProfileStatus defines the observed state of PowerProfile
 type PowerProfileStatus struct {

@@ -201,7 +201,7 @@ func TestPowerNode_Reconcile(t *testing.T) {
 	defer teardown()
 	pool, err := dummyFilesystemHost.AddExclusivePool("performance-TestNode")
 	assert.Nil(t, err)
-	prof, err := power.NewPowerProfile("performance", 1000, 1000, "powersave", "", map[string]bool{})
+	prof, err := power.NewPowerProfile("performance", 1000, 1000, "powersave", "", map[string]bool{}, nil)
 	assert.Nil(t, err)
 	err = dummyFilesystemHost.GetSharedPool().SetPowerProfile(prof)
 	assert.Nil(t, err)
@@ -349,7 +349,7 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 	defer teardown()
 	pool, err := dummyFilesystemHost.AddExclusivePool("performance")
 	assert.Nil(t, err)
-	prof, err := power.NewPowerProfile("performance", 10000, 10000, "powersave", "", map[string]bool{})
+	prof, err := power.NewPowerProfile("performance", 10000, 10000, "powersave", "", map[string]bool{}, nil)
 	assert.Nil(t, err)
 	pool.SetPowerProfile(prof)
 	err = dummyFilesystemHost.GetSharedPool().SetPowerProfile(prof)
@@ -474,7 +474,7 @@ func FuzzPowerNodeController(f *testing.F) {
 		defer teardown()
 
 		pool, err1 := dummyFilesystemHost.AddExclusivePool(prof1)
-		profile, err2 := power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{})
+		profile, err2 := power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{}, nil)
 		// continue test without pools
 		if err1 == nil && err2 == nil {
 			pool.SetPowerProfile(profile)
@@ -485,7 +485,7 @@ func FuzzPowerNodeController(f *testing.F) {
 			if err != nil {
 				return
 			}
-			profile, err = power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{})
+			profile, err = power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{}, nil)
 			if err != nil {
 				return
 			}
@@ -494,7 +494,7 @@ func FuzzPowerNodeController(f *testing.F) {
 			if err != nil {
 				return
 			}
-			profile, err = power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{})
+			profile, err = power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{}, nil)
 			if err != nil {
 				return
 			}

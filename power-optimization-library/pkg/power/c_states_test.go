@@ -65,17 +65,18 @@ func setupCpuCStatesTests(cpufiles map[string]map[string]map[string]string) func
 		}
 		basePath = origBasePath
 		getNumberOfCpus = origGetNumOfCpusFunc
-		cStatesNamesMap = map[string]int{}
+		allCPUCStatesInfo = map[uint]cpuCStatesInfo{}
 		featureList[CStatesFeature].err = uninitialisedErr
 	}
 }
 
 func Test_mapAvailableCStates(t *testing.T) {
+	// Test success case
 	states := map[string]map[string]string{
-		"state0":   {"name": "C0"},
-		"state1":   {"name": "C1"},
-		"state2":   {"name": "C2"},
-		"state3":   {"name": "POLL"},
+		"state0":   {"name": "C0", "latency": "1", "default_status": "enabled"},
+		"state1":   {"name": "C1", "latency": "10", "default_status": "enabled"},
+		"state2":   {"name": "C2", "latency": "150", "default_status": "disabled"},
+		"state3":   {"name": "POLL", "latency": "0", "default_status": "enabled"},
 		"notState": nil,
 	}
 	cpufiles := map[string]map[string]map[string]string{
@@ -87,29 +88,31 @@ func Test_mapAvailableCStates(t *testing.T) {
 	err := mapAvailableCStates()
 	assert.NoError(t, err)
 
-	assert.Equal(t, cStatesNamesMap, map[string]int{
-		"C0":   0,
-		"C1":   1,
-		"C2":   2,
-		"POLL": 3,
-	})
-
+	expectedMap := map[string]cstateInfo{
+		"C0":   {StateNumber: 0, Latency: 1, DefaultStatus: true},
+		"C1":   {StateNumber: 1, Latency: 10, DefaultStatus: true},
+		"C2":   {StateNumber: 2, Latency: 150, DefaultStatus: false},
+		"POLL": {StateNumber: 3, Latency: 0, DefaultStatus: true},
+	}
+	assert.Equal(t, expectedMap, allCPUCStatesInfo[0])
+	assert.Equal(t, expectedMap, allCPUCStatesInfo[1])
 	teardown()
 
+	// Test missing name file
 	states["state0"] = nil
+	teardown = setupCpuCStatesTests(cpufiles)
+	err = mapAvailableCStates()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "could not read cpu0 C-State 0 name")
+	teardown()
+
+	// Test missing latency file
+	states["state0"] = map[string]string{"name": "C0"} // No latency file
 	teardown = setupCpuCStatesTests(cpufiles)
 
 	err = mapAvailableCStates()
-
 	assert.Error(t, err)
-
-	teardown()
-
-	states["state0"] = map[string]string{"name": "C0"}
-	delete(cpufiles, "cpu0")
-	teardown = setupCpuCStatesTests(cpufiles)
-
-	assert.Error(t, mapAvailableCStates())
+	assert.Contains(t, err.Error(), "could not read cpu0 C-State 0 latency")
 	teardown()
 }
 
@@ -136,20 +139,24 @@ func TestCStates_preCheckCStates(t *testing.T) {
 
 func TestCpuImpl_applyCStates(t *testing.T) {
 	states := map[string]map[string]string{
-		"state0": {"name": "C0", "disable": "0"},
-		"state2": {"name": "C2", "disable": "0"},
+		"state0": {"name": "C0", "disable": "0", "latency": "1"},
+		"state2": {"name": "C2", "disable": "0", "latency": "10"},
 	}
 	cpufiles := map[string]map[string]map[string]string{
 		"cpu0": states,
 	}
 	defer setupCpuCStatesTests(cpufiles)()
-	cStatesNamesMap = map[string]int{
-		"C2": 2,
-		"C0": 0,
+
+	allCPUCStatesInfo[0] = map[string]cstateInfo{
+		"C2": {StateNumber: 2, Latency: 10, DefaultStatus: true},
+		"C0": {StateNumber: 0, Latency: 1, DefaultStatus: true},
 	}
 	err := (&cpuImpl{id: 0}).applyCStates(cstatesImpl{
-		"C0": false,
-		"C2": true})
+		states: map[string]bool{
+			"C0": false,
+			"C2": true,
+		},
+	})
 
 	assert.NoError(t, err)
 
@@ -173,27 +180,38 @@ func TestCpuImpl_applyCStates(t *testing.T) {
 func TestValidateCStates(t *testing.T) {
 	defer setupCpuCStatesTests(nil)()
 
-	cStatesNamesMap = map[string]int{
-		"C0": 0,
-		"C2": 2,
-		"C3": 3,
+	allCPUCStatesInfo[0] = map[string]cstateInfo{
+		"C0": {StateNumber: 0, Latency: 0, DefaultStatus: true},
+		"C2": {StateNumber: 2, Latency: 10, DefaultStatus: true},
+		"C3": {StateNumber: 3, Latency: 100, DefaultStatus: false},
 	}
 
+	// Validate cstates with explicit c-state names
 	assert.NoError(t, ValidateCStates(map[string]bool{
 		"C0": true,
 		"C2": false,
-	}))
-
+	}, nil))
 	assert.ErrorContains(t, ValidateCStates(map[string]bool{
 		"C9": false,
-	}), "does not exist on this system")
+	}, nil), "does not exist on this system")
+
+	// Validate cstates with max latency
+	validMaxLatency := 11
+	assert.NoError(t, ValidateCStates(nil, &validMaxLatency))
+	invalidMaxLatency := -11
+	assert.ErrorContains(t, ValidateCStates(nil, &invalidMaxLatency), "must be a non-negative integer")
+
+	assert.ErrorContains(t, ValidateCStates(map[string]bool{
+		"C0": true,
+		"C2": false,
+	}, &validMaxLatency), "cannot specify both explicit C-state names and latency-based configuration")
 }
 
 func TestAvailableCStates(t *testing.T) {
-	cStatesNamesMap = map[string]int{
-		"C1": 1,
-		"C2": 2,
-		"C3": 3,
+	allCPUCStatesInfo[0] = map[string]cstateInfo{
+		"C1": {StateNumber: 1, Latency: 1, DefaultStatus: true},
+		"C2": {StateNumber: 2, Latency: 10, DefaultStatus: true},
+		"C3": {StateNumber: 3, Latency: 100, DefaultStatus: false},
 	}
 
 	assert.ElementsMatch(t, GetAvailableCStates(), []string{"C1", "C2", "C3"})
@@ -204,39 +222,94 @@ func TestCpuImpl_updateCStates(t *testing.T) {
 	// cstates feature not supported
 	assert.NoError(t, core.updateCStates())
 
+	// Common filesystem setup
 	defer setupCpuCStatesTests(map[string]map[string]map[string]string{
 		"cpu0": {
-			"state0": {"name": "C0", "disable": "0"},
-			"state1": {"name": "C1", "disable": "0"},
+			"state0": {"name": "C0", "disable": "0", "latency": "0"},
+			"state1": {"name": "C1", "disable": "0", "latency": "1"},
+			"state2": {"name": "C2", "disable": "0", "latency": "10"},
+			"state3": {"name": "C6", "disable": "1", "latency": "100"},
+		},
+		"cpu1": {
+			"state0": {"name": "C0", "disable": "0", "latency": "0"},
+			"state1": {"name": "C1", "disable": "0", "latency": "1"},
+			"state2": {"name": "C2", "disable": "0", "latency": "100"},
 		},
 	})()
 
-	cStatesNamesMap["C0"] = 0
-	cStatesNamesMap["C1"] = 1
+	allCPUCStatesInfo = map[uint]cpuCStatesInfo{
+		0: {
+			"C0": {StateNumber: 0, Latency: 0, DefaultStatus: true},
+			"C1": {StateNumber: 1, Latency: 1, DefaultStatus: true},
+			"C2": {StateNumber: 2, Latency: 10, DefaultStatus: true},
+			"C6": {StateNumber: 3, Latency: 100, DefaultStatus: false},
+		},
+		1: {
+			"C0": {StateNumber: 0, Latency: 0, DefaultStatus: true},
+			"C1": {StateNumber: 1, Latency: 1, DefaultStatus: true},
+			"C2": {StateNumber: 2, Latency: 100, DefaultStatus: true},
+		},
+	}
 
-	stateFilePath := filepath.Join(
-		basePath,
-		fmt.Sprint("cpu", 0),
-		fmt.Sprintf(cStateDisableFileFmt, 0),
-	)
+	testcases := []struct {
+		name     string
+		profile  Profile
+		expected map[uint]map[string]string
+	}{
+		{
+			name:    "Configure c-states by name",
+			profile: &profileImpl{cstates: cstatesImpl{states: map[string]bool{"C0": true, "C6": true}}},
+			expected: map[uint]map[string]string{
+				0: {"C0": "0", "C1": "0", "C2": "0", "C6": "0"},
+				1: {"C0": "0", "C1": "0", "C2": "0"},
+			},
+		},
+		{
+			name:    "Configure c-states by latency",
+			profile: &profileImpl{cstates: cstatesImpl{maxLatencyUs: &[]int{10}[0]}},
+			expected: map[uint]map[string]string{
+				0: {"C0": "0", "C1": "0", "C2": "0", "C6": "1"},
+				1: {"C0": "0", "C1": "0", "C2": "1"},
+			},
+		},
+		{
+			name:    "Configure c-states by latency (0)",
+			profile: &profileImpl{cstates: cstatesImpl{maxLatencyUs: &[]int{0}[0]}},
+			expected: map[uint]map[string]string{
+				0: {"C0": "0", "C1": "1", "C2": "1", "C6": "1"},
+				1: {"C0": "0", "C1": "1", "C2": "1"},
+			},
+		},
+		{
+			name:    "No power profile (use defaults)",
+			profile: Profile(nil),
+			expected: map[uint]map[string]string{
+				0: {"C0": "0", "C1": "0", "C2": "0", "C6": "1"},
+				1: {"C0": "0", "C1": "0", "C2": "0"},
+			},
+		},
+	}
 
-	// read pool property
-	pool := new(poolMock)
-	profile := &profileImpl{cstates: cstatesImpl{"C0": true}}
-	pool.On("GetPowerProfile").Return(profile)
-	core.pool = pool
-	assert.NoError(t, core.updateCStates())
-	value, _ := os.ReadFile(stateFilePath)
-	assert.Equal(t, "0", string(value), "expecting cstate to be enabled")
-	pool.AssertExpectations(t)
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			for id, cpuStatesInfo := range allCPUCStatesInfo {
+				core := &cpuImpl{id: id}
+				pool := new(poolMock)
+				pool.On("GetPowerProfile").Return(testcase.profile)
+				core.pool = pool
+				assert.NoError(t, core.updateCStates())
 
-	// no power profile, use default
-	defaultCStates = cstatesImpl{"C0": false}
-	pool = new(poolMock)
-	pool.On("GetPowerProfile").Return(nil)
-	core.pool = pool
-	assert.NoError(t, core.updateCStates())
-	value, _ = os.ReadFile(stateFilePath)
-	assert.Equal(t, "1", string(value), "expecting cstate to be disabled")
-	pool.AssertExpectations(t)
+				for state, expectedValue := range testcase.expected[id] {
+					stateNum := cpuStatesInfo[state].StateNumber
+					stateFilePath := filepath.Join(
+						basePath,
+						fmt.Sprint("cpu", id),
+						fmt.Sprintf(cStateDisableFileFmt, stateNum))
+					value, _ := os.ReadFile(stateFilePath)
+					assert.Equal(t, expectedValue, string(value), "C-state %s should be %s", state, expectedValue)
+				}
+				pool.AssertExpectations(t)
+			}
+		})
+	}
 }
