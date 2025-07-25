@@ -106,7 +106,24 @@ func createPodReconcilerObject(objs []runtime.Object, podResourcesClient *podres
 	}
 
 	// create a ReconcileNode object with the scheme and fake client.
-	r := &PowerPodReconciler{cl, ctrl.Log.WithName("testing"), s, state, *podResourcesClient}
+	mockPowerLibrary := new(hostMock)
+	// Set up mock to return valid pools for profiles that should work
+	mockPowerLibrary.On("GetExclusivePool", "performance").Return(new(poolMock))
+	mockPowerLibrary.On("GetExclusivePool", "balance-performance").Return(new(poolMock))
+	mockPowerLibrary.On("GetExclusivePool", "universal").Return(new(poolMock))
+	mockPowerLibrary.On("GetExclusivePool", "zone-specific").Return(new(poolMock))
+	// Return nil for profiles that should fail validation
+	mockPowerLibrary.On("GetExclusivePool", "gpu-optimized").Return(nil)
+	mockPowerLibrary.On("GetExclusivePool", "nonexistent").Return(nil)
+
+	r := &PowerPodReconciler{
+		Client:             cl,
+		Log:                ctrl.Log.WithName("testing"),
+		Scheme:             s,
+		State:              state,
+		PodResourcesClient: *podResourcesClient,
+		PowerLibrary:       mockPowerLibrary,
+	}
 
 	return r, nil
 }
@@ -1524,14 +1541,14 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 					wload := args.Get(2).(*powerv1.PowerWorkload)
 					*wload = *defaultWload
 				})
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.intel.com \"performance\" not found"))
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNode")).Return(nil).Run(func(args mock.Arguments) {
 					pnode := args.Get(2).(*powerv1.PowerNode)
 					*pnode = *defaultNode
 				})
-				mkcl.On("List", mock.Anything, mock.Anything).Return(fmt.Errorf("client list error"))
 				return mkcl
 			},
-			clientErr: "client list error",
+			clientErr: "",
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
@@ -1559,6 +1576,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 					wload := args.Get(2).(*powerv1.PowerWorkload)
 					*wload = *defaultWload
 				})
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.intel.com \"performance\" not found"))
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNode")).Return(fmt.Errorf("client  powernode get error"))
 				return mkcl
 			},
@@ -1593,7 +1611,11 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 		}
 		r.Client = tc.convertClient(r.Client)
 		_, err = r.Reconcile(context.TODO(), req)
-		assert.ErrorContains(t, err, tc.clientErr)
+		if tc.clientErr == "" {
+			assert.NoError(t, err)
+		} else {
+			assert.ErrorContains(t, err, tc.clientErr)
+		}
 
 	}
 
@@ -1838,4 +1860,769 @@ func TestPowerPodisContainerInList(t *testing.T) {
 
 	// negative test
 	assert.False(t, isContainerInList("not-in-list", "not-in-list", containers, &logger))
+}
+
+func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
+	testNode := "TestNode"
+
+	baseNode := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: testNode,
+			Labels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+				"env":       "production",
+			},
+		},
+	}
+
+	basePowerNode := &powerv1.PowerNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      testNode,
+			Namespace: IntelPowerNamespace,
+		},
+		Status: powerv1.PowerNodeStatus{
+			CustomDevices: []string{},
+		},
+	}
+
+	matchingProfile := &powerv1.PowerProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "performance",
+			Namespace: IntelPowerNamespace,
+		},
+		Spec: powerv1.PowerProfileSpec{
+			Name: "performance",
+			NodeSelector: powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"node-type": "worker",
+					},
+				},
+			},
+		},
+	}
+
+	nonMatchingProfile := &powerv1.PowerProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "gpu-optimized",
+			Namespace: IntelPowerNamespace,
+		},
+		Spec: powerv1.PowerProfileSpec{
+			Name: "gpu-optimized",
+			NodeSelector: powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"node-type": "gpu-node",
+					},
+				},
+			},
+		},
+	}
+
+	universalProfile := &powerv1.PowerProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "universal",
+			Namespace: IntelPowerNamespace,
+		},
+		Spec: powerv1.PowerProfileSpec{
+			Name: "universal",
+			// No node selector - should apply to all nodes
+		},
+	}
+
+	expressionMatchingProfile := &powerv1.PowerProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "zone-specific",
+			Namespace: IntelPowerNamespace,
+		},
+		Spec: powerv1.PowerProfileSpec{
+			Name: "zone-specific",
+			NodeSelector: powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "zone",
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   []string{"us-west-1a", "us-west-1b"},
+						},
+						{
+							Key:      "env",
+							Operator: metav1.LabelSelectorOpExists,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	testCases := []struct {
+		name              string
+		nodeLabels        map[string]string
+		podSpec           corev1.PodSpec
+		podStatus         corev1.PodStatus
+		profiles          []runtime.Object
+		workloads         []runtime.Object
+		podResources      []*podresourcesapi.PodResources
+		expectError       bool
+		expectRecoverable bool
+		errorContains     string
+		expectedWorkloads map[string][]uint
+	}{
+		{
+			name: "Single profile with matching node selector",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+			},
+			podSpec: corev1.PodSpec{
+				NodeName: testNode,
+				Containers: []corev1.Container{
+					{
+						Name: "test-container",
+						Resources: corev1.ResourceRequirements{
+							Limits: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+							Requests: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+						},
+					},
+				},
+			},
+			podStatus: corev1.PodStatus{
+				Phase:    corev1.PodRunning,
+				QOSClass: corev1.PodQOSGuaranteed,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name:        "test-container",
+						ContainerID: "docker://abc123",
+					},
+				},
+			},
+			profiles: []runtime.Object{matchingProfile},
+			workloads: []runtime.Object{
+				&powerv1.PowerWorkload{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "performance-" + testNode,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerWorkloadSpec{
+						Name:         "performance-" + testNode,
+						PowerProfile: "performance",
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name:       testNode,
+							Containers: []powerv1.Container{},
+							CpuIds:     []uint{},
+						},
+					},
+				},
+			},
+			podResources: []*podresourcesapi.PodResources{
+				{
+					Name:      "test-pod",
+					Namespace: IntelPowerNamespace,
+					Containers: []*podresourcesapi.ContainerResources{
+						{
+							Name:   "test-container",
+							CpuIds: []int64{1, 2},
+						},
+					},
+				},
+			},
+			expectError:       false,
+			expectedWorkloads: map[string][]uint{"performance-" + testNode: {1, 2}},
+		},
+		{
+			name: "Profile with non-matching node selector",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+			},
+			podSpec: corev1.PodSpec{
+				NodeName: testNode,
+				Containers: []corev1.Container{
+					{
+						Name: "test-container",
+						Resources: corev1.ResourceRequirements{
+							Limits: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/gpu-optimized": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+							Requests: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/gpu-optimized": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+						},
+					},
+				},
+			},
+			podStatus: corev1.PodStatus{
+				Phase:    corev1.PodRunning,
+				QOSClass: corev1.PodQOSGuaranteed,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name:        "test-container",
+						ContainerID: "docker://abc123",
+					},
+				},
+			},
+			profiles: []runtime.Object{nonMatchingProfile},
+			workloads: []runtime.Object{
+				&powerv1.PowerWorkload{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gpu-optimized-" + testNode,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerWorkloadSpec{
+						Name:         "gpu-optimized-" + testNode,
+						PowerProfile: "gpu-optimized",
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name:       testNode,
+							Containers: []powerv1.Container{},
+							CpuIds:     []uint{},
+						},
+					},
+				},
+			},
+			podResources: []*podresourcesapi.PodResources{
+				{
+					Name:      "test-pod",
+					Namespace: IntelPowerNamespace,
+					Containers: []*podresourcesapi.ContainerResources{
+						{
+							Name:   "test-container",
+							CpuIds: []int64{1, 2},
+						},
+					},
+				},
+			},
+			expectError:       true,
+			expectRecoverable: true,
+			errorContains: fmt.Sprintf(
+				"recoverable errors encountered: power profile '%s' is not available on node %s",
+				nonMatchingProfile.Name,
+				testNode,
+			),
+		},
+		{
+			name: "Universal profile with no node selector",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+			},
+			podSpec: corev1.PodSpec{
+				NodeName: testNode,
+				Containers: []corev1.Container{
+					{
+						Name: "test-container",
+						Resources: corev1.ResourceRequirements{
+							Limits: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                       *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/universal": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+							Requests: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                       *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/universal": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+						},
+					},
+				},
+			},
+			podStatus: corev1.PodStatus{
+				Phase:    corev1.PodRunning,
+				QOSClass: corev1.PodQOSGuaranteed,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name:        "test-container",
+						ContainerID: "docker://abc123",
+					},
+				},
+			},
+			profiles: []runtime.Object{universalProfile},
+			workloads: []runtime.Object{
+				&powerv1.PowerWorkload{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "universal-" + testNode,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerWorkloadSpec{
+						Name:         "universal-" + testNode,
+						PowerProfile: "universal",
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name:       testNode,
+							Containers: []powerv1.Container{},
+							CpuIds:     []uint{},
+						},
+					},
+				},
+			},
+			podResources: []*podresourcesapi.PodResources{
+				{
+					Name:      "test-pod",
+					Namespace: IntelPowerNamespace,
+					Containers: []*podresourcesapi.ContainerResources{
+						{
+							Name:   "test-container",
+							CpuIds: []int64{3, 4},
+						},
+					},
+				},
+			},
+			expectError:       false,
+			expectedWorkloads: map[string][]uint{"universal-" + testNode: {3, 4}},
+		},
+		{
+			name: "Profile with MatchExpressions selector",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+				"env":       "production",
+			},
+			podSpec: corev1.PodSpec{
+				NodeName: testNode,
+				Containers: []corev1.Container{
+					{
+						Name: "test-container",
+						Resources: corev1.ResourceRequirements{
+							Limits: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/zone-specific": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+							Requests: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/zone-specific": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+						},
+					},
+				},
+			},
+			podStatus: corev1.PodStatus{
+				Phase:    corev1.PodRunning,
+				QOSClass: corev1.PodQOSGuaranteed,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name:        "test-container",
+						ContainerID: "docker://abc123",
+					},
+				},
+			},
+			profiles: []runtime.Object{expressionMatchingProfile},
+			workloads: []runtime.Object{
+				&powerv1.PowerWorkload{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "zone-specific-" + testNode,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerWorkloadSpec{
+						Name:         "zone-specific-" + testNode,
+						PowerProfile: "zone-specific",
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name:       testNode,
+							Containers: []powerv1.Container{},
+							CpuIds:     []uint{},
+						},
+					},
+				},
+			},
+			podResources: []*podresourcesapi.PodResources{
+				{
+					Name:      "test-pod",
+					Namespace: IntelPowerNamespace,
+					Containers: []*podresourcesapi.ContainerResources{
+						{
+							Name:   "test-container",
+							CpuIds: []int64{5, 6},
+						},
+					},
+				},
+			},
+			expectError:       false,
+			expectedWorkloads: map[string][]uint{"zone-specific-" + testNode: {5, 6}},
+		},
+		{
+			name: "Multiple containers with different profiles",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+				"env":       "production",
+			},
+			podSpec: corev1.PodSpec{
+				NodeName: testNode,
+				Containers: []corev1.Container{
+					{
+						Name: "performance-container",
+						Resources: corev1.ResourceRequirements{
+							Limits: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+							Requests: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+						},
+					},
+					{
+						Name: "universal-container",
+						Resources: corev1.ResourceRequirements{
+							Limits: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                       *resource.NewQuantity(1, resource.DecimalSI),
+								"power.intel.com/universal": *resource.NewQuantity(1, resource.DecimalSI),
+							},
+							Requests: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                       *resource.NewQuantity(1, resource.DecimalSI),
+								"power.intel.com/universal": *resource.NewQuantity(1, resource.DecimalSI),
+							},
+						},
+					},
+				},
+			},
+			podStatus: corev1.PodStatus{
+				Phase:    corev1.PodRunning,
+				QOSClass: corev1.PodQOSGuaranteed,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name:        "performance-container",
+						ContainerID: "docker://abc123",
+					},
+					{
+						Name:        "universal-container",
+						ContainerID: "docker://def456",
+					},
+				},
+			},
+			profiles: []runtime.Object{matchingProfile, universalProfile},
+			workloads: []runtime.Object{
+				&powerv1.PowerWorkload{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "performance-" + testNode,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerWorkloadSpec{
+						Name:         "performance-" + testNode,
+						PowerProfile: "performance",
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name:       testNode,
+							Containers: []powerv1.Container{},
+							CpuIds:     []uint{},
+						},
+					},
+				},
+				&powerv1.PowerWorkload{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "universal-" + testNode,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerWorkloadSpec{
+						Name:         "universal-" + testNode,
+						PowerProfile: "universal",
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name:       testNode,
+							Containers: []powerv1.Container{},
+							CpuIds:     []uint{},
+						},
+					},
+				},
+			},
+			podResources: []*podresourcesapi.PodResources{
+				{
+					Name:      "test-pod",
+					Namespace: IntelPowerNamespace,
+					Containers: []*podresourcesapi.ContainerResources{
+						{
+							Name:   "performance-container",
+							CpuIds: []int64{7, 8},
+						},
+						{
+							Name:   "universal-container",
+							CpuIds: []int64{9},
+						},
+					},
+				},
+			},
+			expectError: false,
+			expectedWorkloads: map[string][]uint{
+				"performance-" + testNode: {7, 8},
+				"universal-" + testNode:   {9},
+			},
+		},
+		{
+			name: "Profile doesn't exist in cluster",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+			},
+			podSpec: corev1.PodSpec{
+				NodeName: testNode,
+				Containers: []corev1.Container{
+					{
+						Name: "test-container",
+						Resources: corev1.ResourceRequirements{
+							Limits: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/nonexistent": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+							Requests: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/nonexistent": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+						},
+					},
+				},
+			},
+			podStatus: corev1.PodStatus{
+				Phase:    corev1.PodRunning,
+				QOSClass: corev1.PodQOSGuaranteed,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name:        "test-container",
+						ContainerID: "docker://abc123",
+					},
+				},
+			},
+			profiles: []runtime.Object{
+				&powerv1.PowerProfile{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "nonexistent",
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerProfileSpec{
+						Name: "nonexistent",
+						NodeSelector: powerv1.NodeSelector{
+							LabelSelector: metav1.LabelSelector{
+								MatchLabels: map[string]string{
+									"node-type": "worker",
+								},
+							},
+						},
+					},
+				},
+			},
+			workloads: []runtime.Object{},
+			podResources: []*podresourcesapi.PodResources{
+				{
+					Name:      "test-pod",
+					Namespace: IntelPowerNamespace,
+					Containers: []*podresourcesapi.ContainerResources{
+						{
+							Name:   "test-container",
+							CpuIds: []int64{1, 2},
+						},
+					},
+				},
+			},
+			expectError:       true,
+			expectRecoverable: true,
+			errorContains: fmt.Sprintf(
+				"recoverable errors encountered: power profile 'nonexistent' is not available on node %s",
+				testNode,
+			),
+		},
+		{
+			name: "Mixed scenario - one matching, one non-matching profile",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+			},
+			podSpec: corev1.PodSpec{
+				NodeName: testNode,
+				Containers: []corev1.Container{
+					{
+						Name: "good-container",
+						Resources: corev1.ResourceRequirements{
+							Limits: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+							Requests: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
+								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+							},
+						},
+					},
+					{
+						Name: "bad-container",
+						Resources: corev1.ResourceRequirements{
+							Limits: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                           *resource.NewQuantity(1, resource.DecimalSI),
+								"power.intel.com/gpu-optimized": *resource.NewQuantity(1, resource.DecimalSI),
+							},
+							Requests: map[corev1.ResourceName]resource.Quantity{
+								"cpu":                           *resource.NewQuantity(1, resource.DecimalSI),
+								"power.intel.com/gpu-optimized": *resource.NewQuantity(1, resource.DecimalSI),
+							},
+						},
+					},
+				},
+			},
+			podStatus: corev1.PodStatus{
+				Phase:    corev1.PodRunning,
+				QOSClass: corev1.PodQOSGuaranteed,
+				ContainerStatuses: []corev1.ContainerStatus{
+					{
+						Name:        "good-container",
+						ContainerID: "docker://abc123",
+					},
+					{
+						Name:        "bad-container",
+						ContainerID: "docker://def456",
+					},
+				},
+			},
+			profiles: []runtime.Object{matchingProfile, nonMatchingProfile},
+			workloads: []runtime.Object{
+				&powerv1.PowerWorkload{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "performance-" + testNode,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerWorkloadSpec{
+						Name:         "performance-" + testNode,
+						PowerProfile: "performance",
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name:       testNode,
+							Containers: []powerv1.Container{},
+							CpuIds:     []uint{},
+						},
+					},
+				},
+				&powerv1.PowerWorkload{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "gpu-optimized-" + testNode,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerWorkloadSpec{
+						Name:         "gpu-optimized-" + testNode,
+						PowerProfile: "gpu-optimized",
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name:       testNode,
+							Containers: []powerv1.Container{},
+							CpuIds:     []uint{},
+						},
+					},
+				},
+			},
+			podResources: []*podresourcesapi.PodResources{
+				{
+					Name:      "test-pod",
+					Namespace: IntelPowerNamespace,
+					Containers: []*podresourcesapi.ContainerResources{
+						{
+							Name:   "good-container",
+							CpuIds: []int64{10, 11},
+						},
+						{
+							Name:   "bad-container",
+							CpuIds: []int64{12},
+						},
+					},
+				},
+			},
+			expectError:       true,
+			expectRecoverable: true,
+			errorContains: fmt.Sprintf(
+				"recoverable errors encountered: power profile 'gpu-optimized' is not available on node %s",
+				testNode,
+			),
+			expectedWorkloads: map[string][]uint{
+				"performance-" + testNode: {10, 11},
+				// gpu-optimized workload should not get updated due to selector mismatch
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("NODE_NAME", testNode)
+
+			// Create node with specified labels
+			node := baseNode.DeepCopy()
+			node.Labels = tc.nodeLabels
+
+			// Create PowerNode
+			powerNode := basePowerNode.DeepCopy()
+
+			// Create pod with test spec
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: IntelPowerNamespace,
+					UID:       "test-uid-123",
+				},
+				Spec:   tc.podSpec,
+				Status: tc.podStatus,
+			}
+
+			clientObjs := []runtime.Object{node, powerNode, pod}
+			clientObjs = append(clientObjs, tc.profiles...)
+			clientObjs = append(clientObjs, tc.workloads...)
+
+			podResourcesClient := createFakePodResourcesListerClient(tc.podResources)
+
+			r, err := createPodReconcilerObject(clientObjs, podResourcesClient)
+			assert.NoError(t, err)
+
+			req := reconcile.Request{
+				NamespacedName: client.ObjectKey{
+					Name:      "test-pod",
+					Namespace: IntelPowerNamespace,
+				},
+			}
+
+			result, err := r.Reconcile(context.TODO(), req)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorContains != "" {
+					assert.Contains(t, err.Error(), tc.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Check workload updates
+			for workloadName, expectedCPUs := range tc.expectedWorkloads {
+				workload := &powerv1.PowerWorkload{}
+				err = r.Client.Get(context.TODO(), client.ObjectKey{
+					Name:      workloadName,
+					Namespace: IntelPowerNamespace,
+				}, workload)
+				assert.NoError(t, err)
+
+				actualCPUs := workload.Status.WorkloadNodes.CpuIds
+				sort.Slice(actualCPUs, func(i, j int) bool {
+					return actualCPUs[i] < actualCPUs[j]
+				})
+				sort.Slice(expectedCPUs, func(i, j int) bool {
+					return expectedCPUs[i] < expectedCPUs[j]
+				})
+
+				assert.ElementsMatch(t, expectedCPUs, actualCPUs,
+					"Workload %s should have CPUs %v but got %v", workloadName, expectedCPUs, actualCPUs)
+			}
+
+			// Verify result properties
+			assert.False(t, result.Requeue)
+			assert.Equal(t, time.Duration(0), result.RequeueAfter)
+		})
+	}
 }

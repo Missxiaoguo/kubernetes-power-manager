@@ -157,17 +157,19 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 			requestedProfiles = append(requestedProfiles, coreConfig.PowerProfile)
 		}
 		for _, profileName := range requestedProfiles {
-			if err = r.validateProfileAvailabilityOnNode(c, profileName); err != nil {
-				if errors.IsNotFound(err) {
-					logger.Error(err, "power profile not found, will retry")
+			match, localerr := validateProfileAvailabilityOnNode(c, r.Client, profileName, nodeName, r.PowerLibrary, &logger)
+			if localerr != nil {
+				if errors.IsNotFound(localerr) {
+					logger.Error(localerr, "power profile not found, will retry")
 					err = fmt.Errorf("requested PowerProfile '%s' does not exist in the cluster", profileName)
 					return ctrl.Result{RequeueAfter: queuetime}, nil
-				} else if errors.IsServiceUnavailable(err) {
-					logger.Error(err, "pool not found, stopping reconciliation")
-					err = fmt.Errorf("requested PowerProfile '%s' is not available on the node %s", profileName, nodeName)
-					return ctrl.Result{}, nil
 				}
-				return ctrl.Result{}, err
+				return ctrl.Result{}, localerr
+			}
+			if !match {
+				logger.Error(fmt.Errorf("power profile not available on the node"), fmt.Sprintf("requested PowerProfile '%s' is not available on node %s", profileName, nodeName))
+				err = fmt.Errorf("requested PowerProfile '%s' is not available on the node %s", profileName, nodeName)
+				return ctrl.Result{RequeueAfter: queuetime}, nil
 			}
 		}
 
@@ -271,30 +273,6 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// validateProfileAvailabilityOnNode validates that a PowerProfile exists in the cluster and is available to be used on the node
-func (r *PowerWorkloadReconciler) validateProfileAvailabilityOnNode(ctx context.Context, profileName string) error {
-	if profileName == "" {
-		return nil
-	}
-
-	powerProfile := &powerv1.PowerProfile{}
-	err := r.Client.Get(ctx, client.ObjectKey{
-		Name:      profileName,
-		Namespace: IntelPowerNamespace,
-	}, powerProfile)
-	if err != nil {
-		return err
-	}
-
-	// profile exists in the cluster and pool exists indicates profile is available to be used on the node
-	pool := r.PowerLibrary.GetExclusivePool(profileName)
-	if pool == nil {
-		return errors.NewServiceUnavailable(fmt.Sprintf("pool '%s' not found", profileName))
-	}
-
-	return nil
 }
 
 func detectCoresRemoved(originalCoreList []uint, updatedCoreList []uint, logger *logr.Logger) []uint {

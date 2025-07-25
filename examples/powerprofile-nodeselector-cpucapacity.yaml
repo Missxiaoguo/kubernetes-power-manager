@@ -1,0 +1,37 @@
+# PowerProfile for x86_64 with NodeSelector and CpuCapacity
+# This example demonstrates how to deploy a PowerProfile with a NodeSelector and CpuCapacity.
+# The NodeSelector is used to select the nodes that the PowerProfile should be applied to.
+# The CpuCapacity is used to set the maximum number of CPUs that can be used by the PowerProfile.
+# This PowerProfile will be applied to all nodes that match the NodeSelector and it can take up to 99 of the CPUs.
+apiVersion: power.intel.com/v1
+kind: PowerProfile
+metadata:
+ name: application
+ namespace: intel-power
+spec:
+ name: application
+ cpuCapacity: "99" #
+ # cpuCapacity: "50%"
+ nodeSelector:
+   labelSelector:
+     matchLabels:
+       test3: test3
+     matchExpressions:
+       - key: test
+         operator: In
+         values:
+         - test
+       - key: mno
+         operator: DoesNotExist
+       - key: test2
+         operator: Exists
+ pstates:
+   governor: "powersave"
+   min: 3000
+   max: 3500 # Optional, hardware limit is used when unspecified
+   epp: balance_performance
+ cstates:
+   C1: true
+   C1E: true
+   POLL: false
+   C6: false

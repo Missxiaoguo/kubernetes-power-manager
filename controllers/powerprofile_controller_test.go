@@ -17,6 +17,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"testing"
@@ -32,6 +33,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -249,6 +251,8 @@ func TestPowerProfile_Reconcile_SharedPoolCreation(t *testing.T) {
 	nodemk.On("GetFreqRanges").Return(power.CoreTypeList{freqSetmk})
 	freqSetmk.On("GetMax").Return(uint(9000000))
 	freqSetmk.On("GetMin").Return(uint(100000))
+	// Mock GetAllCpus to return an empty CpuList
+	nodemk.On("GetAllCpus").Return(new(power.CpuList))
 	t.Setenv("NODE_NAME", "TestNode")
 	r, err := createProfileReconcilerObject(clientObjs)
 	assert.Nil(t, err)
@@ -818,13 +822,10 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyValidationErrors(t *testing.T) {
 				t.Fatalf("error creating the reconciler object: %v", err)
 			}
 
-			nodemk := new(hostMock)
-			freqSetmk := new(frequencySetMock)
-			nodemk.On("GetFreqRanges").Return(power.CoreTypeList{freqSetmk})
-			freqSetmk.On("GetMax").Return(uint(3700000)) // 3.7 GHz in kHz
-			freqSetmk.On("GetMin").Return(uint(1000000)) // 1.0 GHz in kHz
-			nodemk.On("GetExclusivePool", tc.profileName).Return(nil)
-			r.PowerLibrary = nodemk
+			host, teardown, err := fullDummySystem()
+			assert.Nil(t, err)
+			defer teardown()
+			r.PowerLibrary = host
 
 			req := reconcile.Request{
 				NamespacedName: client.ObjectKey{
@@ -888,6 +889,8 @@ func TestPowerProfile_Reconcile_IncorrectEppValue(t *testing.T) {
 		}
 
 		nodemk := new(hostMock)
+		// Mock GetAllCpus to return an empty CpuList
+		nodemk.On("GetAllCpus").Return(new(power.CpuList))
 		r.PowerLibrary = nodemk
 
 		req := reconcile.Request{
@@ -1289,6 +1292,7 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 				dummyProf := new(profMock)
 				nodemk.On("GetExclusivePool", mock.Anything).Return(nil)
 				nodemk.On("GetSharedPool").Return(dummyShared)
+				nodemk.On("GetAllCpus").Return(new(power.CpuList))
 				dummyShared.On("GetPowerProfile").Return(dummyProf)
 				dummyProf.On("Name").Return("shared")
 				return nodemk
@@ -1305,6 +1309,7 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 				nodemk := new(hostMock)
 				nodemk.On("GetExclusivePool", mock.Anything).Return(nil)
 				nodemk.On("AddExclusivePool", mock.Anything).Return(nil, fmt.Errorf("Pool creation err"))
+				nodemk.On("GetAllCpus").Return(new(power.CpuList))
 				freqSetmk := new(frequencySetMock)
 				nodemk.On("GetFreqRanges").Return(power.CoreTypeList{freqSetmk})
 				freqSetmk.On("GetMax").Return(uint(9000000))
@@ -1348,6 +1353,7 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 				nodemk := new(hostMock)
 				poolmk := new(poolMock)
 				nodemk.On("GetExclusivePool", mock.Anything).Return(nil)
+				nodemk.On("GetAllCpus").Return(new(power.CpuList))
 				freqSetmk := new(frequencySetMock)
 				nodemk.On("GetFreqRanges").Return(power.CoreTypeList{freqSetmk})
 				freqSetmk.On("GetMax").Return(uint(9000000))
@@ -1395,6 +1401,7 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 				profmk := new(profMock)
 				nodemk.On("GetSharedPool").Return(poolmk)
 				poolmk.On("GetPowerProfile").Return(profmk)
+				nodemk.On("GetAllCpus").Return(new(power.CpuList))
 				profmk.On("Name").Return("shared")
 				poolmk.On("SetPowerProfile", mock.Anything).Return(fmt.Errorf("Set profile err"))
 				return nodemk
@@ -1413,6 +1420,7 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 				profmk := new(profMock)
 				nodemk.On("GetSharedPool").Return(poolmk)
 				poolmk.On("GetPowerProfile").Return(profmk)
+				nodemk.On("GetAllCpus").Return(new(power.CpuList))
 				profmk.On("Name").Return("shared")
 				poolmk.On("SetPowerProfile", mock.Anything).Return(nil)
 				nodemk.On("GetExclusivePool", mock.Anything).Return(nil)
@@ -1432,6 +1440,7 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 				dummyPoolmk := new(poolMock)
 				profmk := new(profMock)
 				nodemk.On("GetSharedPool").Return(poolmk)
+				nodemk.On("GetAllCpus").Return(new(power.CpuList))
 				poolmk.On("GetPowerProfile").Return(profmk)
 				profmk.On("Name").Return("shared")
 				poolmk.On("SetPowerProfile", mock.Anything).Return(nil)
@@ -1580,6 +1589,7 @@ func TestPowerProfile_Reconcile_FeatureNotSupportedErr(t *testing.T) {
 		nodemk.On("GetFreqRanges").Return(power.CoreTypeList{freqSetmk})
 		freqSetmk.On("GetMax").Return(uint(9000000))
 		freqSetmk.On("GetMin").Return(uint(100000))
+		nodemk.On("GetAllCpus").Return(new(power.CpuList))
 		poolmk := new(poolMock)
 		nodemk.On("GetExclusivePool", mock.Anything).Return(poolmk)
 		r.PowerLibrary = nodemk
@@ -2133,4 +2143,530 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
+	testCases := []struct {
+		name                    string
+		profileName             string
+		nodeSelector            *powerv1.NodeSelector
+		cpuCapacity             string
+		nodeLabels              map[string]string
+		totalCPUs               int
+		expectedResourcePercent float64
+		expectMatch             bool
+		expectExtendedResource  bool
+		expectWorkload          bool
+	}{
+		// NodeSelector scenarios
+		{
+			name:                    "No selector - applies to all nodes",
+			profileName:             "no-selector-profile",
+			nodeSelector:            nil,
+			cpuCapacity:             "100%",
+			nodeLabels:              map[string]string{"node-type": "worker"},
+			totalCPUs:               86, // Power library has 86 CPUs
+			expectedResourcePercent: 1.0,
+			expectMatch:             true,
+			expectExtendedResource:  true,
+			expectWorkload:          true,
+		},
+		{
+			name:        "Empty selector - applies to all nodes",
+			profileName: "empty-selector-profile",
+			nodeSelector: &powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{},
+			},
+			cpuCapacity:             "100%",
+			nodeLabels:              map[string]string{"node-type": "worker"},
+			totalCPUs:               86, // Power library has 86 CPUs
+			expectedResourcePercent: 1.0,
+			expectMatch:             true,
+			expectExtendedResource:  true,
+			expectWorkload:          true,
+		},
+		{
+			name:        "Matching MatchLabels - should apply",
+			profileName: "matching-labels-profile",
+			nodeSelector: &powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"node-type": "worker",
+						"zone":      "us-west-1a",
+					},
+				},
+			},
+			cpuCapacity: "50%",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+				"extra":     "label",
+			},
+			totalCPUs:               86, // Power library has 86 CPUs
+			expectedResourcePercent: 0.5,
+			expectMatch:             true,
+			expectExtendedResource:  true,
+			expectWorkload:          true,
+		},
+		{
+			name:        "Non-matching MatchLabels - should not apply",
+			profileName: "non-matching-labels-profile",
+			nodeSelector: &powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"node-type": "master",
+						"zone":      "us-west-1a",
+					},
+				},
+			},
+			cpuCapacity: "25%",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+			},
+			totalCPUs:               86, // Power library has 86 CPUs
+			expectedResourcePercent: 0.0,
+			expectMatch:             false,
+			expectExtendedResource:  false,
+			expectWorkload:          false,
+		},
+		{
+			name:        "Matching MatchExpressions - should apply",
+			profileName: "matching-expressions-profile",
+			nodeSelector: &powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "node-type",
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   []string{"worker", "compute"},
+						},
+						{
+							Key:      "zone",
+							Operator: metav1.LabelSelectorOpExists,
+						},
+					},
+				},
+			},
+			cpuCapacity: "75%",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+			},
+			totalCPUs:               86,          // Power library has 86 CPUs
+			expectedResourcePercent: 64.0 / 86.0, // 75% of 86 = 64.5 -> 64
+			expectMatch:             true,
+			expectExtendedResource:  true,
+			expectWorkload:          true,
+		},
+		{
+			name:        "Non-matching MatchExpressions - should not apply",
+			profileName: "non-matching-expressions-profile",
+			nodeSelector: &powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "node-type",
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   []string{"master", "etcd"},
+						},
+					},
+				},
+			},
+			cpuCapacity: "30%",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+			},
+			totalCPUs:               86, // Power library has 86 CPUs
+			expectedResourcePercent: 0.0,
+			expectMatch:             false,
+			expectExtendedResource:  false,
+			expectWorkload:          false,
+		},
+		{
+			name:        "Missing required label - should not apply",
+			profileName: "missing-label-profile",
+			nodeSelector: &powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"required-label": "value",
+					},
+				},
+			},
+			cpuCapacity: "40%",
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+			},
+			totalCPUs:               86, // Power library has 86 CPUs
+			expectedResourcePercent: 0.0,
+			expectMatch:             false,
+			expectExtendedResource:  false,
+			expectWorkload:          false,
+		},
+
+		// CpuCapacity scenarios
+		{
+			name:                    "Absolute CPU count",
+			profileName:             "absolute-cpu-profile",
+			nodeSelector:            nil,
+			cpuCapacity:             "10",
+			nodeLabels:              map[string]string{"node-type": "worker"},
+			totalCPUs:               86,          // Power library has 86 CPUs
+			expectedResourcePercent: 10.0 / 86.0, // 10 CPUs out of 86
+			expectMatch:             true,
+			expectExtendedResource:  true,
+			expectWorkload:          true,
+		},
+		{
+			name:                    "Percentage CPU capacity",
+			profileName:             "percentage-cpu-profile",
+			nodeSelector:            nil,
+			cpuCapacity:             "25%",
+			nodeLabels:              map[string]string{"node-type": "worker"},
+			totalCPUs:               86,          // Power library has 86 CPUs
+			expectedResourcePercent: 21.0 / 86.0, // 25% of 86 = 21.5 -> 21
+			expectMatch:             true,
+			expectExtendedResource:  true,
+			expectWorkload:          true,
+		},
+		{
+			name:                    "Default capacity (empty string)",
+			profileName:             "default-capacity-profile",
+			nodeSelector:            nil,
+			cpuCapacity:             "",
+			nodeLabels:              map[string]string{"node-type": "worker"},
+			totalCPUs:               86,  // Power library has 86 CPUs
+			expectedResourcePercent: 1.0, // Should default to 100%
+			expectMatch:             true,
+			expectExtendedResource:  true,
+			expectWorkload:          true,
+		},
+		{
+			name:        "High percentage capacity",
+			profileName: "high-percentage-profile",
+			nodeSelector: &powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"high-performance": "true",
+					},
+				},
+			},
+			cpuCapacity: "90%",
+			nodeLabels: map[string]string{
+				"node-type":        "worker",
+				"high-performance": "true",
+			},
+			totalCPUs:               86,          // Power library has 86 CPUs
+			expectedResourcePercent: 77.0 / 86.0, // 90% of 86 = 77.4 -> 77
+			expectMatch:             true,
+			expectExtendedResource:  true,
+			expectWorkload:          true,
+		},
+
+		// Integration scenarios
+		{
+			name:        "Complex selector with custom capacity",
+			profileName: "complex-profile",
+			nodeSelector: &powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"node-type": "worker",
+					},
+					MatchExpressions: []metav1.LabelSelectorRequirement{
+						{
+							Key:      "zone",
+							Operator: metav1.LabelSelectorOpIn,
+							Values:   []string{"us-west-1a", "us-west-1b"},
+						},
+						{
+							Key:      "instance-type",
+							Operator: metav1.LabelSelectorOpNotIn,
+							Values:   []string{"micro", "nano"},
+						},
+					},
+				},
+			},
+			cpuCapacity: "15",
+			nodeLabels: map[string]string{
+				"node-type":     "worker",
+				"zone":          "us-west-1a",
+				"instance-type": "large",
+			},
+			totalCPUs:               86, // Power library has 86 CPUs
+			expectedResourcePercent: 15.0 / 86.0,
+			expectMatch:             true,
+			expectExtendedResource:  true,
+			expectWorkload:          true,
+		},
+		{
+			name:        "Shared profile with selector",
+			profileName: "shared-selector-profile",
+			nodeSelector: &powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"shared-eligible": "true",
+					},
+				},
+			},
+			cpuCapacity: "60%",
+			nodeLabels: map[string]string{
+				"node-type":       "worker",
+				"shared-eligible": "true",
+			},
+			totalCPUs:               86,          // Power library has 86 CPUs
+			expectedResourcePercent: 51.0 / 86.0, // 60% of 86 = 51.6 -> 51
+			expectMatch:             true,
+			expectExtendedResource:  false, // Shared profiles don't create extended resources
+			expectWorkload:          false, // Shared profiles don't create workloads
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			nodeName := "TestNode"
+			t.Setenv("NODE_NAME", nodeName)
+
+			// Create node with specified labels
+			node := &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   nodeName,
+					Labels: tc.nodeLabels,
+				},
+				Status: corev1.NodeStatus{
+					Capacity: map[corev1.ResourceName]resource.Quantity{
+						CPUResource: *resource.NewQuantity(int64(tc.totalCPUs), resource.DecimalSI),
+					},
+				},
+			}
+
+			// Create PowerProfile
+			profile := &powerv1.PowerProfile{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tc.profileName,
+					Namespace: IntelPowerNamespace,
+				},
+				Spec: powerv1.PowerProfileSpec{
+					Name: tc.profileName,
+					PStates: powerv1.PStatesConfig{
+						Max:      3600,
+						Min:      3200,
+						Epp:      "performance",
+						Governor: "powersave",
+					},
+				},
+			}
+
+			// Set nodeSelector if provided
+			if tc.nodeSelector != nil {
+				profile.Spec.NodeSelector = *tc.nodeSelector
+			}
+
+			// Set cpuCapacity if provided
+			if tc.cpuCapacity != "" {
+				if strings.HasSuffix(tc.cpuCapacity, "%") {
+					profile.Spec.CpuCapacity = intstr.FromString(tc.cpuCapacity)
+				} else {
+					// Parse as absolute integer value
+					cpuCount, err := strconv.Atoi(tc.cpuCapacity)
+					if err == nil {
+						profile.Spec.CpuCapacity = intstr.FromInt(cpuCount)
+					} else {
+						profile.Spec.CpuCapacity = intstr.FromString(tc.cpuCapacity)
+					}
+				}
+			}
+
+			// Check if this is a shared profile based on the name
+			if strings.Contains(tc.profileName, "shared") {
+				profile.Spec.Shared = true
+			}
+
+			clientObjs := []runtime.Object{node, profile}
+
+			r, err := createProfileReconcilerObject(clientObjs)
+			assert.NoError(t, err)
+
+			host, teardown, err := fullDummySystem()
+			assert.Nil(t, err)
+			defer teardown()
+			r.PowerLibrary = host
+
+			req := reconcile.Request{
+				NamespacedName: client.ObjectKey{
+					Name:      tc.profileName,
+					Namespace: IntelPowerNamespace,
+				},
+			}
+
+			// Execute reconciliation
+			result, err := r.Reconcile(context.TODO(), req)
+			assert.NoError(t, err)
+			assert.Equal(t, reconcile.Result{}, result)
+
+			// Verify doesNodeMatchPowerProfileSelector behavior
+			match, err := doesNodeMatchPowerProfileSelector(r.Client, profile, nodeName, &r.Log)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectMatch, match, "doesNodeMatchPowerProfileSelector result mismatch")
+
+			// Verify extended resource creation/absence
+			updatedNode := &corev1.Node{}
+			err = r.Client.Get(context.TODO(), client.ObjectKey{Name: nodeName}, updatedNode)
+			assert.NoError(t, err)
+
+			extendedResourceName := corev1.ResourceName(fmt.Sprintf("%s%s", ExtendedResourcePrefix, tc.profileName))
+			_, hasExtendedResource := updatedNode.Status.Capacity[extendedResourceName]
+
+			if tc.expectExtendedResource {
+				assert.True(t, hasExtendedResource, "Extended resource should be created")
+				if hasExtendedResource {
+					expectedQuantity := int64(float64(tc.totalCPUs) * tc.expectedResourcePercent)
+					actualQuantity := updatedNode.Status.Capacity[extendedResourceName]
+					assert.Equal(t, expectedQuantity, actualQuantity.Value(), "Extended resource quantity mismatch")
+				}
+			} else {
+				assert.False(t, hasExtendedResource, "Extended resource should not be created")
+			}
+
+			// Verify workload creation/absence
+			workloadName := fmt.Sprintf("%s-%s", tc.profileName, nodeName)
+			workload := &powerv1.PowerWorkload{}
+			err = r.Client.Get(context.TODO(), client.ObjectKey{
+				Name:      workloadName,
+				Namespace: IntelPowerNamespace,
+			}, workload)
+
+			if tc.expectWorkload {
+				assert.NoError(t, err, "PowerWorkload should be created")
+				assert.Equal(t, workloadName, workload.Name, "PowerWorkload name mismatch")
+				assert.Equal(t, tc.profileName, workload.Spec.PowerProfile, "PowerWorkload should reference the correct profile")
+			} else {
+				assert.True(t, errors.IsNotFound(err), "PowerWorkload should not be created")
+			}
+
+			// Verify exclusive pool creation
+			exclusivePool := host.GetExclusivePool(tc.profileName)
+			if tc.expectMatch {
+				assert.NotNil(t, exclusivePool, "Exclusive pool should be created")
+				assert.NotNil(t, exclusivePool.GetPowerProfile(), "Exclusive pool should have a power profile")
+				assert.Equal(t, tc.profileName, exclusivePool.GetPowerProfile().Name(), "Exclusive pool should have the correct profile name")
+			}
+		})
+	}
+}
+
+// Test cleanup behavior when node labels change
+func TestPowerProfile_Reconcile_NodeSelectorCleanup(t *testing.T) {
+	nodeName := "TestNode"
+	profileName := "cleanup-test-profile"
+	t.Setenv("NODE_NAME", nodeName)
+
+	// Initial node with matching labels
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: nodeName,
+			Labels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+			},
+		},
+		Status: corev1.NodeStatus{
+			Capacity: map[corev1.ResourceName]resource.Quantity{
+				CPUResource: *resource.NewQuantity(86, resource.DecimalSI), // Power library has 86 CPUs
+			},
+		},
+	}
+
+	profile := &powerv1.PowerProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      profileName,
+			Namespace: IntelPowerNamespace,
+		},
+		Spec: powerv1.PowerProfileSpec{
+			Name: profileName,
+			NodeSelector: powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"node-type": "worker",
+						"zone":      "us-west-1a",
+					},
+				},
+			},
+			CpuCapacity: intstr.FromString("50%"),
+			PStates: powerv1.PStatesConfig{
+				Max:      3600,
+				Min:      3200,
+				Epp:      "performance",
+				Governor: "powersave",
+			},
+		},
+	}
+
+	clientObjs := []runtime.Object{node, profile}
+	r, err := createProfileReconcilerObject(clientObjs)
+	assert.NoError(t, err)
+
+	host, teardown, err := fullDummySystem()
+	assert.NoError(t, err)
+	defer teardown()
+	r.PowerLibrary = host
+
+	req := reconcile.Request{
+		NamespacedName: client.ObjectKey{
+			Name:      profileName,
+			Namespace: IntelPowerNamespace,
+		},
+	}
+
+	// First reconciliation - should create resources
+	_, err = r.Reconcile(context.TODO(), req)
+	assert.NoError(t, err)
+
+	// Verify resources were created
+	updatedNode := &corev1.Node{}
+	err = r.Client.Get(context.TODO(), client.ObjectKey{Name: nodeName}, updatedNode)
+	assert.NoError(t, err)
+
+	extendedResourceName := corev1.ResourceName(fmt.Sprintf("%s%s", ExtendedResourcePrefix, profileName))
+	_, hasExtendedResource := updatedNode.Status.Capacity[extendedResourceName]
+	assert.True(t, hasExtendedResource, "Extended resource should be created initially")
+
+	workload := &powerv1.PowerWorkload{}
+	err = r.Client.Get(context.TODO(), client.ObjectKey{
+		Name:      fmt.Sprintf("%s-%s", profileName, nodeName),
+		Namespace: IntelPowerNamespace,
+	}, workload)
+	assert.NoError(t, err, "PowerWorkload should be created initially")
+
+	// Change node labels so they no longer match
+	updatedNode.Labels = map[string]string{
+		"node-type": "master", // Changed from worker
+		"zone":      "us-west-1a",
+	}
+	err = r.Client.Update(context.TODO(), updatedNode)
+	assert.NoError(t, err)
+
+	// Second reconciliation - should clean up resources
+	_, err = r.Reconcile(context.TODO(), req)
+	assert.NoError(t, err)
+
+	// Verify extended resource was removed
+	finalNode := &corev1.Node{}
+	err = r.Client.Get(context.TODO(), client.ObjectKey{Name: nodeName}, finalNode)
+	assert.NoError(t, err)
+
+	_, hasExtendedResource = finalNode.Status.Capacity[extendedResourceName]
+	assert.False(t, hasExtendedResource, "Extended resource should be removed after cleanup")
+
+	// Verify workload and exclusive pool still exist (they're not cleaned up for safety)
+	workload = &powerv1.PowerWorkload{}
+	err = r.Client.Get(context.TODO(), client.ObjectKey{
+		Name:      fmt.Sprintf("%s-%s", profileName, nodeName),
+		Namespace: IntelPowerNamespace,
+	}, workload)
+	assert.NoError(t, err, "PowerWorkload should still exist after cleanup")
+
+	exclusivePool := host.GetExclusivePool(profileName)
+	assert.NotNil(t, exclusivePool, "Exclusive pool should still exist after cleanup")
 }

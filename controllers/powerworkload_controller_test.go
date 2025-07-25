@@ -280,7 +280,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			},
 			validateErr: func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool {
 				assert.NoError(t, e)
-				return assert.Equal(t, result.Requeue, false)
+				return assert.Equal(t, result.RequeueAfter, queuetime)
 			},
 			clientObjs: []runtime.Object{
 				&powerv1.PowerProfile{
@@ -329,7 +329,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			},
 			validateErr: func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool {
 				assert.NoError(t, e)
-				return assert.Equal(t, result.Requeue, false)
+				return assert.Equal(t, result.RequeueAfter, queuetime)
 			},
 			clientObjs: []runtime.Object{sharedSkeleton, nodeObj, pwrProfileObj},
 		},
@@ -820,4 +820,294 @@ func TestPowerWorkload_Reconcile_SetupFail(t *testing.T) {
 	}).SetupWithManager(mgr)
 	assert.Error(t, err)
 
+}
+
+func TestPowerWorkload_ValidateNodeSelectorAndProfileMatching(t *testing.T) {
+	testNode := "TestNode"
+
+	baseNode := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: testNode,
+			Labels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+				"env":       "production",
+			},
+		},
+		Status: corev1.NodeStatus{
+			Capacity: map[corev1.ResourceName]resource.Quantity{
+				CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
+			},
+		},
+	}
+
+	performanceProfile := &powerv1.PowerProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "performance",
+			Namespace: IntelPowerNamespace,
+		},
+		Spec: powerv1.PowerProfileSpec{
+			Name: "performance",
+			NodeSelector: powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"node-type": "worker",
+					},
+				},
+			},
+		},
+	}
+
+	restrictedProfile := &powerv1.PowerProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "restricted",
+			Namespace: IntelPowerNamespace,
+		},
+		Spec: powerv1.PowerProfileSpec{
+			Name: "restricted",
+			NodeSelector: powerv1.NodeSelector{
+				LabelSelector: metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"node-type": "gpu-node",
+					},
+				},
+			},
+		},
+	}
+
+	sharedProfile := &powerv1.PowerProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "shared",
+			Namespace: IntelPowerNamespace,
+		},
+		Spec: powerv1.PowerProfileSpec{
+			Name:   "shared",
+			Shared: true,
+			// No node selector - should apply to all nodes
+		},
+	}
+
+	testCases := []struct {
+		name              string
+		workloadSpec      powerv1.PowerWorkloadSpec
+		nodeLabels        map[string]string
+		profileObjects    []runtime.Object
+		mockSetup         func() *hostMock
+		expectError       bool
+		expectRequeueTime bool
+		errorContains     string
+	}{
+		{
+			name: "Matching node selector and available profiles",
+			workloadSpec: powerv1.PowerWorkloadSpec{
+				Name:         "shared-" + testNode,
+				AllCores:     true,
+				PowerProfile: "shared",
+				ReservedCPUs: []powerv1.ReservedSpec{
+					{Cores: []uint{0, 1}, PowerProfile: "performance"},
+				},
+				PowerNodeSelector: map[string]string{"node-type": "worker"},
+			},
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+			},
+			profileObjects: []runtime.Object{performanceProfile, sharedProfile},
+			mockSetup: func() *hostMock {
+				template := mocktemplate()
+				return template.node
+			},
+			expectError: false,
+		},
+		{
+			name: "Non-matching node selector",
+			workloadSpec: powerv1.PowerWorkloadSpec{
+				Name:              "shared-" + testNode,
+				AllCores:          true,
+				PowerProfile:      "restricted",
+				PowerNodeSelector: map[string]string{"node-type": "worker"},
+			},
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+				"zone":      "us-west-1a",
+			},
+			profileObjects: []runtime.Object{restrictedProfile},
+			mockSetup: func() *hostMock {
+				mock := new(hostMock)
+				pool := new(poolMock)
+				mock.On("GetExclusivePool", "restricted").Return(pool)
+				pool.On("GetPowerProfile").Return(new(profMock))
+				// Mock GetSharedPool to avoid panic
+				mock.On("GetSharedPool").Return(new(poolMock))
+				return mock
+			},
+			expectError:       false, // Controller returns nil error, not an actual error
+			expectRequeueTime: true,
+			// Note: restricted PowerProfile node selector is "node-type": "gpu-node" which doesn't match node labels
+		},
+		{
+			name: "Missing profile in cluster",
+			workloadSpec: powerv1.PowerWorkloadSpec{
+				Name:              "shared-" + testNode,
+				AllCores:          true,
+				PowerProfile:      "nonexistent",
+				PowerNodeSelector: map[string]string{"node-type": "worker"},
+			},
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+			},
+			profileObjects: []runtime.Object{},
+			mockSetup: func() *hostMock {
+				return new(hostMock)
+			},
+			expectError:       false, // Returns nil error but requeues
+			expectRequeueTime: true,
+		},
+		{
+			name: "Profile exists but pool unavailable",
+			workloadSpec: powerv1.PowerWorkloadSpec{
+				Name:              "shared-" + testNode,
+				AllCores:          true,
+				PowerProfile:      "performance",
+				PowerNodeSelector: map[string]string{"node-type": "worker"},
+			},
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+			},
+			profileObjects: []runtime.Object{performanceProfile},
+			mockSetup: func() *hostMock {
+				mock := new(hostMock)
+				mock.On("GetExclusivePool", "performance").Return(nil)
+				return mock
+			},
+			expectError:       false,
+			expectRequeueTime: true,
+		},
+		{
+			name: "Reserved CPU with empty profile name",
+			workloadSpec: powerv1.PowerWorkloadSpec{
+				Name:         "shared-" + testNode,
+				AllCores:     true,
+				PowerProfile: "shared",
+				ReservedCPUs: []powerv1.ReservedSpec{
+					{Cores: []uint{0, 1}, PowerProfile: ""}, // Empty profile should be allowed
+				},
+				PowerNodeSelector: map[string]string{"node-type": "worker"},
+			},
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+			},
+			profileObjects: []runtime.Object{sharedProfile},
+			mockSetup: func() *hostMock {
+				template := mocktemplate()
+				return template.node
+			},
+			expectError: false,
+		},
+		{
+			name: "Multiple reserved CPUs with mixed profile availability",
+			workloadSpec: powerv1.PowerWorkloadSpec{
+				Name:         "shared-" + testNode,
+				AllCores:     true,
+				PowerProfile: "shared",
+				ReservedCPUs: []powerv1.ReservedSpec{
+					{Cores: []uint{0, 1}, PowerProfile: "performance"}, // Available
+					{Cores: []uint{2, 3}, PowerProfile: "nonexistent"}, // Not available
+				},
+				PowerNodeSelector: map[string]string{"node-type": "worker"},
+			},
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+			},
+			profileObjects: []runtime.Object{sharedProfile, performanceProfile},
+			mockSetup: func() *hostMock {
+				mock := new(hostMock)
+				sharedPool := new(poolMock)
+				perfPool := new(poolMock)
+				prof := new(profMock)
+
+				mock.On("GetExclusivePool", "shared").Return(sharedPool)
+				mock.On("GetExclusivePool", "performance").Return(perfPool)
+				mock.On("GetExclusivePool", "nonexistent").Return(nil)
+				mock.On("GetSharedPool").Return(sharedPool)
+
+				sharedPool.On("GetPowerProfile").Return(prof)
+				perfPool.On("GetPowerProfile").Return(prof)
+
+				return mock
+			},
+			expectError:       false,
+			expectRequeueTime: true,
+		},
+		{
+			name: "No node selector - should apply to any node",
+			workloadSpec: powerv1.PowerWorkloadSpec{
+				Name:         "shared-" + testNode,
+				AllCores:     true,
+				PowerProfile: "shared",
+				// No PowerNodeSelector specified
+			},
+			nodeLabels: map[string]string{
+				"node-type": "worker",
+			},
+			profileObjects: []runtime.Object{sharedProfile},
+			mockSetup: func() *hostMock {
+				template := mocktemplate()
+				return template.node
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("NODE_NAME", testNode)
+
+			// Reset global state before each test case
+			sharedPowerWorkloadName = ""
+
+			// Create node with specified labels
+			node := baseNode.DeepCopy()
+			node.Labels = tc.nodeLabels
+
+			// Create workload with test spec
+			workload := &powerv1.PowerWorkload{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "shared-" + testNode,
+					Namespace: IntelPowerNamespace,
+				},
+				Spec: tc.workloadSpec,
+			}
+
+			clientObjs := []runtime.Object{workload, node}
+			clientObjs = append(clientObjs, tc.profileObjects...)
+
+			r, err := createWorkloadReconcilerObject(clientObjs)
+			assert.NoError(t, err)
+
+			r.PowerLibrary = tc.mockSetup()
+
+			req := reconcile.Request{
+				NamespacedName: client.ObjectKey{
+					Name:      workload.Name,
+					Namespace: IntelPowerNamespace,
+				},
+			}
+
+			result, err := r.Reconcile(context.TODO(), req)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				if tc.errorContains != "" {
+					assert.Contains(t, err.Error(), tc.errorContains)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+
+			if tc.expectRequeueTime {
+				assert.True(t, result.RequeueAfter > 0)
+			}
+		})
+	}
 }
