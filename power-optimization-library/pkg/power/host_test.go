@@ -334,7 +334,7 @@ func (s *hostTestsSuite) TestAddCoresToExclusivePool() {
 // //
 func (s *hostTestsSuite) TestUpdateProfile() {
 	//pool := new(poolMock)
-	profile := &profileImpl{name: "powah", pstates: &pstatesImpl{min: 2500, max: 3200}, cstates: cstatesImpl{"C1": true}}
+	profile := &profileImpl{name: "powah", pstates: &pstatesImpl{min: 2500, max: 3200}, cstates: cstatesImpl{states: map[string]bool{"C1": true}}}
 	//pool.On("GetPowerProfile").Return(profile)
 	//pool.On("SetPowerProfile", mock.Anything).Return(nil)
 	//pool.On("Name").Return("powah")
@@ -360,12 +360,22 @@ func (s *hostTestsSuite) TestUpdateProfile() {
 	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetPStates().MaxFreq(), uint(3200))
 	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetCStates().States(), map[string]bool{"C1": true})
 
-	newProfile := &profileImpl{name: "powah", pstates: &pstatesImpl{min: 1200, max: 2500}, cstates: cstatesImpl{"C1": false, "C2": true}}
+	// Update p-state frequency and c-state configuration by names
+	newProfile := &profileImpl{name: "powah", pstates: &pstatesImpl{min: 1200, max: 2500}, cstates: cstatesImpl{states: map[string]bool{"C1": false, "C2": true}}}
 	s.Nil(host.GetExclusivePool("ex").SetPowerProfile(newProfile))
-
 	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetPStates().MinFreq(), uint(1200))
 	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetPStates().MaxFreq(), uint(2500))
 	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetCStates().States(), map[string]bool{"C1": false, "C2": true})
+	s.Nil(host.GetExclusivePool("ex").GetPowerProfile().GetCStates().GetMaxLatencyUs())
+
+	// Update p-state frequency and c-state configuration by latency
+	maxLatencyUs := 10
+	newProfile = &profileImpl{name: "powah", pstates: &pstatesImpl{min: 2500, max: 3000}, cstates: cstatesImpl{maxLatencyUs: &maxLatencyUs}}
+	s.Nil(host.GetExclusivePool("ex").SetPowerProfile(newProfile))
+	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetPStates().MinFreq(), uint(2500))
+	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetPStates().MaxFreq(), uint(3000))
+	s.Nil(host.GetExclusivePool("ex").GetPowerProfile().GetCStates().States())
+	s.Equal(host.GetExclusivePool("ex").GetPowerProfile().GetCStates().GetMaxLatencyUs(), &maxLatencyUs)
 }
 
 func (s *hostTestsSuite) TestRemoveCoresFromSharedPool() {

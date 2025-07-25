@@ -59,10 +59,10 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 
 		// set c-states
 		cpuCstatesMap[fmt.Sprint("cpu", i)] = map[string]map[string]string{
-			"state0": {"name": "POLL", "disable": "0"},
-			"state1": {"name": "C1", "disable": "0"},
-			"state2": {"name": "C1E", "disable": "0"},
-			"state3": {"name": "C6", "disable": "0"},
+			"state0": {"name": "POLL", "disable": "0", "latency": "0"},
+			"state1": {"name": "C1", "disable": "0", "latency": "1"},
+			"state2": {"name": "C1E", "disable": "0", "latency": "10"},
+			"state3": {"name": "C6", "disable": "0", "latency": "170"},
 		}
 		cpuCstatesMap["Driver"] = map[string]map[string]string{"intel_idle\n": nil}
 
@@ -93,7 +93,7 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 	assert.ElementsMatch(t, *instance.GetReservedPool().Cpus(), *instance.GetAllCpus())
 	assert.Empty(t, *instance.GetSharedPool().Cpus())
 
-	powerProfile, err := NewPowerProfile("pwr", 100, 1000, "performance", "performance", map[string]bool{"C1": true, "C6": false})
+	powerProfile, err := NewPowerProfile("pwr", 100, 1000, "performance", "performance", map[string]bool{"C1": true, "C6": false}, nil)
 	assert.NoError(t, err)
 
 	moveCoresErrChan := make(chan error)
@@ -154,7 +154,7 @@ func verifyPowerProfile(cpuId uint, profile Profile) error {
 	}
 
 	for stateName, expected := range profile.GetCStates().States() {
-		actual, err := readCpuStringProperty(cpuId, fmt.Sprintf(cStateDisableFileFmt, cStatesNamesMap[stateName]))
+		actual, err := readCpuStringProperty(cpuId, fmt.Sprintf(cStateDisableFileFmt, allCPUCStatesInfo[cpuId][stateName].StateNumber))
 		allerrs = append(allerrs, err)
 
 		if expected != (actual == "0") {

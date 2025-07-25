@@ -40,8 +40,10 @@ metadata:
           },
           "spec": {
             "cstates": {
-              "C1": true,
-              "C6": false
+              "names": {
+                "C1": true,
+                "C6": false
+              }
             },
             "name": "shared",
             "pstates": {

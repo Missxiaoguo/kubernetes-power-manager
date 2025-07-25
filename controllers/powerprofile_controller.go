@@ -212,20 +212,11 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		actualEpp = ""
 	}
 
-	// Use default hardware C-states if not specified
-	profileCStates := make(map[string]bool)
-	for cname, isEnabled := range power.GetDefaultCStates() {
-		if _, exists := profile.Spec.CStates[cname]; !exists {
-			profileCStates[cname] = isEnabled
-		} else {
-			profileCStates[cname] = profile.Spec.CStates[cname]
-		}
-	}
-
 	// Create and validate power profile in the power library
 	powerProfile, err := power.NewPowerProfile(
 		profile.Spec.Name, uint(profileMinFreq), uint(profileMaxFreq),
-		profile.Spec.PStates.Governor, actualEpp, profileCStates)
+		profile.Spec.PStates.Governor, actualEpp,
+		profile.Spec.CStates.Names, profile.Spec.CStates.MaxLatencyUs)
 	if err != nil {
 		logger.Error(err, "could not create the power profile")
 		return ctrl.Result{Requeue: false}, err
@@ -246,9 +237,8 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 
 		// This block is trying to handle the edge case where a shared workload references a profile that was created later,
 		// but this approach is incomplete and problematic because:
-		//      1. PowerWorkload controller doesn't watch for annotation updates
-		//      2. Shared workloads can reference non-shared profiles
-		//      3. Shared workload naming is not guaranteed to follow the shared-<NodeName>-workload format
+		//      1. Shared workloads can reference non-shared profiles
+		//      2. Shared workload naming is not guaranteed to follow the shared-<NodeName>-workload format
 		// TODO: Remove this workaround and implement proper webhook validation to reject workload creation if referenced profile is not found
 		if profile.Spec.Shared {
 			logger.V(5).Info(fmt.Sprintf(

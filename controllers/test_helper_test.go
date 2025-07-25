@@ -462,7 +462,13 @@ func setupDummyFiles(cores int, packages int, diesPerPackage int, cpufiles map[s
 	uncoreInitMinFreqFile := "initial_min_freq_khz"
 	uncoreMaxFreqFile := "max_freq_khz"
 	uncoreMinFreqFile := "min_freq_khz"
-	cstates := []string{"C0", "C1", "C1E", "C3"}
+	cstates := map[int]map[string]string{
+		0: {"name": "C0", "latency": "0", "default_status": "enabled"},
+		1: {"name": "C1", "latency": "1", "default_status": "enabled"},
+		2: {"name": "C1E", "latency": "10", "default_status": "enabled"},
+		3: {"name": "C3", "latency": "100", "default_status": "enabled"},
+	}
+
 	// if we're setting uncore we need to spoof the module being loaded
 	_, ok := cpufiles["uncore_max"]
 	if ok {
@@ -532,13 +538,15 @@ func setupDummyFiles(cores int, packages int, diesPerPackage int, cpufiles map[s
 				os.WriteFile(filepath.Join(uncoreDir, pkgDir, uncoreInitMinFreqFile), []byte(value+"\n"), 0644)
 				os.WriteFile(filepath.Join(uncoreDir, pkgDir, uncoreMinFreqFile), []byte(value+"\n"), 0644)
 			case "cstates":
-				for i, state := range cstates {
+				for i, stateInfo := range cstates {
 					statedir := "cpuidle/state" + fmt.Sprint(i)
 					os.MkdirAll(filepath.Join(cpudir, statedir), os.ModePerm)
 					os.MkdirAll(filepath.Join(path, "cpuidle"), os.ModePerm)
 					os.WriteFile(filepath.Join(path, "cpuidle", "current_driver"), []byte(value+"\n"), 0644)
-					os.WriteFile(filepath.Join(cpudir, statedir, "name"), []byte(state+"\n"), 0644)
+					os.WriteFile(filepath.Join(cpudir, statedir, "name"), []byte(stateInfo["name"]+"\n"), 0644)
 					os.WriteFile(filepath.Join(cpudir, statedir, "disable"), []byte("0\n"), 0644)
+					os.WriteFile(filepath.Join(cpudir, statedir, "latency"), []byte(stateInfo["latency"]+"\n"), 0644)
+					os.WriteFile(filepath.Join(cpudir, statedir, "default_status"), []byte(stateInfo["default_status"]+"\n"), 0644)
 				}
 			}
 

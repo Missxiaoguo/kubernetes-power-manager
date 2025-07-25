@@ -94,7 +94,8 @@ func main() {
 		if id == power.FrequencyScalingFeature {
 			govs := power.GetAvailableGovernors()
 			setupLog.Info(fmt.Sprintf("available governors: %v", govs))
-		} else if id == power.CStatesFeature {
+		}
+		if id == power.CStatesFeature {
 			cstates := power.GetAvailableCStates()
 			setupLog.Info(fmt.Sprintf("available c-states: %v", cstates))
 		}

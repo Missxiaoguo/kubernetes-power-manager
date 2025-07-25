@@ -40,10 +40,29 @@ spec:
             description: PowerProfileSpec defines the desired state of PowerProfile
             properties:
               cstates:
-                additionalProperties:
-                  type: boolean
                 description: C-states configuration
+                properties:
+                  maxLatencyUs:
+                    description: |-
+                      MaxLatencyUs defines the maximum latency threshold in microseconds.
+                      C-states with latency higher than this threshold will be disabled.
+                      This field is mutually exclusive with 'names' — only one of 'names' or 'maxLatencyUs' may be set.
+                    minimum: 0
+                    type: integer
+                  names:
+                    additionalProperties:
+                      type: boolean
+                    description: |-
+                      Names defines explicit C-state configuration.
+                      The map key represents the C-state name (e.g., "C1", "C1E", "C6" etc.).
+                      The map value represents whether the C-state should be enabled (true) or disabled (false).
+                      This field is mutually exclusive with 'maxLatencyUs' — only one of 'names' or 'maxLatencyUs' may be set.
+                    type: object
                 type: object
+                x-kubernetes-validations:
+                - message: Specify either 'names' or 'maxLatencyUs' for C-state configuration,
+                    but not both
+                  rule: '!(has(self.names) && has(self.maxLatencyUs))'
               name:
                 description: The name of the PowerProfile
                 type: string

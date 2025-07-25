@@ -85,28 +85,51 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name        string
-		profileName string
-		clientObjs  []runtime.Object
+		name         string
+		powerprofile *powerv1.PowerProfile
 	}{
 		{
-			name:        "Exclusive pool creation",
-			profileName: "performance",
-			clientObjs: []runtime.Object{
-				node,
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "performance",
-						Namespace: IntelPowerNamespace,
+			name: "Exclusive pool creation",
+			powerprofile: &powerv1.PowerProfile{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "performance",
+					Namespace: IntelPowerNamespace,
+				},
+				Spec: powerv1.PowerProfileSpec{
+					Name: "performance",
+					PStates: powerv1.PStatesConfig{
+						Max:      3600,
+						Min:      3200,
+						Epp:      "performance",
+						Governor: "powersave",
 					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
-						PStates: powerv1.PStatesConfig{
-							Max:      3600,
-							Min:      3200,
-							Epp:      "performance",
-							Governor: "powersave",
+					CStates: powerv1.CStatesConfig{
+						Names: map[string]bool{
+							"C0":  true,
+							"C1":  true,
+							"C1E": false,
 						},
+					},
+				},
+			},
+		},
+		{
+			name: "Exclusive pool creation with cstates latency",
+			powerprofile: &powerv1.PowerProfile{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "performance",
+					Namespace: IntelPowerNamespace,
+				},
+				Spec: powerv1.PowerProfileSpec{
+					Name: "performance",
+					PStates: powerv1.PStatesConfig{
+						Max:      3600,
+						Min:      3200,
+						Epp:      "performance",
+						Governor: "powersave",
+					},
+					CStates: powerv1.CStatesConfig{
+						MaxLatencyUs: &[]int{10}[0],
 					},
 				},
 			},
@@ -119,12 +142,12 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 
 			req := reconcile.Request{
 				NamespacedName: client.ObjectKey{
-					Name:      tc.profileName,
+					Name:      tc.powerprofile.Name,
 					Namespace: IntelPowerNamespace,
 				},
 			}
 
-			r, err := createProfileReconcilerObject(tc.clientObjs)
+			r, err := createProfileReconcilerObject([]runtime.Object{node, tc.powerprofile})
 			if err != nil {
 				t.Error(err)
 				t.Fatalf("error creating the reconciler object")
@@ -141,26 +164,35 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 			_, err = r.Reconcile(context.TODO(), req)
 			assert.Nil(t, err)
 
-			exPool := host.GetExclusivePool(tc.profileName)
+			exPool := host.GetExclusivePool(tc.powerprofile.Name)
 			assert.NotNil(t, exPool, "Exclusive pool should be created")
-			assert.Equal(t, tc.profileName, exPool.GetPowerProfile().Name(), "pool should have the correct name")
+			exProfile := exPool.GetPowerProfile()
+			assert.Equal(t, tc.powerprofile.Name, exProfile.Name(), "pool should have the correct name")
+			if tc.powerprofile.Spec.CStates.MaxLatencyUs != nil {
+				assert.Equal(t, *tc.powerprofile.Spec.CStates.MaxLatencyUs, *exProfile.GetCStates().GetMaxLatencyUs())
+				assert.Nil(t, exProfile.GetCStates().States())
+			}
+			if tc.powerprofile.Spec.CStates.Names != nil {
+				assert.Equal(t, tc.powerprofile.Spec.CStates.Names, exProfile.GetCStates().States())
+				assert.Nil(t, exProfile.GetCStates().GetMaxLatencyUs())
+			}
 
 			// Check extended resource creation on node
 			updatedNode := &corev1.Node{}
 			err = r.Client.Get(context.TODO(), client.ObjectKey{Name: nodeName}, updatedNode)
 			assert.NoError(t, err)
-			extendedResourceName := corev1.ResourceName(fmt.Sprintf("%s%s", ExtendedResourcePrefix, tc.profileName))
+			extendedResourceName := corev1.ResourceName(fmt.Sprintf("%s%s", ExtendedResourcePrefix, tc.powerprofile.Name))
 			_, exists := updatedNode.Status.Capacity[extendedResourceName]
 			assert.True(t, exists, "Extended resource should be created")
 
 			// Check power workload creation on node
 			workload := &powerv1.PowerWorkload{}
 			wErr := r.Client.Get(context.TODO(), client.ObjectKey{
-				Name:      fmt.Sprintf("%s-%s", tc.profileName, nodeName),
+				Name:      fmt.Sprintf("%s-%s", tc.powerprofile.Name, nodeName),
 				Namespace: IntelPowerNamespace,
 			}, workload)
 			assert.NoError(t, wErr, "power workload should be created")
-			assert.Equal(t, workload.Name, fmt.Sprintf("%s-%s", tc.profileName, nodeName), "power workload should have the correct name")
+			assert.Equal(t, workload.Name, fmt.Sprintf("%s-%s", tc.powerprofile.Name, nodeName), "power workload should have the correct name")
 		})
 	}
 }
@@ -1985,9 +2017,12 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 							Governor: "powersave",
 						},
 						CStates: powerv1.CStatesConfig{
-							"C1":  true,
-							"C1E": false,
-							"C3":  false,
+							Names: map[string]bool{
+								"C0":  true,
+								"C1":  true,
+								"C1E": false,
+								"C3":  false,
+							},
 						},
 					},
 				},
@@ -2029,7 +2064,7 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 				}
 				initialProfile, err := power.NewPowerProfile(
 					profileName, uint(2000), uint(4000), "powersave", "power",
-					map[string]bool{"C0": false, "C1": true, "C1E": false, "C3": true})
+					map[string]bool{"C0": true, "C1": true, "C1E": false, "C3": true}, nil)
 				assert.Nil(t, err)
 				err = sharedPool.SetPowerProfile(initialProfile)
 				assert.Nil(t, err)
@@ -2042,7 +2077,7 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 				assert.Nil(t, err)
 				initialProfile, err := power.NewPowerProfile(
 					tc.setupReservedPoolProfile, uint(2000), uint(4000), "powersave", "balance_performance",
-					map[string]bool{"C0": false, "C1": false, "C1E": false, "C3": false})
+					map[string]bool{"C0": true, "C1": false, "C1E": false, "C3": false}, nil)
 				assert.Nil(t, err)
 				err = reservedPool.SetPowerProfile(initialProfile)
 				assert.Nil(t, err)
@@ -2067,13 +2102,13 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 			currentProfile := exclusivePool.GetPowerProfile()
 			assert.NotNil(t, currentProfile, "Exclusive pool should have a profile")
 			verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200),
-				"powersave", "performance", map[string]bool{"C0": false, "C1": true, "C1E": false, "C3": false})
+				"powersave", "performance", map[string]bool{"C0": true, "C1": true, "C1E": false, "C3": false})
 
 			if tc.expectSharedUpdate {
 				currentProfile := sharedPool.GetPowerProfile()
 				assert.NotNil(t, currentProfile, "Shared pool should have the updated profile")
 				verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200),
-					"powersave", "performance", map[string]bool{"C0": false, "C1": true, "C1E": false, "C3": false})
+					"powersave", "performance", map[string]bool{"C0": true, "C1": true, "C1E": false, "C3": false})
 			} else if tc.setupSharedPoolProfile == "" {
 				currentProfile := sharedPool.GetPowerProfile()
 				assert.Nil(t, currentProfile, "Shared pool should not have a profile")
@@ -2081,7 +2116,7 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 				currentProfile := sharedPool.GetPowerProfile()
 				assert.NotNil(t, currentProfile, "Shared pool should have the original profile")
 				verifyProfileParameters(currentProfile, tc.otherProfileName, uint(4000), uint(2000),
-					"powersave", "power", map[string]bool{"C0": false, "C1": true, "C1E": false, "C3": true})
+					"powersave", "power", map[string]bool{"C0": true, "C1": true, "C1E": false, "C3": true})
 			}
 
 			if tc.expectReservedUpdate {
@@ -2089,12 +2124,12 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 				currentProfile := reservedPool.GetPowerProfile()
 				assert.NotNil(t, currentProfile, "Reserved pool should have the updated profile")
 				verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200),
-					"powersave", "performance", map[string]bool{"C0": false, "C1": true, "C1E": false, "C3": false})
+					"powersave", "performance", map[string]bool{"C0": true, "C1": true, "C1E": false, "C3": false})
 			} else if tc.setupReservedPoolProfile != "" {
 				currentProfile := reservedPool.GetPowerProfile()
 				assert.NotNil(t, currentProfile, "Reserved pool should have the original profile")
 				verifyProfileParameters(currentProfile, tc.setupReservedPoolProfile, uint(4000), uint(2000),
-					"powersave", "balance_performance", map[string]bool{"C0": false, "C1": false, "C1E": false, "C3": false})
+					"powersave", "balance_performance", map[string]bool{"C0": true, "C1": false, "C1E": false, "C3": false})
 			}
 		})
 	}

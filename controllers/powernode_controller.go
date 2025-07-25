@@ -107,6 +107,10 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 
 		pstates := profileFromLibrary.GetPStates()
 		cstatesString := prettifyCStatesMap(profileFromLibrary.GetCStates().States())
+		cstatesLatency := profileFromLibrary.GetCStates().GetMaxLatencyUs()
+		if cstatesString == "" && cstatesLatency != nil {
+			cstatesString = fmt.Sprintf("maxLatency: %d", *cstatesLatency)
+		}
 		profileString := fmt.Sprintf("%s: %v || %v || %s || %s || %s",
 			profileFromLibrary.Name(), pstates.MaxFreq(), pstates.MinFreq(), pstates.Epp(), pstates.Governor(), cstatesString)
 		powerProfileStrings = append(powerProfileStrings, profileString)

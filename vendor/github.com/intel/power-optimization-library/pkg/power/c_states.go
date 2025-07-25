@@ -14,19 +14,37 @@ const (
 	cStateDisableFileFmt        = cStatesDir + "/state%d/disable"
 	cStateNameFileFmt           = cStatesDir + "/state%d/name"
 	cStatesDefaultStatusFileFmt = cStatesDir + "/state%d/default_status"
+	cStateLatencyFileFmt        = cStatesDir + "/state%d/latency"
 	cStatesDrvPath              = cStatesDir + "/current_driver"
 )
 
-type cstatesImpl map[string]bool
+type cstatesImpl struct {
+	states       map[string]bool // c-state name -> enable/disable status
+	maxLatencyUs *int            // maximum latency in microseconds
+}
 
 // CStates provides access to CPU C-state configuration
 type CStates interface {
 	States() map[string]bool
+	GetMaxLatencyUs() *int
 }
 
 func (c cstatesImpl) States() map[string]bool {
-	return c
+	return c.states
 }
+
+func (c cstatesImpl) GetMaxLatencyUs() *int {
+	return c.maxLatencyUs
+}
+
+// cstateInfo holds information about a c-state including its latency and default status in sysfs
+type cstateInfo struct {
+	StateNumber   int
+	Latency       int  // latency in microseconds
+	DefaultStatus bool // default enable/disable status
+}
+
+type cpuCStatesInfo = map[string]cstateInfo // c-state name -> c-state info
 
 func isSupportedCStatesDriver(driver string) bool {
 	for _, s := range []string{"intel_idle", "acpi_idle"} {
@@ -37,12 +55,10 @@ func isSupportedCStatesDriver(driver string) bool {
 	return false
 }
 
-// map of c-state name to state number path in the sysfs
+// per-CPU c-state information mapping
 // populated during library initialisation
-var cStatesNamesMap = map[string]int{}
-
-// populated when mapping CStates
-var defaultCStates = cstatesImpl{}
+// organized as cpuID -> cstate name -> cstate info
+var allCPUCStatesInfo = map[uint]cpuCStatesInfo{}
 
 func initCStates() featureStatus {
 	feature := featureStatus{
@@ -65,54 +81,120 @@ func initCStates() featureStatus {
 	return feature
 }
 
-// sets cStatesNamesMap and defaultCStates
+// Set allCPUCStatesInfo
+// Read latency and default enable/disable status for each c-state of each CPU from sysfs
 func mapAvailableCStates() error {
-	dirs, err := os.ReadDir(filepath.Join(basePath, "cpu0", cStatesDir))
-	if err != nil {
-		return fmt.Errorf("could not open cpu0 C-States directory: %w", err)
-	}
-
 	cStateDirNameRegex := regexp.MustCompile(`state(\d+)`)
-	for _, stateDir := range dirs {
-		dirName := stateDir.Name()
-		if !stateDir.IsDir() || !cStateDirNameRegex.MatchString(dirName) {
-			log.Info("map C-States ignoring " + dirName)
-			continue
-		}
-		stateNumber, err := strconv.Atoi(cStateDirNameRegex.FindStringSubmatch(dirName)[1])
+
+	// Initialize per-CPU c-state information for all available CPUs
+	numCpus := getNumberOfCpus()
+	for cpuID := uint(0); cpuID < numCpus; cpuID++ {
+		allCPUCStatesInfo[cpuID] = make(map[string]cstateInfo)
+
+		// Read per-CPU C-state information
+		cpuDirs, err := os.ReadDir(filepath.Join(basePath, fmt.Sprintf("cpu%d", cpuID), cStatesDir))
 		if err != nil {
-			return fmt.Errorf("failed to extract C-State number %s: %w", dirName, err)
+			return fmt.Errorf("could not open cpu%d C-States directory: %w", cpuID, err)
 		}
 
-		stateName, err := readCpuStringProperty(0, fmt.Sprintf(cStateNameFileFmt, stateNumber))
-		if err != nil {
-			return fmt.Errorf("could not read C-State %d name: %w", stateNumber, err)
-		}
+		for _, stateDir := range cpuDirs {
+			dirName := stateDir.Name()
+			if !stateDir.IsDir() || !cStateDirNameRegex.MatchString(dirName) {
+				log.Info("map C-States ignoring " + dirName)
+				continue
+			}
+			stateNumber, err := strconv.Atoi(cStateDirNameRegex.FindStringSubmatch(dirName)[1])
+			if err != nil {
+				return fmt.Errorf("failed to extract cpu%d C-State number %s: %w", cpuID, dirName, err)
+			}
 
-		cStatesNamesMap[stateName] = stateNumber
+			// Read c-state name from sysfs
+			stateName, err := readCpuStringProperty(cpuID, fmt.Sprintf(cStateNameFileFmt, stateNumber))
+			if err != nil {
+				return fmt.Errorf("could not read cpu%d C-State %d name: %w", cpuID, stateNumber, err)
+			}
 
-		// Get default c-state status from default_status sysfs file if it exists, otherwise set to true
-		defaultCStates[stateName] = true
-		defaultStatus, err := readCpuStringProperty(0, fmt.Sprintf(cStatesDefaultStatusFileFmt, stateNumber))
-		if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("could not read C-State %d default status file: %w", stateNumber, err)
+			// Read c-state latency from sysfs
+			latency, err := readCpuUintProperty(cpuID, fmt.Sprintf(cStateLatencyFileFmt, stateNumber))
+			if err != nil {
+				return fmt.Errorf("could not read cpu%d C-State %d latency: %w", cpuID, stateNumber, err)
+			}
+
+			// Get default c-state status from default_status sysfs file if it exists, otherwise set to true
+			defaultStatus := true
+			defaultStatusStr, err := readCpuStringProperty(cpuID, fmt.Sprintf(cStatesDefaultStatusFileFmt, stateNumber))
+			if err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("could not read cpu%d C-State %d default status file: %w", cpuID, stateNumber, err)
+			} else if err == nil {
+				defaultStatus = defaultStatusStr == "enabled"
+			}
+
+			allCPUCStatesInfo[cpuID][stateName] = cstateInfo{
+				StateNumber:   stateNumber,
+				Latency:       int(latency),
+				DefaultStatus: defaultStatus,
+			}
 		}
-		defaultCStates[stateName] = defaultStatus == "enabled"
+		log.V(4).Info("mapped C-states", "cpuID", cpuID, "map", allCPUCStatesInfo[cpuID])
 	}
-	log.V(3).Info("mapped C-states", "map", cStatesNamesMap)
 	return nil
 }
 
-func GetDefaultCStates() map[string]bool {
-	return defaultCStates
+func (cpu *cpuImpl) getDefaultCStatesStatus() map[string]bool {
+	defaults := make(map[string]bool)
+	for stateName, info := range allCPUCStatesInfo[cpu.id] {
+		defaults[stateName] = info.DefaultStatus
+	}
+	return defaults
 }
 
 func GetAvailableCStates() []string {
-	cStatesList := make([]string, 0)
-	for name := range cStatesNamesMap {
-		cStatesList = append(cStatesList, name)
+	cStatesSet := make(map[string]bool)
+	for _, cstatesInfo := range allCPUCStatesInfo {
+		for stateName := range cstatesInfo {
+			cStatesSet[stateName] = true
+		}
+	}
+	cStatesList := make([]string, 0, len(cStatesSet))
+	for stateName := range cStatesSet {
+		cStatesList = append(cStatesList, stateName)
 	}
 	return cStatesList
+}
+
+// configCStatesByLatency configures C-states based on maximum latency threshold
+func (cpu *cpuImpl) configCStatesByLatency(maxLatencyUs int) CStates {
+	cstatesInfo := allCPUCStatesInfo[cpu.id]
+
+	desiredCStates := make(map[string]bool)
+	for stateName, stateInfo := range cstatesInfo {
+		if stateInfo.Latency <= maxLatencyUs {
+			// Enable C-states with latency <= maxLatencyUs
+			desiredCStates[stateName] = true
+		} else {
+			// Disable C-states with latency > maxLatencyUs
+			desiredCStates[stateName] = false
+		}
+	}
+
+	log.V(4).Info("config C-states by latency", "cpuID", cpu.id, "maxLatencyUs", maxLatencyUs, "desiredCStates", desiredCStates)
+	return cstatesImpl{states: desiredCStates}
+}
+
+// configCStatesByNames configures C-states based on names
+func (cpu *cpuImpl) configCStatesByNames(names map[string]bool) CStates {
+	cstatesInfo := allCPUCStatesInfo[cpu.id]
+
+	desiredCStates := make(map[string]bool)
+	for stateName, info := range cstatesInfo {
+		if providedStatus, exists := names[stateName]; exists {
+			desiredCStates[stateName] = providedStatus
+		} else {
+			desiredCStates[stateName] = info.DefaultStatus
+		}
+	}
+
+	return cstatesImpl{states: desiredCStates}
 }
 
 func (cpu *cpuImpl) updateCStates() error {
@@ -123,18 +205,29 @@ func (cpu *cpuImpl) updateCStates() error {
 	// Get cstates config from profile
 	profile := cpu.pool.GetPowerProfile()
 	if profile != nil {
-		return cpu.applyCStates(profile.GetCStates())
+		if maxLatencyUs := profile.GetCStates().GetMaxLatencyUs(); maxLatencyUs != nil {
+			return cpu.applyCStates(cpu.configCStatesByLatency(*maxLatencyUs))
+		}
+		if providedCStates := profile.GetCStates().States(); len(providedCStates) > 0 {
+			return cpu.applyCStates(cpu.configCStatesByNames(providedCStates))
+		}
 	}
 
-	return cpu.applyCStates(defaultCStates)
+	return cpu.applyCStates(cstatesImpl{states: cpu.getDefaultCStatesStatus()})
 }
 
 func (cpu *cpuImpl) applyCStates(desiredCStates CStates) error {
-	for state, enabled := range desiredCStates.States() {
+	cstatesInfo := allCPUCStatesInfo[cpu.id]
+	for stateName, enabled := range desiredCStates.States() {
+		if _, exists := cstatesInfo[stateName]; !exists {
+			log.Error(fmt.Errorf("c-state %s does not exist for cpu %d", stateName, cpu.id), "c-state does not exist")
+			continue
+		}
+
 		stateFilePath := filepath.Join(
 			basePath,
 			fmt.Sprint("cpu", cpu.id),
-			fmt.Sprintf(cStateDisableFileFmt, cStatesNamesMap[state]),
+			fmt.Sprintf(cStateDisableFileFmt, cstatesInfo[stateName].StateNumber),
 		)
 		content := make([]byte, 1)
 		if enabled {
@@ -143,7 +236,7 @@ func (cpu *cpuImpl) applyCStates(desiredCStates CStates) error {
 			content[0] = '1' // write '1' to disable the c state
 		}
 		if err := os.WriteFile(stateFilePath, content, 0644); err != nil {
-			return fmt.Errorf("could not apply cstate %s on cpu %d: %w", state, cpu.id, err)
+			return fmt.Errorf("could not apply cstate %s on cpu %d: %w", stateName, cpu.id, err)
 		}
 	}
 	return nil
