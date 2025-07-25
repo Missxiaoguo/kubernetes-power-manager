@@ -28,46 +28,26 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-// value deducted from the max freq of a default profile
-// this gives the profile a 0.2 Ghz frequency range
-const MinFreqOffset = 200
 
 // performance          ===>  priority level 0
 // balance_performance  ===>  priority level 1
 // balance_power        ===>  priority level 2
 // power                ===>  priority level 3
-
-var profilePercentages map[string]map[string]float64 = map[string]map[string]float64{
-	"performance": {
-		"resource":   .40,
-		"difference": 0.0,
-	},
-	"balance_performance": {
-		"resource":   .60,
-		"difference": .25,
-	},
-	"balance_power": {
-		"resource":   .80,
-		"difference": .50,
-	},
-	"power": {
-		"resource":   1.0,
-		"difference": 0.0,
-	},
-	// We have the empty string here so users can create power profiles that are not associated with SST-CP
-	"": {
-		"resource": 1.0,
-	},
-}
 
 // PowerProfileReconciler reconciles a PowerProfile object
 type PowerProfileReconciler struct {
@@ -144,7 +124,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 					return ctrl.Result{}, err
 				}
 			}
-			// Remove the extended resources for this power profile from the node
+			// Remove the extended resources for this power profile from the node.
 			err = r.removeExtendedResources(nodeName, req.NamespacedName.Name, &logger)
 			if err != nil {
 				logger.Error(err, "error removing the extended resources from the node")
@@ -154,23 +134,46 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 			return ctrl.Result{}, nil
 		}
 
-		// Requeue the request
+		// Requeue the request.
 		return ctrl.Result{}, err
 	}
 
-	// Make sure the EPP value is one of the four correct ones or empty in the case of a user-created profile
-	logger.V(5).Info("confirming EPP value is one of the correct values")
-	if _, exists := profilePercentages[profile.Spec.PStates.Epp]; !exists {
-		incorrectEppErr := errors.NewServiceUnavailable(fmt.Sprintf("EPP value not allowed: %v - deleting the power profile CRD", profile.Spec.PStates.Epp))
-		logger.Error(incorrectEppErr, "error reconciling the power profile")
+	// Check if this profile should be applied to this node. The check applies to both shared and non-shared profiles.
+	match, err := doesNodeMatchPowerProfileSelector(r.Client, profile, nodeName, &logger)
+	if err != nil {
+		logger.Error(err, "error checking if node matches power profile selector")
+		return ctrl.Result{}, err
+	}
+	if !match {
+		logger.V(5).Info("Profile not applicable to this node due to node selector", "nodeName", nodeName, "nodeSelector", profile.Spec.NodeSelector)
 
-		err = r.Client.Delete(context.TODO(), profile)
+		// Clean up resources if they exist on this node but shouldn't anymore.
+		err = r.cleanupProfileFromNode(profile, nodeName, &logger)
 		if err != nil {
-			logger.Error(err, fmt.Sprintf("error deleting the power profile %s with the incorrect EPP value %s", profile.Spec.Name, profile.Spec.PStates.Epp))
+			logger.Error(err, "error cleaning up profile resources from node")
 			return ctrl.Result{}, err
 		}
 
 		return ctrl.Result{}, nil
+	}
+
+	// Make sure the EPP value is one of the correct ones or empty in the case of a user-created profile.
+	logger.V(5).Info("confirming EPP value is one of the correct values")
+	if profile.Spec.PStates.Epp != "" {
+		isValid := isValidEpp(profile.Spec.PStates.Epp)
+
+		if !isValid {
+			incorrectEppErr := errors.NewServiceUnavailable(fmt.Sprintf("EPP value not allowed: %v - deleting the power profile CRD", profile.Spec.PStates.Epp))
+			logger.Error(incorrectEppErr, "error reconciling the power profile")
+
+			err = r.Client.Delete(context.TODO(), profile)
+			if err != nil {
+				logger.Error(err, fmt.Sprintf("error deleting the power profile %s with the incorrect EPP value %s", profile.Spec.Name, profile.Spec.PStates.Epp))
+				return ctrl.Result{}, err
+			}
+
+			return ctrl.Result{}, nil
+		}
 	}
 
 	absoluteMinimumFrequency, absoluteMaximumFrequency, err := getMaxMinFrequencyValues(r.PowerLibrary)
@@ -192,12 +195,6 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		profileMinFreq = absoluteMinimumFrequency
 	} else {
 		profileMinFreq = profile.Spec.PStates.Min
-	}
-
-	// If both max and min are not specified and it's EPP-based profile, override with EPP-based calculation
-	if profile.Spec.PStates.Epp != "" && profile.Spec.PStates.Max == 0 && profile.Spec.PStates.Min == 0 {
-		profileMaxFreq = int(float64(absoluteMaximumFrequency) - (float64((absoluteMaximumFrequency - absoluteMinimumFrequency)) * profilePercentages[profile.Spec.PStates.Epp]["difference"]))
-		profileMinFreq = int(profileMaxFreq) - MinFreqOffset
 	}
 
 	if profileMaxFreq > absoluteMaximumFrequency || profileMinFreq < absoluteMinimumFrequency {
@@ -319,8 +316,8 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		return ctrl.Result{}, nil
 	}
 
-	// Create or update the extended resources for the profile
-	err = r.ensureExtendedResources(nodeName, profile.Spec.Name, profile.Spec.PStates.Epp, &logger)
+	// Create or update the extended resources for the profile.
+	err = r.ensureExtendedResources(nodeName, profile, &logger)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("error creating or updating the extended resources for the base profile: %v", err)
 	}
@@ -365,7 +362,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 	return ctrl.Result{}, nil
 }
 
-func (r *PowerProfileReconciler) ensureExtendedResources(nodeName string, profileName string, eppValue string, logger *logr.Logger) error {
+func (r *PowerProfileReconciler) ensureExtendedResources(nodeName string, profile *powerv1.PowerProfile, logger *logr.Logger) error {
 	node := &corev1.Node{}
 	err := r.Client.Get(context.TODO(), client.ObjectKey{
 		Name: nodeName,
@@ -374,11 +371,28 @@ func (r *PowerProfileReconciler) ensureExtendedResources(nodeName string, profil
 		return err
 	}
 
-	numCPUsOnNode := float64(len(*r.PowerLibrary.GetAllCpus()))
-	logger.V(5).Info("configuring based on the percentage associated to the specific power profile")
-	numExtendedResources := int64(numCPUsOnNode * profilePercentages[eppValue]["resource"])
+	totalCPUs := len(*r.PowerLibrary.GetAllCpus())
+	logger.V(0).Info("configuring based on the capacity associated to the specific power profile")
+
+	// Calculate CPU count based on profile's CpuCapacity or default to all CPUs.
+	var numExtendedResources int64
+	if profile.Spec.CpuCapacity.String() != "" {
+		// Use the standard library function to handle IntOrString properly.
+		absoluteCPUs, err := intstr.GetScaledValueFromIntOrPercent(&profile.Spec.CpuCapacity, totalCPUs, false)
+		if err == nil && absoluteCPUs > 0 {
+			numExtendedResources = int64(absoluteCPUs)
+		} else {
+			// Fallback to all CPUs if parsing fails
+			logger.Error(err, "could not parse power profile cpu capacity, using total CPUs", "error", err, "absoluteCPUs", absoluteCPUs)
+			numExtendedResources = int64(totalCPUs)
+		}
+	} else {
+		// Default to all CPUs if no configuration found.
+		numExtendedResources = int64(totalCPUs)
+	}
+
 	profilesAvailable := resource.NewQuantity(numExtendedResources, resource.DecimalSI)
-	extendedResourceName := corev1.ResourceName(fmt.Sprintf("%s%s", ExtendedResourcePrefix, profileName))
+	extendedResourceName := corev1.ResourceName(fmt.Sprintf("%s%s", ExtendedResourcePrefix, profile.Spec.Name))
 	node.Status.Capacity[extendedResourceName] = *profilesAvailable
 
 	err = r.Client.Status().Update(context.TODO(), node)
@@ -417,6 +431,22 @@ func (r *PowerProfileReconciler) removeExtendedResources(nodeName string, profil
 	return nil
 }
 
+// cleanupProfileFromNode removes only extended resources from a node when it no longer matches the PowerProfile selector.
+func (r *PowerProfileReconciler) cleanupProfileFromNode(profile *powerv1.PowerProfile, nodeName string, logger *logr.Logger) error {
+	logger.V(5).Info("Cleaning up PowerProfile extended resources from node", "profile", profile.Spec.Name, "nodeName", nodeName)
+
+	// Only remove extended resources from the node.
+	// Keep pools, workloads, and shared PowerProfile configurations as pods/services may depend on them.
+	err := r.removeExtendedResources(nodeName, profile.Spec.Name, logger)
+	if err != nil {
+		logger.Error(err, "error removing extended resources")
+		return err
+	}
+
+	logger.V(5).Info("Successfully cleaned up PowerProfile extended resources from node", "profile", profile.Spec.Name, "nodeName", nodeName)
+	return nil
+}
+
 func getMaxMinFrequencyValues(h power.Host) (int, int, error) {
 	typeList := h.GetFreqRanges()
 	if len(typeList) == 0 {
@@ -434,7 +464,55 @@ func getMaxMinFrequencyValues(h power.Host) (int, int, error) {
 // SetupWithManager specifies how the controller is built and watch a CR and other resources that are owned and managed by the controller
 func (r *PowerProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&powerv1.PowerProfile{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		For(
+			&powerv1.PowerProfile{},
+			builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		Watches(
+			&corev1.Node{},
+			handler.EnqueueRequestsFromMapFunc(r.nodeToProfileRequests),
+			builder.WithPredicates(predicate.Funcs{
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					// Filter out the nodes that are not the current node.
+					if e.ObjectOld.GetName() != os.Getenv("NODE_NAME") {
+						return false
+					}
+					// Filter for label updates only.
+					return !equality.Semantic.DeepEqual(e.ObjectNew.GetLabels(), e.ObjectOld.GetLabels())
+				},
+				CreateFunc:  func(e event.CreateEvent) bool { return true },
+				GenericFunc: func(ge event.GenericEvent) bool { return false },
+				DeleteFunc: func(de event.DeleteEvent) bool {
+					// Filter the current node.
+					return de.Object.GetName() == os.Getenv("NODE_NAME")
+				},
+			})).
 		Complete(r)
+}
+
+// nodeToProfileRequests maps Node events to PowerProfile reconciliation requests
+func (r *PowerProfileReconciler) nodeToProfileRequests(ctx context.Context, obj client.Object) []reconcile.Request {
+	node := obj.(*corev1.Node)
+	r.Log.V(5).Info("Node change detected, checking PowerProfiles", "nodeName", node.Name)
+
+	var requests []reconcile.Request
+
+	// List all PowerProfiles.
+	powerProfiles := &powerv1.PowerProfileList{}
+	if err := r.Client.List(ctx, powerProfiles); err != nil {
+		r.Log.Error(err, "Failed to list PowerProfiles for node event handling")
+		return requests
+	}
+
+	// Enqueue reconciliation for all PowerProfiles that might be affected.
+	for _, profile := range powerProfiles.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Name:      profile.Name,
+				Namespace: profile.Namespace,
+			},
+		})
+	}
+
+	r.Log.V(5).Info("Enqueuing PowerProfile reconciliation requests", "count", len(requests), "nodeName", node.Name)
+	return requests
 }

@@ -29,6 +29,7 @@ import (
 
 	"github.com/go-logr/logr"
 	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
+	"github.com/intel/power-optimization-library/pkg/power"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -57,6 +58,7 @@ type PowerPodReconciler struct {
 	Scheme             *runtime.Scheme
 	State              *podstate.State
 	PodResourcesClient podresourcesclient.PodResourcesClient
+	PowerLibrary       power.Host
 }
 
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
@@ -184,13 +186,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, errors.NewServiceUnavailable("pod UID not found")
 	}
 
-	powerProfileCRs := &powerv1.PowerProfileList{}
-	logger.V(5).Info("retrieving the power profiles from the cluster")
-	if err = r.Client.List(context.TODO(), powerProfileCRs); err != nil {
-		logger.Error(err, "error retrieving the power profiles from the cluster")
-		return ctrl.Result{}, err
-	}
-	powerProfilesFromContainers, powerContainers, recoveryErrs := r.getPowerProfileRequestsFromContainers(admissibleContainers, powerProfileCRs.Items, powernode.Status.CustomDevices, pod, &logger)
+	powerProfilesFromContainers, powerContainers, recoveryErrs := r.getPowerProfileRequestsFromContainers(admissibleContainers, powernode.Status.CustomDevices, pod, &logger)
 	logger.V(5).Info("retrieving the power profiles and cores from the pod requests")
 	for profile, cores := range powerProfilesFromContainers {
 		logger.V(5).Info("retrieving the workload for the power profile")
@@ -273,12 +269,12 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 	wrappedErrs := e.Join(recoveryErrs...)
 	if wrappedErrs != nil {
 		logger.Error(wrappedErrs, "recoverable errors")
-		return ctrl.Result{Requeue: false}, fmt.Errorf("recoverable errors encountered")
+		return ctrl.Result{Requeue: false}, fmt.Errorf("recoverable errors encountered: %w", wrappedErrs)
 	}
 	return ctrl.Result{}, nil
 }
 
-func (r *PowerPodReconciler) getPowerProfileRequestsFromContainers(containers []corev1.Container, profileCRs []powerv1.PowerProfile, customDevices []string, pod *corev1.Pod, logger *logr.Logger) (map[string][]uint, []powerv1.Container, []error) {
+func (r *PowerPodReconciler) getPowerProfileRequestsFromContainers(containers []corev1.Container, customDevices []string, pod *corev1.Pod, logger *logr.Logger) (map[string][]uint, []powerv1.Container, []error) {
 	logger.V(5).Info("get the power profiles from the containers")
 	_ = context.Background()
 	var recoverableErrs []error
@@ -286,25 +282,30 @@ func (r *PowerPodReconciler) getPowerProfileRequestsFromContainers(containers []
 	powerContainers := make([]powerv1.Container, 0)
 	for _, container := range containers {
 		logger.V(5).Info("retrieving the requested power profile from the container spec")
-		profile, requestNum, err := getContainerProfileFromRequests(container, customDevices, logger)
+		profileName, requestNum, err := getContainerProfileFromRequests(container, customDevices, logger)
 		if err != nil {
 			recoverableErrs = append(recoverableErrs, err)
 			continue
 		}
 
 		// If there was no profile requested in this container we can move onto the next one
-		if profile == "" {
+		if profileName == "" {
 			logger.V(5).Info("no profile was requested by the container")
 			continue
 		}
 		// checks if pod has been altered by time of day
 		newProf, ok := pod.ObjectMeta.Annotations["PM-altered"]
 		if ok {
-			profile = newProf
+			profileName = newProf
 		}
-		if !verifyProfileExists(profile, profileCRs, logger) {
-			powerProfileNotFoundError := errors.NewServiceUnavailable(fmt.Sprintf("power profile '%s' not found", profile))
-			recoverableErrs = append(recoverableErrs, powerProfileNotFoundError)
+		profileAvailable, err := validateProfileAvailabilityOnNode(context.TODO(), r.Client, profileName, pod.Spec.NodeName, r.PowerLibrary, logger)
+		if err != nil {
+			logger.Error(err, "error checking if power profile is available on node")
+			continue
+		}
+		if !profileAvailable {
+			powerProfileNotAvailableError := errors.NewServiceUnavailable(fmt.Sprintf("power profile '%s' is not available on node %s", profileName, pod.Spec.NodeName))
+			recoverableErrs = append(recoverableErrs, powerProfileNotAvailableError)
 			continue
 		}
 		containerID := getContainerID(pod, container.Name)
@@ -326,28 +327,17 @@ func (r *PowerPodReconciler) getPowerProfileRequestsFromContainers(containers []
 		powerContainer.Name = container.Name
 		powerContainer.Id = strings.TrimPrefix(containerID, "docker://")
 		powerContainer.ExclusiveCPUs = cleanCoreList
-		powerContainer.PowerProfile = profile
+		powerContainer.PowerProfile = profileName
 		powerContainers = append(powerContainers, *powerContainer)
 
-		if _, exists := profiles[profile]; exists {
-			profiles[profile] = append(profiles[profile], cleanCoreList...)
+		if _, exists := profiles[profileName]; exists {
+			profiles[profileName] = append(profiles[profileName], cleanCoreList...)
 		} else {
-			profiles[profile] = cleanCoreList
+			profiles[profileName] = cleanCoreList
 		}
 	}
 
 	return profiles, powerContainers, recoverableErrs
-}
-
-func verifyProfileExists(profile string, powerProfiles []powerv1.PowerProfile, logger *logr.Logger) bool {
-	logger.V(5).Info("confirming the power profile exists in the cluster")
-	for _, powerProfile := range powerProfiles {
-		if powerProfile.Name == profile {
-			return true
-		}
-	}
-
-	return false
 }
 
 func getNewWorkloadCPUList(cpuList []uint, nodeCpuIds []uint, logger *logr.Logger) []uint {

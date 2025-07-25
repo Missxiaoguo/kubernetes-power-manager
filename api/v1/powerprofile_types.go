@@ -18,6 +18,7 @@ package v1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // PowerProfileSpec defines the desired state of PowerProfile
@@ -29,11 +30,33 @@ type PowerProfileSpec struct {
 
 	Shared bool `json:"shared,omitempty"`
 
+	// NodeSelector specifies which nodes this PowerProfile should be applied to
+	// If empty, the profile will be applied to all the nodes.
+	// +optional
+	NodeSelector NodeSelector `json:"nodeSelector,omitempty"`
+
 	// P-states configuration
 	PStates PStatesConfig `json:"pstates,omitempty"`
 
 	// C-states configuration
 	CStates CStatesConfig `json:"cstates,omitempty"`
+
+	// CpuCapacity defines the number or percentage of CPUs that can be allocated to this profile.
+	// If not specified, it defaults to 100% of the available CPUs.
+	// Accepted values are:
+	// - A number (e.g., 5)
+	// - A percentage (e.g., "10%")
+	// +kubebuilder:validation:XIntOrString
+	// +kubebuilder:validation:Pattern=`^([1-9][0-9]?|100)%?$`
+	// +kubebuilder:default="100%"
+	CpuCapacity intstr.IntOrString `json:"cpuCapacity,omitempty"`
+}
+
+type NodeSelector struct {
+	// LabelSelector is a label selector that specifies which nodes this PowerProfile should be
+	// applied to.
+	// +optional
+	LabelSelector metav1.LabelSelector `json:"labelSelector,omitempty"`
 }
 
 // PStatesConfig defines the CPU P-states configuration
