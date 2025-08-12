@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 func TestFeatureSet_init(t *testing.T) {
@@ -224,7 +225,7 @@ func Fuzz_library(f *testing.F) {
 		epp := eppList[int(eppSeed)%len(eppList)]
 		pool, _ := node.AddExclusivePool(poolName)
 		cstates := map[string]bool{"C0": true, "C1": false}
-		profile, _ := NewEcorePowerProfile(poolName, min, max, emin, emax, governor, epp, cstates, nil)
+		profile, _ := NewPowerProfile(poolName, &intstr.IntOrString{Type: intstr.Int, IntVal: int32(min)}, &intstr.IntOrString{Type: intstr.Int, IntVal: int32(max)}, governor, epp, cstates, nil)
 		pool.SetPowerProfile(profile)
 		node.GetSharedPool().MoveCpuIDs([]uint{1, 3, 5})
 		node.GetExclusivePool(poolName).MoveCpuIDs([]uint{1, 3, 5})

@@ -144,11 +144,23 @@ spec:
                     description: Governor to be used
                     type: string
                   max:
-                    description: Max frequency cores can run at
-                    type: integer
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      Max frequency cores can run at. If not specified, it defaults to the maximum frequency of the CPU.
+                      If specified as a percentage, the following formula is used: min + (max - min) * percentage.
+                    pattern: ^(\d+|([1-9]?\d|100)%)$
+                    x-kubernetes-int-or-string: true
                   min:
-                    description: Min frequency cores can run at
-                    type: integer
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      Min frequency cores can run at. If not specified, it defaults to the minimum frequency of the CPU.
+                      If specified as a percentage, the following formula is used: min + (max - min) * percentage.
+                    pattern: ^(\d+|([1-9]?\d|100)%)$
+                    x-kubernetes-int-or-string: true
                 type: object
               shared:
                 type: boolean

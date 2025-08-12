@@ -61,11 +61,17 @@ type NodeSelector struct {
 
 // PStatesConfig defines the CPU P-states configuration
 type PStatesConfig struct {
-	// Max frequency cores can run at
-	Max int `json:"max,omitempty"`
+	// Max frequency cores can run at. If not specified, it defaults to the maximum frequency of the CPU.
+	// If specified as a percentage, the following formula is used: min + (max - min) * percentage.
+	// +kubebuilder:validation:XIntOrString
+	// +kubebuilder:validation:Pattern=`^(\d+|([1-9]?\d|100)%)$`
+	Max *intstr.IntOrString `json:"max,omitempty"`
 
-	// Min frequency cores can run at
-	Min int `json:"min,omitempty"`
+	// Min frequency cores can run at. If not specified, it defaults to the minimum frequency of the CPU.
+	// If specified as a percentage, the following formula is used: min + (max - min) * percentage.
+	// +kubebuilder:validation:XIntOrString
+	// +kubebuilder:validation:Pattern=`^(\d+|([1-9]?\d|100)%)$`
+	Min *intstr.IntOrString `json:"min,omitempty"`
 
 	// The priority value associated with this Power Profile
 	Epp string `json:"epp,omitempty"`

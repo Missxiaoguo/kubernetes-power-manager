@@ -83,33 +83,9 @@ func initHost(nodeName string) (Host, error) {
 	for _, cpu := range *topology.CPUs() {
 		cpu._setPoolProperty(host.reservedPool)
 	}
-	// not very pretty but finds the lowest/highest core ranges
-	var highest uint
-	var highIndex uint
-	var lowIndex uint
-	for i, frequencies := range coreTypes {
-		if frequencies.GetMax() > highest {
-			highest = frequencies.GetMax()
-			lowIndex = highIndex
-			highIndex = uint(i)
-		}
-		if frequencies.GetMax() < highest {
-			lowIndex = uint(i)
-		}
-	}
-	CpuTypeReferences.pcore = highIndex
-	CpuTypeReferences.ecore = lowIndex
+
 	log.Info("discovered cpus", "cpus", len(*topology.CPUs()))
-	// coretypes are populated after default profile is generated so we need to update here
-	if featureList.isFeatureIdSupported(FrequencyScalingFeature) && host.NumCoreTypes() == 2 {
-		defaultPStates.max = coreTypes[CpuTypeReferences.Pcore()].GetMax()
-		defaultPStates.min = coreTypes[CpuTypeReferences.Pcore()].GetMax()
-		defaultPStates.efficientMax = coreTypes[CpuTypeReferences.Ecore()].GetMax()
-		defaultPStates.efficientMin = coreTypes[CpuTypeReferences.Ecore()].GetMax()
-	}
-	if host.NumCoreTypes() > numOfSupportedCoreTypes {
-		log.Error(fmt.Errorf("more than %d core types detected. This may result in undefined behavior: %v", numOfSupportedCoreTypes, coreTypes), "topology issues detected")
-	}
+
 	host.topology = topology
 
 	// create a shallow copy of pointers, changes to underlying cpu object will reflect in both lists,

@@ -176,32 +176,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		}
 	}
 
-	absoluteMinimumFrequency, absoluteMaximumFrequency, err := getMaxMinFrequencyValues(r.PowerLibrary)
-	logger.V(5).Info("retrieving the max possible frequency and min possible frequency from the system")
-	if err != nil {
-		logger.Error(err, "error retrieving the frequency values from the node")
-		return ctrl.Result{Requeue: false}, err
-	}
-
-	var profileMaxFreq int
-	var profileMinFreq int
-	// Use default hardware limits if not specified
-	if profile.Spec.PStates.Max == 0 {
-		profileMaxFreq = absoluteMaximumFrequency
-	} else {
-		profileMaxFreq = profile.Spec.PStates.Max
-	}
-	if profile.Spec.PStates.Min == 0 {
-		profileMinFreq = absoluteMinimumFrequency
-	} else {
-		profileMinFreq = profile.Spec.PStates.Min
-	}
-
-	if profileMaxFreq > absoluteMaximumFrequency || profileMinFreq < absoluteMinimumFrequency {
-		err = fmt.Errorf("max and min frequency must be within the range %d-%d", absoluteMinimumFrequency, absoluteMaximumFrequency)
-		logger.Error(err, fmt.Sprintf("error creating the profile '%s'", profile.Spec.Name))
-		return ctrl.Result{Requeue: false}, err
-	}
+	// Validate the EPP value.
 	actualEpp := profile.Spec.PStates.Epp
 	if !power.IsFeatureSupported(power.EPPFeature) && actualEpp != "" {
 		err = fmt.Errorf("EPP is not supported but %s provides one, setting EPP to ''", profile.Name)
@@ -211,7 +186,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 
 	// Create and validate power profile in the power library
 	powerProfile, err := power.NewPowerProfile(
-		profile.Spec.Name, uint(profileMinFreq), uint(profileMaxFreq),
+		profile.Spec.Name, profile.Spec.PStates.Min, profile.Spec.PStates.Max,
 		profile.Spec.PStates.Governor, actualEpp,
 		profile.Spec.CStates.Names, profile.Spec.CStates.MaxLatencyUs)
 	if err != nil {
@@ -240,7 +215,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		if profile.Spec.Shared {
 			logger.V(5).Info(fmt.Sprintf(
 				"shared power profile successfully created: name - %s max - %d min - %d EPP - %s",
-				profile.Spec.Name, profileMaxFreq, profileMinFreq, actualEpp))
+				profile.Spec.Name, powerProfile.GetPStates().GetMaxFreq().IntVal, powerProfile.GetPStates().GetMinFreq().IntVal, actualEpp))
 			workloadName := fmt.Sprintf("shared-%s-workload", nodeName)
 			// check if the current node has a shared workload
 			workload := &powerv1.PowerWorkload{}
@@ -270,7 +245,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 
 		logger.V(5).Info(fmt.Sprintf(
 			"power profile successfully created: name - %s max - %d min - %d EPP - %s",
-			profile.Spec.Name, profileMaxFreq, profileMinFreq, actualEpp))
+			profile.Spec.Name, powerProfile.GetPStates().GetMaxFreq().IntVal, powerProfile.GetPStates().GetMinFreq().IntVal, actualEpp))
 	} else {
 		// Exclusive pool for this profile already exists, update it and all the other pools that use this profile
 		err = r.PowerLibrary.GetExclusivePool(profile.Spec.Name).SetPowerProfile(powerProfile)
@@ -308,7 +283,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 
 		logger.V(5).Info(fmt.Sprintf(
 			"power profile successfully updated: name - %s max - %d min - %d EPP - %s",
-			profile.Spec.Name, profileMaxFreq, profileMinFreq, actualEpp))
+			profile.Spec.Name, powerProfile.GetPStates().GetMaxFreq().IntVal, powerProfile.GetPStates().GetMinFreq().IntVal, actualEpp))
 	}
 
 	if profile.Spec.Shared {
@@ -445,20 +420,6 @@ func (r *PowerProfileReconciler) cleanupProfileFromNode(profile *powerv1.PowerPr
 
 	logger.V(5).Info("Successfully cleaned up PowerProfile extended resources from node", "profile", profile.Spec.Name, "nodeName", nodeName)
 	return nil
-}
-
-func getMaxMinFrequencyValues(h power.Host) (int, int, error) {
-	typeList := h.GetFreqRanges()
-	if len(typeList) == 0 {
-		return 0, 0, fmt.Errorf("could not retireve hardware frequency limits")
-	}
-	absoluteMaximumFrequency := int(typeList[0].GetMax())
-	absoluteMinimumFrequency := int(typeList[0].GetMin())
-
-	absoluteMaximumFrequency = absoluteMaximumFrequency / 1000
-	absoluteMinimumFrequency = absoluteMinimumFrequency / 1000
-
-	return absoluteMinimumFrequency, absoluteMaximumFrequency, nil
 }
 
 // SetupWithManager specifies how the controller is built and watch a CR and other resources that are owned and managed by the controller

@@ -100,8 +100,8 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 				Spec: powerv1.PowerProfileSpec{
 					Name: "performance",
 					PStates: powerv1.PStatesConfig{
-						Max:      3600,
-						Min:      3200,
+						Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+						Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 						Epp:      "performance",
 						Governor: "powersave",
 					},
@@ -125,8 +125,8 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 				Spec: powerv1.PowerProfileSpec{
 					Name: "performance",
 					PStates: powerv1.PStatesConfig{
-						Max:      3600,
-						Min:      3200,
+						Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+						Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 						Epp:      "performance",
 						Governor: "powersave",
 					},
@@ -218,8 +218,8 @@ func TestPowerProfile_Reconcile_SharedPoolCreation(t *testing.T) {
 				Name:   "shared",
 				Shared: true,
 				PStates: powerv1.PStatesConfig{
-					Max: 3600,
-					Min: 3200,
+					Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+					Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 					Epp: "",
 				},
 			},
@@ -290,8 +290,8 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
 						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp: "performance",
 						},
 					},
@@ -309,7 +309,7 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 			},
 		},
 		{
-			testCase:    "Test Case 2 - Max|Min zero, epp performance",
+			testCase:    "Test Case 2 - Max|Min nil, epp performance",
 			nodeName:    "TestNode",
 			profileName: "performance",
 			clientObjs: []runtime.Object{
@@ -321,8 +321,8 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
 						PStates: powerv1.PStatesConfig{
-							Max: 0,
-							Min: 0,
+							Max: nil,
+							Min: nil,
 							Epp: "performance",
 						},
 					},
@@ -352,8 +352,8 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "user-created",
 						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp: "",
 						},
 					},
@@ -444,8 +444,8 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
 						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp: "performance",
 						},
 					},
@@ -463,7 +463,7 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 			},
 		},
 		{
-			testCase:    "Test Case 2 - Max|Min zero, epp performance",
+			testCase:    "Test Case 2 - Max|Min nil, epp performance",
 			nodeName:    "TestNode",
 			profileName: "performance",
 			clientObjs: []runtime.Object{
@@ -475,8 +475,8 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
 						PStates: powerv1.PStatesConfig{
-							Max: 0,
-							Min: 0,
+							Max: nil,
+							Min: nil,
 							Epp: "performance",
 						},
 					},
@@ -506,8 +506,8 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "user-created",
 						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp: "",
 						},
 					},
@@ -570,66 +570,75 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyHandling(t *testing.T) {
 		testCase    string
 		nodeName    string
 		profileName string
-		max         int
-		min         int
+		max         *intstr.IntOrString
+		min         *intstr.IntOrString
 		epp         string
 		governor    string
 	}{
 		// Partial defaults - max only
 		{
-			testCase:    "Max is zero, min specified, no EPP (use hardware maximum)",
+			testCase:    "Max is nil, min specified, no EPP (use hardware maximum)",
 			nodeName:    "TestNode",
 			profileName: "max-default-profile",
-			max:         0,
-			min:         2000,
+			max:         nil,
+			min:         &intstr.IntOrString{Type: intstr.Int, IntVal: 2000},
 			epp:         "",
 			governor:    "powersave",
 		},
 		{
-			testCase:    "Max is zero, min specified, with EPP (use hardware maximum)",
+			testCase:    "Max is nil, min specified, with EPP (use hardware maximum)",
 			nodeName:    "TestNode",
 			profileName: "max-default-epp-profile",
-			max:         0,
-			min:         1500,
+			max:         nil,
+			min:         &intstr.IntOrString{Type: intstr.Int, IntVal: 1500},
 			epp:         "performance",
 			governor:    "powersave",
 		},
 		// Partial defaults - min only
 		{
-			testCase:    "Min is zero, max specified, no EPP (use hardware minimum)",
+			testCase:    "Min is nil, max specified, no EPP (use hardware minimum)",
 			nodeName:    "TestNode",
 			profileName: "min-default-profile",
-			max:         3000,
-			min:         0,
+			max:         &intstr.IntOrString{Type: intstr.Int, IntVal: 3000}, // 3000 MHz
+			min:         nil,
 			epp:         "",
 			governor:    "powersave",
 		},
 		{
-			testCase:    "Min is zero, max specified, with EPP (use hardware minimum)",
+			testCase:    "Min is nil, max specified as percentage, no EPP (use hardware minimum)",
+			nodeName:    "TestNode",
+			profileName: "min-default-profile",
+			max:         &intstr.IntOrString{Type: intstr.String, StrVal: "75%"},
+			min:         nil,
+			epp:         "",
+			governor:    "powersave",
+		},
+		{
+			testCase:    "Min is nil, max specified, with EPP (use hardware minimum)",
 			nodeName:    "TestNode",
 			profileName: "min-default-epp-profile",
-			max:         2500,
-			min:         0,
+			max:         &intstr.IntOrString{Type: intstr.Int, IntVal: 2500},
+			min:         nil,
 			epp:         "balance_power",
 			governor:    "powersave",
 		},
 		// Both zero - EPP-based calculation
 		{
-			testCase:    "Both zero with EPP (use EPP-based calculation)",
+			testCase:    "Both nil with EPP (use EPP-based calculation)",
 			nodeName:    "TestNode",
 			profileName: "epp-based-profile",
-			max:         0,
-			min:         0,
+			max:         nil,
+			min:         nil,
 			epp:         "balance_performance",
 			governor:    "powersave",
 		},
 		// Both zero - hardware defaults
 		{
-			testCase:    "Both zero without EPP (use hardware defaults)",
+			testCase:    "Both nil without EPP (use hardware defaults)",
 			nodeName:    "TestNode",
 			profileName: "hardware-default-profile",
-			max:         0,
-			min:         0,
+			max:         nil,
+			min:         nil,
 			epp:         "",
 			governor:    "powersave",
 		},
@@ -638,17 +647,26 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyHandling(t *testing.T) {
 			testCase:    "Both values specified, no EPP (use as-is)",
 			nodeName:    "TestNode",
 			profileName: "explicit-values-profile",
-			max:         3200,
-			min:         1800,
+			max:         &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
+			min:         &intstr.IntOrString{Type: intstr.Int, IntVal: 1800},
 			epp:         "",
 			governor:    "powersave",
 		},
 		{
-			testCase:    "Both values specified, with EPP (use as-is)",
+			testCase:    "Both values specified as percentage, with EPP (use as-is)",
 			nodeName:    "TestNode",
 			profileName: "explicit-values-epp-profile",
-			max:         2800,
-			min:         2000,
+			max:         &intstr.IntOrString{Type: intstr.String, StrVal: "75%"},
+			min:         &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
+			epp:         "balance_performance",
+			governor:    "powersave",
+		},
+		{
+			testCase:    "Both values as 0% is a valid configuration",
+			nodeName:    "TestNode",
+			profileName: "explicit-values-epp-profile",
+			max:         &intstr.IntOrString{Type: intstr.String, StrVal: "0%"},
+			min:         &intstr.IntOrString{Type: intstr.String, StrVal: "0%"},
 			epp:         "balance_performance",
 			governor:    "powersave",
 		},
@@ -727,8 +745,8 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyValidationErrors(t *testing.T) {
 		testCase      string
 		nodeName      string
 		profileName   string
-		max           int
-		min           int
+		max           *intstr.IntOrString
+		min           *intstr.IntOrString
 		epp           string
 		governor      string
 		expectedError string
@@ -737,18 +755,38 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyValidationErrors(t *testing.T) {
 			testCase:      "Max lower than min (both specified)",
 			nodeName:      "TestNode",
 			profileName:   "invalid-range-profile",
-			max:           2600,
-			min:           2800,
+			max:           &intstr.IntOrString{Type: intstr.Int, IntVal: 2600},
+			min:           &intstr.IntOrString{Type: intstr.Int, IntVal: 2800},
 			epp:           "performance",
 			governor:      "powersave",
 			expectedError: "max frequency (2600) cannot be lower than the min frequency (2800)",
 		},
 		{
+			testCase:      "Max lower than min as percentage (both specified)",
+			nodeName:      "TestNode",
+			profileName:   "invalid-range-profile",
+			max:           &intstr.IntOrString{Type: intstr.String, StrVal: "25%"},
+			min:           &intstr.IntOrString{Type: intstr.String, StrVal: "75%"},
+			epp:           "performance",
+			governor:      "powersave",
+			expectedError: "max frequency (25%) cannot be lower than the min frequency (75%)",
+		},
+		{
+			testCase:      "Max and min of different types (both specified)",
+			nodeName:      "TestNode",
+			profileName:   "invalid-range-profile",
+			max:           &intstr.IntOrString{Type: intstr.Int, IntVal: 2500},
+			min:           &intstr.IntOrString{Type: intstr.String, StrVal: "75%"},
+			epp:           "performance",
+			governor:      "powersave",
+			expectedError: "max and min frequency must be either numeric or percentage",
+		},
+		{
 			testCase:      "Values outside hardware range - too low",
 			nodeName:      "TestNode",
 			profileName:   "too-low-profile",
-			max:           100,
-			min:           50,
+			max:           &intstr.IntOrString{Type: intstr.Int, IntVal: 100},
+			min:           &intstr.IntOrString{Type: intstr.Int, IntVal: 50},
 			epp:           "",
 			governor:      "powersave",
 			expectedError: "max and min frequency must be within the range",
@@ -757,18 +795,18 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyValidationErrors(t *testing.T) {
 			testCase:      "Values outside hardware range - too high",
 			nodeName:      "TestNode",
 			profileName:   "too-high-profile",
-			max:           9999999,
-			min:           9999998,
+			max:           &intstr.IntOrString{Type: intstr.Int, IntVal: 9999999},
+			min:           &intstr.IntOrString{Type: intstr.Int, IntVal: 9999998},
 			epp:           "",
 			governor:      "powersave",
 			expectedError: "max and min frequency must be within the range",
 		},
 		{
-			testCase:      "Min specified higher than hardware max when max=0",
+			testCase:      "Min specified higher than hardware max when max=nil",
 			nodeName:      "TestNode",
 			profileName:   "min-too-high-profile",
-			max:           0,    // Will use hardware max (3700 in our mock)
-			min:           5000, // Higher than hardware max
+			max:           nil,                                                 // Will use hardware max (3700 in our mock)
+			min:           &intstr.IntOrString{Type: intstr.Int, IntVal: 5000}, // Higher than hardware max
 			epp:           "",
 			governor:      "powersave",
 			expectedError: "max frequency (3700) cannot be lower than the min frequency (5000)",
@@ -777,8 +815,8 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyValidationErrors(t *testing.T) {
 			testCase:      "Shared profile with values outside hardware range",
 			nodeName:      "TestNode",
 			profileName:   "shared-too-low",
-			max:           100,
-			min:           100,
+			max:           &intstr.IntOrString{Type: intstr.Int, IntVal: 100},
+			min:           &intstr.IntOrString{Type: intstr.Int, IntVal: 100},
 			epp:           "",
 			governor:      "powersave",
 			expectedError: "max and min frequency must be within the range",
@@ -870,8 +908,8 @@ func TestPowerProfile_Reconcile_IncorrectEppValue(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "user-created",
 						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp: "incorrect",
 						},
 					},
@@ -949,8 +987,8 @@ func TestPowerProfile_Reconcile_SharedProfileDoesNotExistInLibrary(t *testing.T)
 						Name:   "shared",
 						Shared: true,
 						PStates: powerv1.PStatesConfig{
-							Max: 800,
-							Min: 800,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 800},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 800},
 						},
 					},
 				},
@@ -1144,8 +1182,8 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
 						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp: "performance",
 						},
 					},
@@ -1163,7 +1201,7 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 			},
 		},
 		{
-			testCase:    "Test Case 2 - Max|Min zero, epp performance",
+			testCase:    "Test Case 2 - Max|Min nil, epp performance",
 			nodeName:    "TestNode",
 			profileName: "performance",
 			clientObjs: []runtime.Object{
@@ -1175,8 +1213,8 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
 						PStates: powerv1.PStatesConfig{
-							Max: 0,
-							Min: 0,
+							Max: nil,
+							Min: nil,
 							Epp: "performance",
 						},
 					},
@@ -1206,8 +1244,8 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "user-created",
 						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp: "",
 						},
 					},
@@ -1328,8 +1366,8 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
 						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp: "performance",
 						},
 					},
@@ -1374,8 +1412,8 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
 						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp: "performance",
 						},
 					},
@@ -1520,8 +1558,8 @@ func TestPowerProfile_Reconcile_FeatureNotSupportedErr(t *testing.T) {
 						Name:   "shared",
 						Shared: true,
 						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp: "power",
 						},
 					},
@@ -1557,8 +1595,8 @@ func TestPowerProfile_Reconcile_FeatureNotSupportedErr(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
 						PStates: powerv1.PStatesConfig{
-							Max: 3600,
-							Min: 3200,
+							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp: "power",
 						},
 					},
@@ -1744,8 +1782,8 @@ func TestPowerProfile_Reconcile_UnsupportedGovernor(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
 						PStates: powerv1.PStatesConfig{
-							Max:      3600,
-							Min:      3200,
+							Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp:      "performance",
 							Governor: "made up",
 						},
@@ -1777,8 +1815,8 @@ func TestPowerProfile_Reconcile_UnsupportedGovernor(t *testing.T) {
 						Name:   "shared",
 						Shared: true,
 						PStates: powerv1.PStatesConfig{
-							Max:      1000,
-							Min:      1000,
+							Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 1000},
+							Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 1000},
 							Governor: "made up",
 						},
 					},
@@ -1840,8 +1878,8 @@ func TestPowerProfile_Wrong_Namespace(t *testing.T) {
 // uses dummy sysfs so must be run in isolation from other fuzzers
 // go test -fuzz FuzzPowerProfileController -run=FuzzPowerProfileController -parallel=1
 func FuzzPowerProfileController(f *testing.F) {
-	f.Add("TestNode", "performance", 3600, 3200, "performance", "powersave", false)
-	f.Fuzz(func(t *testing.T, nodeName, prof string, maxVal int, minVal int, epp string, governor string, shared bool) {
+	f.Add("TestNode", "performance", uint(3600), uint(3200), "performance", "powersave", false)
+	f.Fuzz(func(t *testing.T, nodeName, prof string, maxVal uint, minVal uint, epp string, governor string, shared bool) {
 		nodeName = strings.ReplaceAll(nodeName, " ", "")
 		nodeName = strings.ReplaceAll(nodeName, "\t", "")
 		nodeName = strings.ReplaceAll(nodeName, "\000", "")
@@ -1859,8 +1897,8 @@ func FuzzPowerProfileController(f *testing.F) {
 				Spec: powerv1.PowerProfileSpec{
 					Name: prof,
 					PStates: powerv1.PStatesConfig{
-						Max:      maxVal,
-						Min:      minVal,
+						Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: int32(maxVal)},
+						Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: int32(minVal)},
 						Epp:      epp,
 						Governor: governor,
 					},
@@ -1953,11 +1991,11 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 		expectedCStates map[string]bool,
 	) {
 		assert.Equal(t, expectedName, profile.Name())
-		assert.Equal(t, expectedMaxMHz*1000, profile.GetPStates().MaxFreq())
-		assert.Equal(t, expectedMinMHz*1000, profile.GetPStates().MinFreq())
-		assert.Equal(t, expectedEpp, profile.GetPStates().Epp())
-		assert.Equal(t, expectedGovernor, profile.GetPStates().Governor())
-		assert.Equal(t, expectedEpp, profile.GetPStates().Epp())
+		assert.Equal(t, expectedMaxMHz*1000, uint(profile.GetPStates().GetMaxFreq().IntVal))
+		assert.Equal(t, expectedMinMHz*1000, uint(profile.GetPStates().GetMinFreq().IntVal))
+		assert.Equal(t, expectedEpp, profile.GetPStates().GetEpp())
+		assert.Equal(t, expectedGovernor, profile.GetPStates().GetGovernor())
+		assert.Equal(t, expectedEpp, profile.GetPStates().GetEpp())
 		assert.Equal(t, expectedCStates, profile.GetCStates().States())
 	}
 
@@ -2021,8 +2059,8 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 					Spec: powerv1.PowerProfileSpec{
 						Name: tc.profileName,
 						PStates: powerv1.PStatesConfig{
-							Max:      3600,
-							Min:      3200,
+							Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+							Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 							Epp:      "performance",
 							Governor: "powersave",
 						},
@@ -2073,7 +2111,7 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 					profileName = tc.otherProfileName
 				}
 				initialProfile, err := power.NewPowerProfile(
-					profileName, uint(2000), uint(4000), "powersave", "power",
+					profileName, &intstr.IntOrString{Type: intstr.Int, IntVal: 2000}, &intstr.IntOrString{Type: intstr.Int, IntVal: 3000}, "powersave", "power",
 					map[string]bool{"C0": true, "C1": true, "C1E": false, "C3": true}, nil)
 				assert.Nil(t, err)
 				err = sharedPool.SetPowerProfile(initialProfile)
@@ -2086,7 +2124,7 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 				reservedPool, err = host.AddExclusivePool(reservedPoolName)
 				assert.Nil(t, err)
 				initialProfile, err := power.NewPowerProfile(
-					tc.setupReservedPoolProfile, uint(2000), uint(4000), "powersave", "balance_performance",
+					tc.setupReservedPoolProfile, &intstr.IntOrString{Type: intstr.Int, IntVal: 2000}, &intstr.IntOrString{Type: intstr.Int, IntVal: 3000}, "powersave", "balance_performance",
 					map[string]bool{"C0": true, "C1": false, "C1E": false, "C3": false}, nil)
 				assert.Nil(t, err)
 				err = reservedPool.SetPowerProfile(initialProfile)
@@ -2111,13 +2149,13 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 			assert.NotNil(t, exclusivePool, "Exclusive pool should be created/updated")
 			currentProfile := exclusivePool.GetPowerProfile()
 			assert.NotNil(t, currentProfile, "Exclusive pool should have a profile")
-			verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200),
+			verifyProfileParameters(currentProfile, tc.profileName, 3600, 3200,
 				"powersave", "performance", map[string]bool{"C0": true, "C1": true, "C1E": false, "C3": false})
 
 			if tc.expectSharedUpdate {
 				currentProfile := sharedPool.GetPowerProfile()
 				assert.NotNil(t, currentProfile, "Shared pool should have the updated profile")
-				verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200),
+				verifyProfileParameters(currentProfile, tc.profileName, 3600, 3200,
 					"powersave", "performance", map[string]bool{"C0": true, "C1": true, "C1E": false, "C3": false})
 			} else if tc.setupSharedPoolProfile == "" {
 				currentProfile := sharedPool.GetPowerProfile()
@@ -2125,7 +2163,7 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 			} else if tc.setupSharedPoolProfile == tc.otherProfileName {
 				currentProfile := sharedPool.GetPowerProfile()
 				assert.NotNil(t, currentProfile, "Shared pool should have the original profile")
-				verifyProfileParameters(currentProfile, tc.otherProfileName, uint(4000), uint(2000),
+				verifyProfileParameters(currentProfile, tc.otherProfileName, 3000, 2000,
 					"powersave", "power", map[string]bool{"C0": true, "C1": true, "C1E": false, "C3": true})
 			}
 
@@ -2133,12 +2171,12 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 				assert.NotNil(t, reservedPool, "Reserved pool should exist")
 				currentProfile := reservedPool.GetPowerProfile()
 				assert.NotNil(t, currentProfile, "Reserved pool should have the updated profile")
-				verifyProfileParameters(currentProfile, tc.profileName, uint(3600), uint(3200),
+				verifyProfileParameters(currentProfile, tc.profileName, 3600, 3200,
 					"powersave", "performance", map[string]bool{"C0": true, "C1": true, "C1E": false, "C3": false})
 			} else if tc.setupReservedPoolProfile != "" {
 				currentProfile := reservedPool.GetPowerProfile()
 				assert.NotNil(t, currentProfile, "Reserved pool should have the original profile")
-				verifyProfileParameters(currentProfile, tc.setupReservedPoolProfile, uint(4000), uint(2000),
+				verifyProfileParameters(currentProfile, tc.setupReservedPoolProfile, 3000, 2000,
 					"powersave", "balance_performance", map[string]bool{"C0": true, "C1": false, "C1E": false, "C3": false})
 			}
 		})
@@ -2450,8 +2488,8 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 				Spec: powerv1.PowerProfileSpec{
 					Name: tc.profileName,
 					PStates: powerv1.PStatesConfig{
-						Max:      3600,
-						Min:      3200,
+						Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+						Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 						Epp:      "performance",
 						Governor: "powersave",
 					},
@@ -2471,7 +2509,7 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 					// Parse as absolute integer value
 					cpuCount, err := strconv.Atoi(tc.cpuCapacity)
 					if err == nil {
-						profile.Spec.CpuCapacity = intstr.FromInt(cpuCount)
+						profile.Spec.CpuCapacity = intstr.FromInt32(int32(cpuCount))
 					} else {
 						profile.Spec.CpuCapacity = intstr.FromString(tc.cpuCapacity)
 					}
@@ -2595,8 +2633,8 @@ func TestPowerProfile_Reconcile_NodeSelectorCleanup(t *testing.T) {
 			},
 			CpuCapacity: intstr.FromString("50%"),
 			PStates: powerv1.PStatesConfig{
-				Max:      3600,
-				Min:      3200,
+				Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+				Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 				Epp:      "performance",
 				Governor: "powersave",
 			},
