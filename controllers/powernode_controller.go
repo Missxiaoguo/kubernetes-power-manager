@@ -111,8 +111,8 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 		if cstatesString == "" && cstatesLatency != nil {
 			cstatesString = fmt.Sprintf("maxLatency: %d", *cstatesLatency)
 		}
-		profileString := fmt.Sprintf("%s: %v || %v || %s || %s || %s",
-			profileFromLibrary.Name(), pstates.GetMaxFreq(), pstates.GetMinFreq(), pstates.GetEpp(), pstates.GetGovernor(), cstatesString)
+		profileString := fmt.Sprintf("%s: %s || %s || %s || %s || %s",
+			profileFromLibrary.Name(), formatIntOrStringValue(pstates.GetMaxFreq()), formatIntOrStringValue(pstates.GetMinFreq()), pstates.GetEpp(), pstates.GetGovernor(), cstatesString)
 		powerProfileStrings = append(powerProfileStrings, profileString)
 	}
 
@@ -176,7 +176,7 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 		cores := prettifyCoreList(sharedCores)
 		pstates := sharedProfile.GetPStates()
 		powerNode.Status.SharedPool = fmt.Sprintf("%s || %v || %v || %s",
-			sharedProfile.Name(), pstates.GetMaxFreq(), pstates.GetMinFreq(), cores)
+			sharedProfile.Name(), formatIntOrStringValue(pstates.GetMaxFreq()), formatIntOrStringValue(pstates.GetMinFreq()), cores)
 	} else {
 		powerNode.Status.SharedPool = ""
 	}
@@ -188,7 +188,7 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 			cores := prettifyCoreList(pool.Cpus().IDs())
 			pstates := pool.GetPowerProfile().GetPStates()
 			powerNode.Status.ReservedPools = append(powerNode.Status.ReservedPools,
-				fmt.Sprintf("%v || %v || %s", pstates.GetMaxFreq(), pstates.GetMinFreq(), cores))
+				fmt.Sprintf("%s || %s || %s", formatIntOrStringValue(pstates.GetMaxFreq()), formatIntOrStringValue(pstates.GetMinFreq()), cores))
 		}
 	}
 	logger.V(5).Info("configurating the cores to the reserved pool")

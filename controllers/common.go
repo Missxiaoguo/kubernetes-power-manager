@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -27,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -134,4 +136,13 @@ func validateProfileAvailabilityOnNode(ctx context.Context, c client.Client, pro
 		return false, err
 	}
 	return match, nil
+}
+
+// formatIntOrStringValue extracts the actual value from IntOrString as a string
+// Returns the integer value as string for Int type, or the string value for String type
+func formatIntOrStringValue(value intstr.IntOrString) string {
+	if value.Type == intstr.Int {
+		return strconv.Itoa(int(value.IntVal))
+	}
+	return value.StrVal
 }
