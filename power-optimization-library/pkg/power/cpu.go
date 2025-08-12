@@ -11,22 +11,6 @@ const (
 	numOfSupportedCoreTypes uint = 2
 )
 
-// uints are references to an array index of frequency sets
-type supportedCores struct {
-	pcore uint
-	ecore uint
-}
-
-func (c *supportedCores) Pcore() uint {
-	return c.pcore
-}
-func (c *supportedCores) Ecore() uint {
-	return c.ecore
-}
-
-// public instance with read only access to supported core types
-var CpuTypeReferences = supportedCores{}
-
 // Cpu represents a compute unit/thread as seen by the OS
 // it is either a physical core ot virtual thread if hyperthreading/SMT is enabled
 type Cpu interface {
@@ -183,8 +167,7 @@ func (cpu *cpuImpl) GetAbsMinMax() (uint, uint) {
 	if !featureList.isFeatureIdSupported(FrequencyScalingFeature) {
 		return 0, 0
 	}
-	typeNum := cpu.core.GetType()
-	return coreTypes[typeNum].GetMin(), coreTypes[typeNum].GetMax()
+	return uint(allCPUDefaultPStatesInfo[cpu.id].minFreq.IntVal), uint(allCPUDefaultPStatesInfo[cpu.id].maxFreq.IntVal)
 }
 
 func (cpu *cpuImpl) GetCore() Core {

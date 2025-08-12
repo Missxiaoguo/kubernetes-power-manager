@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap/zapcore"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -78,8 +79,8 @@ var defaultProf = &powerv1.PowerProfile{
 		Name: "performance",
 		PStates: powerv1.PStatesConfig{
 			Epp: "",
-			Max: 3600,
-			Min: 3200,
+			Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+			Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 		},
 	},
 }
@@ -201,7 +202,7 @@ func TestPowerNode_Reconcile(t *testing.T) {
 	defer teardown()
 	pool, err := dummyFilesystemHost.AddExclusivePool("performance-TestNode")
 	assert.Nil(t, err)
-	prof, err := power.NewPowerProfile("performance", 1000, 1000, "powersave", "", map[string]bool{}, nil)
+	prof, err := power.NewPowerProfile("performance", &intstr.IntOrString{Type: intstr.Int, IntVal: 1000}, &intstr.IntOrString{Type: intstr.Int, IntVal: 1000}, "powersave", "", map[string]bool{}, nil)
 	assert.Nil(t, err)
 	err = dummyFilesystemHost.GetSharedPool().SetPowerProfile(prof)
 	assert.Nil(t, err)
@@ -349,7 +350,7 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 	defer teardown()
 	pool, err := dummyFilesystemHost.AddExclusivePool("performance")
 	assert.Nil(t, err)
-	prof, err := power.NewPowerProfile("performance", 10000, 10000, "powersave", "", map[string]bool{}, nil)
+	prof, err := power.NewPowerProfile("performance", &intstr.IntOrString{Type: intstr.Int, IntVal: 1000}, &intstr.IntOrString{Type: intstr.Int, IntVal: 1000}, "powersave", "", map[string]bool{}, nil)
 	assert.Nil(t, err)
 	pool.SetPowerProfile(prof)
 	err = dummyFilesystemHost.GetSharedPool().SetPowerProfile(prof)
@@ -474,7 +475,7 @@ func FuzzPowerNodeController(f *testing.F) {
 		defer teardown()
 
 		pool, err1 := dummyFilesystemHost.AddExclusivePool(prof1)
-		profile, err2 := power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{}, nil)
+		profile, err2 := power.NewPowerProfile(prof1, &intstr.IntOrString{Type: intstr.Int, IntVal: 10000}, &intstr.IntOrString{Type: intstr.Int, IntVal: 10000}, "powersave", "", map[string]bool{}, nil)
 		// continue test without pools
 		if err1 == nil && err2 == nil {
 			pool.SetPowerProfile(profile)
@@ -485,7 +486,7 @@ func FuzzPowerNodeController(f *testing.F) {
 			if err != nil {
 				return
 			}
-			profile, err = power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{}, nil)
+			profile, err = power.NewPowerProfile(prof1, &intstr.IntOrString{Type: intstr.Int, IntVal: 10000}, &intstr.IntOrString{Type: intstr.Int, IntVal: 10000}, "powersave", "", map[string]bool{}, nil)
 			if err != nil {
 				return
 			}
@@ -494,7 +495,7 @@ func FuzzPowerNodeController(f *testing.F) {
 			if err != nil {
 				return
 			}
-			profile, err = power.NewPowerProfile(prof1, 10000, 10000, "powersave", "", map[string]bool{}, nil)
+			profile, err = power.NewPowerProfile(prof1, &intstr.IntOrString{Type: intstr.Int, IntVal: 10000}, &intstr.IntOrString{Type: intstr.Int, IntVal: 10000}, "powersave", "", map[string]bool{}, nil)
 			if err != nil {
 				return
 			}

@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -128,8 +129,8 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 		Spec: powerv1.PowerProfileSpec{
 			Name: "performance",
 			PStates: powerv1.PStatesConfig{
-				Max:      3600,
-				Min:      3200,
+				Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
+				Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
 				Epp:      "performance",
 				Governor: "powersave",
 			},
@@ -538,7 +539,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			host, teardown, err := fullDummySystem()
 			assert.Nil(t, err)
 			defer teardown()
-			sharedProf, err := power.NewPowerProfile("shared", 1000, 1000, "powersave", "power", map[string]bool{"C1": false}, nil)
+			sharedProf, err := power.NewPowerProfile("shared", &intstr.IntOrString{Type: intstr.Int, IntVal: 1000}, &intstr.IntOrString{Type: intstr.Int, IntVal: 1000}, "powersave", "power", map[string]bool{"C1": false}, nil)
 			assert.Nil(t, err)
 			assert.Nil(t, host.GetSharedPool().SetPowerProfile(sharedProf))
 			perf, err := host.AddExclusivePool("performance")
@@ -717,8 +718,8 @@ func FuzzPowerWorkloadController(f *testing.F) {
 				Spec: powerv1.PowerProfileSpec{
 					Name: prof,
 					PStates: powerv1.PStatesConfig{
-						Max:      maxVal,
-						Min:      minVal,
+						Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: int32(maxVal)},
+						Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: int32(minVal)},
 						Epp:      epp,
 						Governor: governor,
 					},

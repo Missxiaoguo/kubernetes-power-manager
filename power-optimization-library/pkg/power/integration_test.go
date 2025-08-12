@@ -9,12 +9,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
 // this test checks for potential race condition where one go routine moves cpus to a pool and another changes a power
 // profile of the target pool
 func TestConcurrentMoveCpusSetProfile(t *testing.T) {
-	typecopy := CpuTypeReferences
 	const count = 5
 	for i := 0; i < count; i++ {
 		doConcurrentMoveCPUSetProfile(t)
@@ -23,8 +23,6 @@ func TestConcurrentMoveCpusSetProfile(t *testing.T) {
 	for _, status := range featureList {
 		status.err = uninitialisedErr
 	}
-	CpuTypeReferences = typecopy
-
 }
 
 func doConcurrentMoveCPUSetProfile(t *testing.T) {
@@ -93,7 +91,7 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 	assert.ElementsMatch(t, *instance.GetReservedPool().Cpus(), *instance.GetAllCpus())
 	assert.Empty(t, *instance.GetSharedPool().Cpus())
 
-	powerProfile, err := NewPowerProfile("pwr", 100, 1000, "performance", "performance", map[string]bool{"C1": true, "C6": false}, nil)
+	powerProfile, err := NewPowerProfile("pwr", &intstr.IntOrString{Type: intstr.Int, IntVal: 100}, &intstr.IntOrString{Type: intstr.Int, IntVal: 1000}, "performance", "performance", map[string]bool{"C1": true, "C6": false}, nil)
 	assert.NoError(t, err)
 
 	moveCoresErrChan := make(chan error)
@@ -130,27 +128,27 @@ func verifyPowerProfile(cpuId uint, profile Profile) error {
 	pstates := profile.GetPStates()
 	governor, err := readCpuStringProperty(cpuId, scalingGovFile)
 	allerrs = append(allerrs, err)
-	if governor != pstates.Governor() {
-		allerrs = append(allerrs, fmt.Errorf("governor mismatch expected : %s, current %s", pstates.Governor(), governor))
+	if governor != pstates.GetGovernor() {
+		allerrs = append(allerrs, fmt.Errorf("governor mismatch expected : %s, current %s", pstates.GetGovernor(), governor))
 	}
 
-	if pstates.Epp() != "" {
+	if pstates.GetEpp() != "" {
 		epp, err := readCpuStringProperty(cpuId, eppFile)
 		allerrs = append(allerrs, err)
-		if epp != pstates.Epp() {
-			allerrs = append(allerrs, fmt.Errorf("epp mismatch expected : %s, current %s", pstates.Epp(), epp))
+		if epp != pstates.GetEpp() {
+			allerrs = append(allerrs, fmt.Errorf("epp mismatch expected : %s, current %s", pstates.GetEpp(), epp))
 		}
 	}
 
 	maxFreq, err := readCpuUintProperty(cpuId, scalingMaxFile)
 	allerrs = append(allerrs, err)
-	if maxFreq != pstates.MaxFreq() && maxFreq != pstates.EfficientMaxFreq() {
-		allerrs = append(allerrs, fmt.Errorf("maxFreq mismatch expected %d, current %d", pstates.MaxFreq(), maxFreq))
+	if maxFreq != uint(pstates.GetMaxFreq().IntVal) {
+		allerrs = append(allerrs, fmt.Errorf("maxFreq mismatch expected %d, current %d", pstates.GetMaxFreq().IntVal, maxFreq))
 	}
 	minFreq, err := readCpuUintProperty(cpuId, scalingMinFile)
 	allerrs = append(allerrs, err)
-	if minFreq != pstates.MinFreq() && minFreq != pstates.EfficientMinFreq() {
-		allerrs = append(allerrs, fmt.Errorf("minFreq mismatch expected %d, current %d", pstates.MinFreq(), minFreq))
+	if minFreq != uint(pstates.GetMinFreq().IntVal) {
+		allerrs = append(allerrs, fmt.Errorf("minFreq mismatch expected %d, current %d", pstates.GetMinFreq().IntVal, minFreq))
 	}
 
 	for stateName, expected := range profile.GetCStates().States() {

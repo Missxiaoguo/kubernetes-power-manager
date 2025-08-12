@@ -10,7 +10,7 @@ metadata:
  namespace: intel-power
 spec:
  name: application
- cpuCapacity: "99" #
+ cpuCapacity: "99"
  # cpuCapacity: "50%"
  nodeSelector:
    labelSelector:
@@ -27,7 +27,13 @@ spec:
          operator: Exists
  pstates:
    governor: "powersave"
-   min: 3000
+   # For min and max, the following apply:
+   # - "0%" is a valid configuration
+   # - "100%" is a valid configuration
+   # - if unspecified, the hardware limit is used
+   # min: "25%" # accepted
+   # max: "75%" # accepted
+   min: 3000 # Optional, hardware limit is used when unspecified
    max: 3500 # Optional, hardware limit is used when unspecified
    epp: balance_performance
  cstates:
