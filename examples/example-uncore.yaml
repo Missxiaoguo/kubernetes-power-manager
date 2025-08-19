@@ -15,3 +15,17 @@ spec:
     #   die: 1
     #   min: 1200000
     #   max: 2400000
+---
+apiVersion: power.amdepyc.com/v1
+kind: Uncore
+metadata:
+  name: <NODE_NAME>
+  namespace: intel-power
+spec:
+ sysMax: 1  # Maximum DF PState (0-2) - lower number = higher performance
+ sysMin: 2  # Minimum DF PState (0-2)
+ # Optional: configure specific packages
+ dieSelector:
+   - package: 0  # Socket 0 (DF P-states are per-socket, not per-die) 
+     min: 1      # Min DF PState for this socket
+     max: 0      # Max DF PState for this socket

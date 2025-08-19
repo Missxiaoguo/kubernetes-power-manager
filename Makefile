@@ -298,3 +298,21 @@ update:
 	sed -i 's|image: .*|image: $(IMG)|' config/manager/ocp/manager.yaml
 	sed -i 's|image: .*|image: $(IMG_AGENT)|' build/manifests/power-node-agent-ds.yaml
 	sed -i 's|image: .*|image: $(IMG_AGENT)|' build/manifests/ocp/power-node-agent-ds.yaml
+
+# markdownlint rules, following: https://github.com/openshift/enhancements/blob/master/Makefile
+.PHONY: markdownlint-image
+markdownlint-image:  ## Build local container markdownlint-image
+	$(IMGTOOL) image build -f ./hack/Dockerfile.markdownlint --tag $(IMAGE_NAME)-markdownlint:latest ./hack
+
+.PHONY: markdownlint-image-clean
+markdownlint-image-clean:  ## Remove locally cached markdownlint-image
+	$(IMGTOOL) image rm $(IMAGE_NAME)-markdownlint:latest
+
+markdownlint: markdownlint-image  ## run the markdown linter
+	$(IMGTOOL) run \
+		--rm=true \
+		--env RUN_LOCAL=true \
+		--env VALIDATE_MARKDOWN=true \
+		--env PULL_BASE_SHA=$(PULL_BASE_SHA) \
+		-v $$(pwd):/workdir:Z \
+		$(IMAGE_NAME)-markdownlint:latest

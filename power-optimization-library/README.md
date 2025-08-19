@@ -1,16 +1,9 @@
-# DISCONTINUATION OF PROJECT  
-This project will no longer be maintained by Intel.  
-Intel has ceased development and contributions including, but not limited to, maintenance, bug fixes, new releases, or updates, to this project.  
-Intel no longer accepts patches to this project.  
-If you have an ongoing need to use this project, are interested in independently developing it, or would like to maintain patches for the open source software community, please create your own fork of this project.  
-
-
-# Intel® Power Optimization Library
+# Power Optimization Library
 
 The Intel Power Optimization Library is an open source library that takes the desired configuration of the user to tune
 the frequencies and set the priority level of the cores.
 
-# Overview
+## Overview
 
 The Power Optimization Library takes allows management of CPUs power/performance on via Pool based management
 
@@ -19,26 +12,26 @@ This library is currently used as part of the
 
 ## Features
 
-* Pool based Frequency Tuning
-* Facilitate use of Intel SST (Speed Select Technology) Suite
-    * SST-CP - Speed Select Technology - Core Power
-* C-States control
-* Uncore frequency
-* CPU Topology discovery and awareness
+- Pool based Frequency Tuning
+- Facilitate use of Intel SST (Speed Select Technology) Suite
+  - SST-CP - Speed Select Technology - Core Power
+- C-States control
+- Uncore frequency
+- CPU Topology discovery and awareness
 
-# Prerequisites
+## Prerequisites
 
 - Linux based OS
 - P-State or acpi-cpufreq scaling driver enabled
 - C-States
-    - ``intel_cstates`` kernel module loaded
+  - ``intel_cstates`` kernel module loaded
 - Uncore frequency
-    - kernel 5.6+ compiled with ``CONFIG_INTEL_UNCORE_FREQ_CONTROL``
-    - ``intel-uncore-frequency`` kernel module loaded
+  - kernel 5.6+ compiled with ``CONFIG_INTEL_UNCORE_FREQ_CONTROL``
+  - ``intel-uncore-frequency`` kernel module loaded
 
 **Note:** on Ubuntu systems for Uncore frequency feature a ``linux-generic-hwe`` kernel is required
 
-# Definitions
+## Definitions
 
 **Intel SST-CP (Speed Select Technology - Core Power)** - allows the user to group cores into levels of priority.
 When there is power to spare on the system, it can be distributed among the cores based on their priority level.
@@ -68,7 +61,7 @@ for managing coherency, managing access to the DIMMs, managing power distributio
 
 **Uncore Frequency**  the frequency of the Uncore fabric.
 
-# Usage
+## Usage
 
 CPU frequency/power values are managed by assigning Cores to desired pools, associated with their attached Power
 Profiles. The user of the Power Optimization Library can create any number of Exclusive Pools and Power Profiles.
@@ -94,35 +87,35 @@ be managed. \
 The below will leave CPUs with id 0,1 unmanaged by the library in the Reserved Pool and move all other CPUs to Shared
 Pool.
 
-````go
+```go
 host.GetReservedPool().SetCpuIDs([]uint{0, 1})
-````
+```
 
 Alternatively CPUs to be put in the Shared Pool can be provided
 
-````go
+```go
 host.GetSharedPool().SecCpuIDs([]uint{2, 3, 4, 5, 6,7})
-````
+```
 
 Create an Exclusive pool with the name ``"performance-pool"``. No CPUs placed are in an exclusive pool upon creation.
 
-````go
+```go
 performancePool, err := node.AddExclusivePool("performance-pool")
-````
+```
 
 Move desired CPUs to the new Pool
 
-````go
+```go
 err := performancePool.MoveCpuIDs([]uint{3, 4})
-````
+```
 
 CPUs can only be moved to/from shared pool, cannot move pools from reserved pool or directly between exclusive pools
 
 Exclusive pools can also be removed.
 
-````go
+```go
 err := perofmancePool.Remove()
-````
+```
 
 All CPUs in the removed pool will be moved back to the Shared Pool.
 
@@ -133,78 +126,80 @@ Power profiles can be associated with any Exclusive Pool or the Shared Pool
 To set a power Profile firs create it using ``NewPowerProfile(name, minFreq, maxFreq, governor, epp)``
 All frequency values are in kHz
 
-````go
+```go
 performanceProfile, err := NewPowerProfile("powerProfile", 2_600_000, 2_800_000, "performance", "performance")
-````
+```
+
 You can also use the ``NewEcorePowerProfile(name, minFreq, maxFreq, emin, emax, governor, epp)`` constructor to
 create a profile that supports environments with performance and efficiency cores.
 
-````go
+```go
 performanceProfile, err := NewEcorePowerProfile("powerProfile", 2_600_000, 2_800_000, 1_600_000, 1_800_000 "performance", "performance")
-````
+```
 
 All values and support by hardware is validated during Profile creation.
 
 A power profile can now be associated with an Exclusive Pool or Shared Pool
 
-````go
+```go
 err := host.GetExclusivePool("performance-pool").SetPowerProfilePool(performanceProfile)
-````
+```
 
 Power Profiles can be unset/removed by passing ``nil``. this will restore CPUs frequencies, governor and epp to default
 
-````go
+```go
 err := host.GetExclusivePool("performance-pool").SetPowerProfile(nil)
-````
+```
 
 ### C-States
 
 C-States can be configured similarly by creating a CStates object and applying it to a pool
 
-````go
+```go
 err := host.GetExclusivePool("performance-pool").SetCstates(CStates{"C0": true})
-````
+```
 
 It is also possible to set CStates on a per-CPU basis. This configuration will always precede per-Pool configuration
 
-````go
+```go
 err := host.GetAllCpus().ById(4).SetCstates(CStates{"C0": true})
-````
+```
 
 Multiple CPUs
 
-````go
+```go
 cStates := Cstates{"C0": true}
 for _, cpu := range host.GetAllCpus().ManyByIDs([]uint{3, 4, 5}){
     err := cpu.SetCStates(cStates)
 }
-````
+```
 
 ### Uncore frequency
 
-It is possible to set uncore frequency on a system-wide basis, per-package basis or per-die basis. Higher granularity 
+It is possible to set uncore frequency on a system-wide basis, per-package basis or per-die basis.
+Higher granularity
 objects i.e. per-die config will always precede per-package configuration
 
 First create uncore object.
 **Note:** due to driver limitations frequency will be rounded down to the nearest multiple of 100,000
 
-````go
+```go
 uncore, err := NewUncore(2_000_000, 2_500_000)
-````
+```
 
 Uncore will be validated during creation against hardware capabilities
 
 The uncore can now be applied system-wide, to package or die
 
-````go
+```go
 err := host.Topology().SetUncore(uncore)
 err := host.Topology().Package(0).Die(0).SetUncore(uncore)
-````
+```
 
-# References
+## References
 
 - [Intel® Speed Select Technology - Core Power (Intel® SST-CP) Overview Technology Guide](https://networkbuilders.intel.com/solutionslibrary/intel-speed-select-technology-core-power-intel-sst-cp-overview-technology-guide)
 
-# License
+## License
 
 Apache 2.0 license, See [License](LICENSE)
