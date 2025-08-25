@@ -1,9 +1,9 @@
-# Power Manger Architectural and Sequence Diagrams
+# Kubernetes Power Manager Architectural and Sequence Diagrams
 
 An up-to-date architectural and sequence diagram will be available here.  
 With each update or release an updated diagram will be available with the version number attached.
 
-## Install PlnatUML
+## Install PlantUML
 
 - install plantuml.jar [here](http://sourceforge.net/projects/plantuml/files/plantuml.jar/download)
 - To run PlantUML you need:

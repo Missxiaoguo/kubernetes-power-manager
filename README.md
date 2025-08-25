@@ -1,5 +1,12 @@
 # Kubernetes Power Manager
 
+## DISCONTINUATION OF PROJECT
+
+This project will no longer be maintained by Intel.  
+Intel has ceased development and contributions including, but not limited to, maintenance, bug fixes, new releases, or updates, to this project.  
+Intel no longer accepts patches to this project.  
+If you have an ongoing need to use this project, are interested in independently developing it, or would like to maintain patches for the open source software community, please create your own fork of this project.
+
 ## Introduction
 
 Utilizing a container orchestration engine like Kubernetes, CPU resources are allocated from a pool of platforms
@@ -9,7 +16,7 @@ The Kubernetes Power Manager is a Kubernetes Operator that has been developed to
 to dynamically request adjustment of worker node power management settings applied to cores allocated to the Pods. The
 power management-related settings can be applied to individual cores or to groups of cores, and each
 may have different policies applied. It is not required that every core in the system be explicitly managed by this
-Kubernetes power manager. When the Power Manager is used to specify core power related policies, it overrides the
+Kubernetes power manager. When the Power Manager is used to specify core power relatead policies, it overrides the
 default settings
 
 Powerful features from the Intel SST package give users more precise control over CPU performance and power use on a
@@ -29,8 +36,6 @@ The Kubernetes Power Manager bridges the gap between the container orchestration
 
 ### Use Cases
 
-- Users may want to pre-schedule nodes to move to a performance profile during peak times to minimize spin up.
-  At times not during peak, they may want to move to a power saving profile.
 - *Unpredictable machine use.*
   Users may use machine learning through monitoring to determine profiles that predict a peak need for compute, to spin up
   ahead of time.
@@ -99,14 +104,16 @@ The Kubernetes Power Manager bridges the gap between the container orchestration
   
     - **cppc_cpufreq**
 
+      This is often the default for aarch64 systems.
+
 - **CPU Idle Time Management**
 
-  To save energy on a system, you can command the CPU to go into a low-power mode. Each CPU has several power modes, which are collectively called C-States. These work by cutting the clock signal and power from idle CPUs, or CPUs that are not executing commands. More details in the [kernel CPU Idle section](https://docs.kernel.org/driver-api/pm/cpuidle.html).
+  To save energy on a system, you can allow the CPU to go into a low-power mode. Each CPU has several power modes, which are collectively called C-States. These work by cutting the clock signal and power from idle CPUs, or CPUs that are not executing commands. More details in the [kernel CPU Idle section](https://docs.kernel.org/driver-api/pm/cpuidle.html).
   
   KPM supports both explicit C-state configuration by name and latency-based C-states configuration, allowing for a more fine-grained control over the trade-off between power saving and latency. C-states can now be configured directly within PowerProfiles alongside P-state settings.
 
   - The C-States configuration in Linux is stored in `/sys/devices/system/cpu/cpuN/cpuidle` or `/sys/devices/system/cpu/cpuidle`. To determine the driver in use, simply check the `/sys/devices/system/cpu/cpuidle/current_driver` file.
-  - C-States have to be confirmed if they are actually active on the system. If a user requests any C-States, they need to check on the system if they are activated and if they are not, reject the PowerConfig. The available C-States are found in `/sys/devices/system/cpu/cpuN/cpuidle/stateN/`.
+  - Before configuring C-states in a PowerProfile, the user must confirm which C-states are actually available on the system. The available C-States are found under `/sys/devices/system/cpu/cpuN/cpuidle/stateN/`.
 
 - **Uncore and equivalents**
 
@@ -135,7 +142,7 @@ The Kubernetes Power Manager bridges the gap between the container orchestration
     - When min equals max, a fixed DF P-state is set. This disables automatic DF p-state scaling and locks the DF to operate at that specific performance level.
     - When min differs max, DF is allowed to dynamically scale between the specified DF P-states range.
 
-    AMD example can be found in the [example-uncore.yaml](examples/example-uncore.yaml)
+    This is not currently supported in KPM.
 
   - **ARM** - no equivalent supported
 
@@ -148,61 +155,23 @@ Once detected, the user can instruct the Kubernetes Power Manager to deploy the 
   > **Note: NFD is recommended, but not essential. Node labels can also be applied manually. See
   the [NFD repo](https://github.com/kubernetes-sigs/node-feature-discovery#feature-labels) for a full list of features labels.**
 
-- If not using NFD, label the node manually:
+- If not using NFD or labels added through NFD, label the node manually with a label of your choosing:
 
   ```console
   oc label node <node-name> feature.node.kubernetes.io/power-node=true
   ```
 
-- **Important**: In the kubelet configuration file the `cpuManagerPolicy` has to set to `static`, and the `reservedSystemCPUs` must be set to the desired value:
+  > Note: Make sure to use the same label in the `PowerConfig`, under `spec.powerNodeSelector`.
+
+- **Important**: In the kubelet configuration file the `cpuManagerPolicy` has to set to `static`, and the `reservedSystemCPUs` must be set to the desired value (full file [here](./examples/example-kubelet-configuration.yaml)):
 
   ```yaml
   apiVersion: kubelet.config.k8s.io/v1beta1
-  authentication:
-    anonymous:
-      enabled: false
-    webhook:
-      cacheTTL: 0s
-      enabled: true
-    x509:
-      clientCAFile: /etc/kubernetes/pki/ca.crt
-  authorization:
-    mode: Webhook
-    webhook:
-      cacheAuthorizedTTL: 0s
-      cacheUnauthorizedTTL: 0s
-  cgroupDriver: systemd
-  clusterDNS:
-    - 10.96.0.10
-  clusterDomain: cluster.local
+  ...
   cpuManagerPolicy: "static"
-  cpuManagerReconcilePeriod: 0s
-  evictionPressureTransitionPeriod: 0s
-  fileCheckFrequency: 0s
-  healthzBindAddress: 127.0.0.1
-  healthzPort: 10248
-  httpCheckFrequency: 0s
-  imageMinimumGCAge: 0s
-  kind: KubeletConfiguration
-  logging:
-    flushFrequency: 0
-    options:
-      json:
-        infoBufferSize: "0"
-    verbosity: 0
-  memorySwap: { }
-  nodeStatusReportFrequency: 0s
-  nodeStatusUpdateFrequency: 0s
+  ...
   reservedSystemCPUs: "0"
-  resolvConf: /run/systemd/resolve/resolv.conf
-  rotateCertificates: true
-  runtimeRequestTimeout: 0s
-  shutdownGracePeriod: 0s
-  shutdownGracePeriodCriticalPods: 0s
-  staticPodPath: /etc/kubernetes/manifests
-  streamingConnectionIdleTimeout: 0s
-  syncFrequency: 0s
-  volumeStatsAggPeriod: 0s
+  ...
   ```
 
 ## Deploying the Kubernetes Power Manager using kustomize
@@ -348,14 +317,14 @@ spec:
 The Power Workload controller is responsible for the actual tuning of the cores. The Power Workload Controller uses the Power
 Optimization Library and requests that it creates the Pools. The Pools hold the `PowerProfile` associated with the cores and the cores that need to be configured.
 
-The `PowerWorkload` objects are created automatically by the PowerPod controller for non-shared `PowerProfiles`. This action is undertaken by the
-Kubernetes Power Manager when a Pod is created with a container requesting exclusive cores and a `PowerProfile`.
-
+`PowerWorkload` objects are automatically created for each valid non-Shared `PowerProfile` by the Power Profile controller.
 `PowerWorkload` objects can also be created directly by the user via the `PowerWorkload` spec. This is only recommended when
 creating the Shared `PowerWorkload` for a given Node, as this is the responsibility of the user. If no Shared
 `PowerWorkload` is created, the cores that remain in the *shared pool* on the Node will remain at their core frequency
 values instead of being tuned to lower frequencies. `PowerWorkloads` are specific to a given node, so one is created for
 each Node with a Pod requesting a `PowerProfile`, based on the `PowerProfile` requested.
+
+> **Note: A Shared `PowerWorkload` is mandatory if guaranteed pods will need to use `PowerProfiles`.**
 
 **Example PowerWorkload with exclusive CPUs:**
 
@@ -396,9 +365,7 @@ The reserved CPUs on the Node must also be specified, as these will not be consi
 It is important that the reservedCPUs value directly corresponds to the reservedCPUs value in the user’s Kubelet config to keep them consistent.\
 The user determines the Node for this `PowerWorkload` using the `spec.powerNodeSelector` to match the labels on the Node. The user then specifies the requested `PowerProfile` to use.
 
-A shared `PowerWorkload` must follow the naming convention of beginning with `shared-`. Any shared `PowerWorkload` that does
-not begin with `shared-` is rejected and deleted by the power workload controller. The shared `PowerWorkload`
-`powerNodeSelector` must also select a unique node, so it is recommended that the `kubernetes.io/hostname` label be used.
+ The shared `PowerWorkload` must select a unique node through its `spec.powerNodeSelector`, so it is recommended that the `kubernetes.io/hostname` label be used.
 A shared `PowerProfile` can be used for multiple shared `PowerWorkloads`.
 
 **Example:**
@@ -420,25 +387,6 @@ spec:
     - “kubernetes.io/hostname”: “example-node”
   powerProfile: "shared-example-node"
 ```
-
-**Important** Version 2.4.0 of the Kubernetes Power Manager allows users the possibility of assigning a specific power profile
-to a reserved pool. This is turn relies on a change in the PowerWorkload CRD that is not backwards compatible with
-older versions of Kubernetes Power Manager (v2.3.1 and older). If affected by this problem, you will see similar error in the
-manager POD's logs:
-
-```console
-Failed to watch *v1.PowerWorkload: failed to list *v1.PowerWorkload: json: cannot unmarshal number into Go struct field PowerWorkloadSpec.items.spec.reservedCPUs of type v1.ReservedSpec
-```
-
-To mitigate this problem, we ask customers to update their PowerWorkload manifests as suggested below:
-
-```yaml
--   - 0
--   - 1
-+   - cores: [0, 1]
-```
-
-We aim to fix this issue in the next release of the Kubernetes Power Manager.
 
 ### The Power Profile Controller
 
@@ -463,7 +411,8 @@ spec:
 
 The Shared `PowerProfile` must also be created by the user and does not require a Base PowerProfile. This allows the user to
 have a Shared `PowerProfile` per Node in their cluster, giving more room for different configurations. The Power
-controller determines that a `PowerProfile` is being designated as `Shared` through the use of the `spec.shared` parameter. This flag must be enabled when using a shared pool.
+controller determines that a `PowerProfile` is being designated as `Shared` through the use of the `spec.shared` parameter.
+This flag must be enabled when using a shared pool.
 
 **Example:**
 
@@ -518,6 +467,9 @@ spec:
       C6: false
 ```
 
+> **Note: The Power Profile controller will create a corresponding `PowerWorkload` for each valid
+non-Shared `PowerProfile`.**
+
 ### The Power Node controller
 
 The Power Node controller provides observability into the node's power management operations. It displays the current state of PowerProfiles, PowerWorkloads, core assignments, and guaranteed pod containers.
@@ -565,11 +517,10 @@ The status shows:
 The Power Pod Controller watches for pods. When a pod comes along the Power Pod Controller checks if the pod is in the guaranteed quality of service class (using exclusive
 cores, [see documentation](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/), taking a core
 out of the shared pool as it is the only option in Kubernetes that can do this operation). Then it examines the Pods to
-determine which PowerProfile has been requested and then creates or updates the appropriate `PowerWorkload`.
+determine which PowerProfile has been requested and then updates the appropriate `PowerWorkload`.
 
 > **Note**: the request and the limits must have a matching number of cores and are also in a container-by-container bases.
-Currently the Kubernetes Power Manager only supports a single PowerProfile per Pod. If two profiles are requested in
-different containers, the pod will get created but the cores will not get tuned.
+Currently the Kubernetes Power Manager supports multiple `PowerProfile` per Pod, but only one `PowerProfile` per container.
 
 ### Uncore Frequency - only applicable to Intel CPUs
 
@@ -577,7 +528,7 @@ different containers, the pod will get created but the cores will not get tuned.
 
 ### Error handling
 
-If any error occurs it will be displayed in the status field of the custom resource:
+If any error occurs it will be displayed in the status field of the custom resource, for example:
 
 ```yaml
 apiVersion: power.intel.com/v1
@@ -669,5 +620,4 @@ status:
     ```
 
     When a Pod that was associated with a `PowerWorkload` is deleted, the cores associated with that Pod will be removed from the corresponding `PowerWorkload`.
-    If that Pod was the last requesting the use of that PowerWorkload, the workload will be deleted.
     All cores removed from the PowerWorkload are added back to the Shared PowerWorkload for that Node and returned to the lower frequencies.

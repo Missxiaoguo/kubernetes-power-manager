@@ -3,6 +3,13 @@
 The Intel Power Optimization Library is an open source library that takes the desired configuration of the user to tune
 the frequencies and set the priority level of the cores.
 
+## DISCONTINUATION OF PROJECT
+
+This project will no longer be maintained by Intel.  
+Intel has ceased development and contributions including, but not limited to, maintenance, bug fixes, new releases, or updates, to this project.  
+Intel no longer accepts patches to this project.  
+If you have an ongoing need to use this project, are interested in independently developing it, or would like to maintain patches for the open source software community, please create your own fork of this project.  
+
 ## Overview
 
 The Power Optimization Library takes allows management of CPUs power/performance on via Pool based management
@@ -119,22 +126,17 @@ err := perofmancePool.Remove()
 
 All CPUs in the removed pool will be moved back to the Shared Pool.
 
-### Profiles
+### Power Profiles
 
-Power profiles can be associated with any Exclusive Pool or the Shared Pool
+Power profiles can be associated with any Exclusive Pool or the Shared Pool.
 
-To set a power Profile firs create it using ``NewPowerProfile(name, minFreq, maxFreq, governor, epp)``
-All frequency values are in kHz
-
-```go
-performanceProfile, err := NewPowerProfile("powerProfile", 2_600_000, 2_800_000, "performance", "performance")
-```
-
-You can also use the ``NewEcorePowerProfile(name, minFreq, maxFreq, emin, emax, governor, epp)`` constructor to
-create a profile that supports environments with performance and efficiency cores.
+To set a PowerProfile first create it using ``NewPowerProfile(name, minFreq, maxFreq, governor, epp, cstates, maxLatencyUs)``
+All frequency values are in kHz.
 
 ```go
-performanceProfile, err := NewEcorePowerProfile("powerProfile", 2_600_000, 2_800_000, 1_600_000, 1_800_000 "performance", "performance")
+performanceProfile, err := NewPowerProfile(
+    "powerProfile", 2_600_000, 2_800_000, "performance", "performance",
+    map[string]bool{"C0": true, "C1": true, "C1E": false, "C3": true}, nil)
 ```
 
 All values and support by hardware is validated during Profile creation.
@@ -149,29 +151,6 @@ Power Profiles can be unset/removed by passing ``nil``. this will restore CPUs f
 
 ```go
 err := host.GetExclusivePool("performance-pool").SetPowerProfile(nil)
-```
-
-### C-States
-
-C-States can be configured similarly by creating a CStates object and applying it to a pool
-
-```go
-err := host.GetExclusivePool("performance-pool").SetCstates(CStates{"C0": true})
-```
-
-It is also possible to set CStates on a per-CPU basis. This configuration will always precede per-Pool configuration
-
-```go
-err := host.GetAllCpus().ById(4).SetCstates(CStates{"C0": true})
-```
-
-Multiple CPUs
-
-```go
-cStates := Cstates{"C0": true}
-for _, cpu := range host.GetAllCpus().ManyByIDs([]uint{3, 4, 5}){
-    err := cpu.SetCStates(cStates)
-}
 ```
 
 ### Uncore frequency
