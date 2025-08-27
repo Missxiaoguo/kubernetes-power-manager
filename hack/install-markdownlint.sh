@@ -1,19 +1,25 @@
 #!/bin/bash -xe
 # Following example of: https://github.com/openshift/enhancements/blob/master/hack/install-markdownlint.sh
 
-cat /etc/redhat-release || echo "No /etc/redhat-release"
-
-if grep -q 'Red Hat Enterprise Linux' /etc/redhat-release; then
-    # install the config file for the RPM repository with node 14
-    # steps taken from https://rpm.nodesource.com/setup_14.x
-    yum module disable -y nodejs
-    curl -sL -o '/tmp/nodesource.rpm' 'https://rpm.nodesource.com/pub_14.x/el/8/x86_64/nodesource-release-el8-1.noarch.rpm'
-    rpm -i --nosignature --force /tmp/nodesource.rpm
-    yum -y install nodejs
-else
-    # Fedora has a module we can use
-    dnf -y module enable nodejs:16
-    dnf -y install nodejs
-fi
+# Install Node.js
+NODE_VERSION=22.5.1
+ARCH=$(uname -m)
+case "${ARCH}" in
+    x86_64)
+        NODE_ARCH="x64"
+        ;;
+    aarch64)
+        NODE_ARCH="arm64"
+        ;;
+    *)
+        echo "Unsupported architecture: ${ARCH}"
+        exit 1
+        ;;
+esac
+NODE_ARCHIVE="https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
+curl -o node.tar.xz $NODE_ARCHIVE
+tar -xJf node.tar.xz -C /usr/local --strip-components=1
+rm node.tar.xz
+dnf clean all
 
 npm install -g markdownlint@v0.25.1 markdownlint-cli2@v0.4.0

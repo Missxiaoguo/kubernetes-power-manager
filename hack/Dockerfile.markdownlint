@@ -1,5 +1,5 @@
 # Following example of: https://github.com/openshift/enhancements/blob/master/hack/Dockerfile.markdownlint
-FROM redhat/ubi9:latest
+FROM fedora:latest
 WORKDIR /workdir
 RUN dnf install -y git golang
 COPY install-markdownlint.sh /tmp
