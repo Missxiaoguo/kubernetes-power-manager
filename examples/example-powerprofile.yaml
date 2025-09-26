@@ -26,6 +26,7 @@ spec:
        - key: test2
          operator: Exists
  pstates:
+   # When cpuScalingPolicy is spcecified, governor must be set to "userspace".
    governor: "powersave"
    # For min and max, the following apply:
    # - "0%" is a valid configuration
@@ -37,7 +38,20 @@ spec:
    max: 3500 # Optional, hardware limit is used when unspecified
    epp: balance_performance
  cstates:
-   C1: true
-   C1E: true
-   POLL: false
-   C6: false
+   # Configure C-states using either 'maxLatencyUs' or 'names', but not both.
+   names:
+     C1E: false
+     POLL: true
+     C6: false
+     C1: false
+   # maxLatencyUs: 1
+ # cpuScalingPolicy enables dynamic CPU frequency tuning for polling workloads (e.g. DPDK).
+ cpuScalingPolicy:
+   workloadType: "polling-dpdk"
+   samplePeriod: 20ms
+   cooldownPeriod: 60ms
+   targetUsage: 80
+   allowedUsageDifference: 5
+   allowedFrequencyDifference: 10
+   scalePercentage: 100
+   fallbackFreqPercent: 50

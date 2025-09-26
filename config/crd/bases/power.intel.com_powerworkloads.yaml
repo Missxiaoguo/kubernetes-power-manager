@@ -105,6 +105,10 @@ spec:
                           description: The name of the Pod the Container is running
                             on
                           type: string
+                        podUID:
+                          description: The UID of the Pod the Container is running
+                            on
+                          type: string
                         powerProfile:
                           description: The PowerProfile that the Container is utilizing
                           type: string

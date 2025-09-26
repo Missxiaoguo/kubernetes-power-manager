@@ -29,11 +29,10 @@ spec:
                   fieldPath: spec.nodeName
           resources:
             limits:
-              cpu: 100m
-              memory: 64Mi
+              memory: 128Mi
             requests:
               cpu: 100m
-              memory: 64Mi
+              memory: 128Mi
           volumeMounts:
             - mountPath: /sys/devices/system/cpu
               name: cpusetup
@@ -42,6 +41,9 @@ spec:
               readOnly: true
             - mountPath: /var/lib/kubelet/pod-resources/
               name: kubesock
+              readOnly: true
+            - mountPath: /var/lib/power-node-agent/pods
+              name: pods
               readOnly: true
       volumes:
         - name: cpusetup
@@ -53,3 +55,7 @@ spec:
         - name: kubesock
           hostPath:
             path: /var/lib/kubelet/pod-resources
+        - name: pods
+          hostPath:
+            path: /var/lib/power-node-agent/pods
+            type: DirectoryOrCreat

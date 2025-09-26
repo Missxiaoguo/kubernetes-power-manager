@@ -51,6 +51,15 @@ func (m *cpuMock) SetPool(pool Pool) error {
 	return m.Called(pool).Error(0)
 }
 
+func (m *cpuMock) SetCPUFrequency(frequency uint) error {
+	return m.Called(frequency).Error(0)
+}
+
+func (m *cpuMock) GetCurrentCPUFrequency() (uint, error) {
+	args := m.Called()
+	return args.Get(0).(uint), args.Error(1)
+}
+
 type mutexMock struct {
 	mock.Mock
 }

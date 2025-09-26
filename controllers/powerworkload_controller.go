@@ -26,12 +26,19 @@ import (
 
 	"github.com/go-logr/logr"
 	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
+	"github.com/intel/kubernetes-power-manager/internal/scaling"
 	"github.com/intel/kubernetes-power-manager/pkg/util"
 	"github.com/intel/power-optimization-library/pkg/power"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1 "k8s.io/api/core/v1"
 )
@@ -39,9 +46,16 @@ import (
 // PowerWorkloadReconciler reconciles a PowerWorkload object
 type PowerWorkloadReconciler struct {
 	client.Client
-	Log          logr.Logger
-	Scheme       *runtime.Scheme
-	PowerLibrary power.Host
+	Log                 logr.Logger
+	Scheme              *runtime.Scheme
+	PowerLibrary        power.Host
+	DPDKTelemetryClient scaling.DPDKTelemetryClient
+	CPUScalingManager   scaling.CPUScalingManager
+}
+
+type dpdkTelemetryConfiguration struct {
+	current *scaling.DPDKTelemetryConnectionData
+	new     *scaling.DPDKTelemetryConnectionData
 }
 
 const (
@@ -242,6 +256,7 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 
+	// Handle exclusive workload
 	if workload.Status.WorkloadNodes.Name == nodeName {
 		poolFromLibrary := r.PowerLibrary.GetExclusivePool(workload.Spec.PowerProfile)
 		if poolFromLibrary == nil {
@@ -269,6 +284,30 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 				logger.Error(err, "error updating the power library CPU list")
 				return ctrl.Result{}, err
 			}
+		}
+
+		// If the referenced PowerProfile defines a CPU scaling policy for DPDK polling
+		// workloads, delegate to the CPU scaling manager. It will dynamically tune
+		// per-CPU frequencies based on usage samples retrieved from DPDK telemetry
+		// when needed.
+		profile := &powerv1.PowerProfile{}
+		err = r.Client.Get(c, client.ObjectKey{
+			Namespace: IntelPowerNamespace,
+			Name:      workload.Spec.PowerProfile,
+		}, profile)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to get power profile: %w", err)
+		}
+		if profile.Spec.CpuScalingPolicy != nil && profile.Spec.CpuScalingPolicy.WorkloadType == "polling-dpdk" {
+			// Ensure telemetry connections for all DPDK pods in this workload.
+			r.reconcileDPDKTelemetryClient(workload.Status.WorkloadNodes.Containers)
+
+			// Build scaling options for each CPU in this exclusive pool.
+			cpus := r.PowerLibrary.GetExclusivePool(workload.Spec.PowerProfile).Cpus()
+			scalingOpts := r.generateCPUScalingOpts(profile.Spec.CpuScalingPolicy, cpus)
+
+			// Hand over to the scaling manager to manage per-CPU scaling.
+			r.CPUScalingManager.ManageCPUScaling(scalingOpts)
 		}
 	}
 
@@ -345,8 +384,142 @@ func createReservedPool(library power.Host, coreConfig powerv1.ReservedSpec, log
 	return nil
 }
 
+// reconcileDPDKTelemetryClient manages the lifecycle of DPDK telemetry
+// connections. It maintains one connection per pod and each connection
+// reports the usage samples(busy cycles and total cycles) for the CPUs
+// managed by that pod.
+func (r *PowerWorkloadReconciler) reconcileDPDKTelemetryClient(containers []powerv1.Container) {
+	// gather current connection configurations
+	dpdkConfigMap := map[string]*dpdkTelemetryConfiguration{}
+	for _, connData := range r.DPDKTelemetryClient.ListConnections() {
+		dpdkConfigMap[connData.PodUID] = &dpdkTelemetryConfiguration{
+			current: &connData,
+			new:     nil,
+		}
+	}
+
+	// gather incoming connection configurations and group them based on pod UID
+	for _, container := range containers {
+		podUID := string(container.PodUID)
+		cpuIDs := container.ExclusiveCPUs
+
+		if dpdkConfig, found := dpdkConfigMap[podUID]; found {
+			if dpdkConfig.new == nil {
+				dpdkConfig.new = &scaling.DPDKTelemetryConnectionData{
+					PodUID:      podUID,
+					WatchedCPUs: cpuIDs,
+				}
+			} else {
+				dpdkConfig.new.WatchedCPUs = append(dpdkConfig.new.WatchedCPUs, cpuIDs...)
+			}
+		} else {
+			dpdkConfigMap[podUID] = &dpdkTelemetryConfiguration{
+				current: nil,
+				new: &scaling.DPDKTelemetryConnectionData{
+					PodUID:      podUID,
+					WatchedCPUs: cpuIDs,
+				},
+			}
+		}
+	}
+
+	// NOTE: Exclusive CPUs for containers are fixed
+	// at Pod scheduling and don't change.
+	// Thus, we can skip updating the CPU list post-connection.
+	for podUID, dpdkConfig := range dpdkConfigMap {
+		if dpdkConfig.new == nil {
+			r.DPDKTelemetryClient.CloseConnection(podUID)
+			continue
+		}
+		if dpdkConfig.current == nil {
+			r.DPDKTelemetryClient.CreateConnection(dpdkConfig.new)
+		}
+	}
+}
+
+// generateCPUScalingOpts translates a CpuScalingPolicy and a set of CPUs
+// into a per-CPU list of scaling options used by the CPUScalingManager.
+func (r *PowerWorkloadReconciler) generateCPUScalingOpts(scalingPolicy *powerv1.CpuScalingPolicy, cpus *power.CpuList) []scaling.CPUScalingOpts {
+	optsList := make([]scaling.CPUScalingOpts, 0)
+
+	for _, cpu := range *cpus {
+		// Get the min and max frequency of this CPU and calculate the fallback frequency.
+		minFreq, maxFreq := cpu.GetAbsMinMax()
+		fallbackFreqPct := uint(*scalingPolicy.FallbackFreqPercent)
+		fallbackFreq := minFreq + (maxFreq-minFreq)*(fallbackFreqPct)/100
+
+		opts := scaling.CPUScalingOpts{
+			CPU:                        cpu,
+			SamplePeriod:               scalingPolicy.SamplePeriod.Duration,
+			CooldownPeriod:             scalingPolicy.CooldownPeriod.Duration,
+			TargetUsage:                *scalingPolicy.TargetUsage,
+			AllowedUsageDifference:     *scalingPolicy.AllowedUsageDifference,
+			AllowedFrequencyDifference: *scalingPolicy.AllowedFrequencyDifference * 1000,
+			HWMaxFrequency:             int(maxFreq),
+			HWMinFrequency:             int(minFreq),
+			CurrentTargetFrequency:     scaling.FrequencyNotYetSet,
+			ScaleFactor:                float64(*scalingPolicy.ScalePercentage) / 100.0,
+			FallbackFreq:               int(fallbackFreq),
+		}
+		optsList = append(optsList, opts)
+	}
+
+	return optsList
+}
+
 func (r *PowerWorkloadReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&powerv1.PowerWorkload{}).
+		Watches(&powerv1.PowerProfile{},
+			handler.EnqueueRequestsFromMapFunc(r.powerProfileToWorkloadRequests),
+			builder.WithPredicates(predicate.Funcs{
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					oldProfile := e.ObjectOld.(*powerv1.PowerProfile)
+					newProfile := e.ObjectNew.(*powerv1.PowerProfile)
+
+					// Filter out shared profiles.
+					if newProfile.Spec.Shared {
+						return false
+					}
+
+					// Filter for CPU scaling policy changes only.
+					return oldProfile.Spec.CpuScalingPolicy != newProfile.Spec.CpuScalingPolicy
+				},
+				CreateFunc:  func(e event.CreateEvent) bool { return false },
+				GenericFunc: func(ge event.GenericEvent) bool { return false },
+				DeleteFunc:  func(de event.DeleteEvent) bool { return false },
+			})).
 		Complete(r)
+}
+
+// powerProfileToWorkloadRequests enqueues reconciliation requests for the
+// PowerWorkload that is associated with the given PowerProfile.
+func (r *PowerWorkloadReconciler) powerProfileToWorkloadRequests(ctx context.Context, obj client.Object) []reconcile.Request {
+	powerProfile := obj.(*powerv1.PowerProfile)
+	requests := []reconcile.Request{}
+
+	workloadName := fmt.Sprintf("%s-%s", powerProfile.Name, os.Getenv("NODE_NAME"))
+	workload := &powerv1.PowerWorkload{}
+	if err := r.Client.Get(ctx, types.NamespacedName{
+		Name:      workloadName,
+		Namespace: IntelPowerNamespace,
+	}, workload); err != nil {
+		if errors.IsNotFound(err) {
+			return requests
+		}
+		r.Log.Error(err, "failed to get power workload")
+		return requests
+	}
+	if workload.Spec.PowerProfile != powerProfile.Name {
+		return requests
+	}
+
+	requests = append(requests, reconcile.Request{
+		NamespacedName: types.NamespacedName{
+			Name:      workloadName,
+			Namespace: IntelPowerNamespace,
+		},
+	})
+	r.Log.V(5).Info("Enqueuing PowerWorkload reconciliation requests", "powerProfile", powerProfile.Name)
+	return requests
 }

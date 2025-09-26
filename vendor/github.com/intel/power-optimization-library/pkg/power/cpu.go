@@ -24,6 +24,9 @@ type Cpu interface {
 	consolidate_unsafe() error
 	GetCore() Core
 
+	SetCPUFrequency(frequency uint) error
+	GetCurrentCPUFrequency() (uint, error)
+
 	// used only to set initial pool when creating core instance
 	_setPoolProperty(pool Pool)
 }

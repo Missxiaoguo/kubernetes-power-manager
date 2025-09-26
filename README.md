@@ -438,6 +438,8 @@ Other considerations:
 - `spec.nodeSelector` can be used to choose to which node the `PowerProfile` applies to.
 - The PowerProfile CRD has been enhanced to support both P-states (frequency) and C-states (power saving) configuration in a single, unified structure. C-states can be configured either by explicit state names or by maximum latency threshold for more flexible power tuning across different CPU architectures.
 - for ARM systems, `spec.pstates.epp` should be skipped.
+- Dynamic scaling for DPDK polling workloads is also supported via `spec.cpuScalingPolicy`.
+  See [Dynamic CPU Frequency Scaling for DPDK workloads](docs/dpdk-dynamic-scaling.md) for details.
 
 ```yaml
 apiVersion: "power.intel.com/v1"
@@ -465,6 +467,7 @@ spec:
     names:
       C1: true
       C6: false
+  # cpuScalingPolicy: {}
 ```
 
 > **Note: The Power Profile controller will create a corresponding `PowerWorkload` for each valid
