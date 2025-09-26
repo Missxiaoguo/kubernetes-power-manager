@@ -15,10 +15,12 @@ import (
 const (
 	pStatesDrvFile = "cpufreq/scaling_driver"
 
-	cpuMaxFreqFile = "cpufreq/cpuinfo_max_freq"
-	cpuMinFreqFile = "cpufreq/cpuinfo_min_freq"
-	scalingMaxFile = "cpufreq/scaling_max_freq"
-	scalingMinFile = "cpufreq/scaling_min_freq"
+	cpuMaxFreqFile      = "cpufreq/cpuinfo_max_freq"
+	cpuMinFreqFile      = "cpufreq/cpuinfo_min_freq"
+	scalingMaxFile      = "cpufreq/scaling_max_freq"
+	scalingMinFile      = "cpufreq/scaling_min_freq"
+	scalingSetSpeedFile = "cpufreq/scaling_setspeed"
+	scalingCurFreqFile  = "cpufreq/scaling_cur_freq"
 
 	scalingGovFile = "cpufreq/scaling_governor"
 	availGovFile   = "cpufreq/scaling_available_governors"
@@ -365,4 +367,25 @@ func (cpu *cpuImpl) writeScalingMinFreq(freq uint) error {
 		return err
 	}
 	return nil
+}
+
+// SetCPUFrequency sets the CPU frequency in kHz for the specified CPU using the userspace governor.
+func (cpu *cpuImpl) SetCPUFrequency(frequency uint) error {
+	scalingSetspeedPath := filepath.Join(basePath, fmt.Sprint("cpu", cpu.id), scalingSetSpeedFile)
+	// Write the desired frequency
+	err := os.WriteFile(scalingSetspeedPath, []byte(fmt.Sprintf("%d", frequency)), 0644)
+	if err != nil {
+		return fmt.Errorf("failed to set frequency for CPU %d: %w", cpu.id, err)
+	}
+
+	return nil
+}
+
+// GetCurrentCPUFrequency returns the CPU frequency in kHz for the specified CPU.
+func (cpu *cpuImpl) GetCurrentCPUFrequency() (uint, error) {
+	freq, err := readCpuUintProperty(cpu.id, scalingCurFreqFile)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read current frequency for CPU %d: %w", cpu.id, err)
+	}
+	return freq, nil
 }

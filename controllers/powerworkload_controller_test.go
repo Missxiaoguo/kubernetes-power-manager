@@ -4,20 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zapcore"
 
 	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
+	"github.com/intel/kubernetes-power-manager/internal/scaling"
 	"github.com/intel/power-optimization-library/pkg/power"
 	"github.com/stretchr/testify/mock"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -53,7 +57,7 @@ func createWorkloadReconcilerObject(objs []runtime.Object) (*PowerWorkloadReconc
 		Build()
 
 	// Create a ReconcileNode object with the scheme and fake client.
-	r := &PowerWorkloadReconciler{cl, ctrl.Log.WithName("testing"), s, nil}
+	r := &PowerWorkloadReconciler{cl, ctrl.Log.WithName("testing"), s, nil, nil, nil}
 
 	return r, nil
 }
@@ -199,7 +203,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 				assert.Nil(t, e)
 				req := reconcile.Request{
 					NamespacedName: client.ObjectKey{
-						Name:      "performance-TestNode",
+						Name:      "shared-TestNode",
 						Namespace: IntelPowerNamespace,
 					},
 				}
@@ -562,6 +566,219 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 		result, err := r.Reconcile(context.TODO(), req)
 		tc.validateErr(r, result, err)
 		nodemk.AssertExpectations(t)
+	}
+}
+
+func TestPowerWorkload_Reconcile_WithCpuScalingPolicy(t *testing.T) {
+	testNode := "TestNode"
+	t.Setenv("NODE_NAME", testNode)
+
+	testcases := []struct {
+		name                                                    string
+		profileName                                             string
+		podUID                                                  string
+		cpuIDs                                                  []uint
+		sample, cooldown                                        time.Duration
+		targetUsage, usageDiff, freqDiff, fallbackPct, scalePct int
+		initialConns                                            []scaling.DPDKTelemetryConnectionData
+	}{
+		{
+			name:        "profile1-two-cpus",
+			profileName: "scaling-profile-1",
+			podUID:      "foo",
+			cpuIDs:      []uint{0, 1},
+			sample:      10 * time.Millisecond,
+			cooldown:    30 * time.Millisecond,
+			targetUsage: 100, usageDiff: 10, freqDiff: 25, fallbackPct: 50, scalePct: 100,
+			initialConns: []scaling.DPDKTelemetryConnectionData{
+				{PodUID: "baz", WatchedCPUs: []uint{5}},
+			},
+		},
+		{
+			name:        "profile2-one-cpu",
+			profileName: "scaling-profile-2",
+			podUID:      "bar",
+			cpuIDs:      []uint{5},
+			sample:      100 * time.Millisecond,
+			cooldown:    100 * time.Millisecond,
+			targetUsage: 50, usageDiff: 5, freqDiff: 45, fallbackPct: 0, scalePct: 130,
+			initialConns: []scaling.DPDKTelemetryConnectionData{
+				{PodUID: "foo", WatchedCPUs: []uint{0, 1}},
+			},
+		},
+		{
+			name:        "profile3-one-cpu",
+			profileName: "scaling-profile-3",
+			podUID:      "qux",
+			cpuIDs:      []uint{7},
+			sample:      300 * time.Millisecond,
+			cooldown:    301 * time.Millisecond,
+			targetUsage: 0, usageDiff: 0, freqDiff: 0, fallbackPct: 100, scalePct: 47,
+			initialConns: []scaling.DPDKTelemetryConnectionData{
+				{PodUID: "foo", WatchedCPUs: []uint{0, 1}},
+				{PodUID: "bar", WatchedCPUs: []uint{5}},
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create objects
+			policy := &powerv1.CpuScalingPolicy{
+				WorkloadType:               "polling-dpdk",
+				SamplePeriod:               &metav1.Duration{Duration: tc.sample},
+				CooldownPeriod:             &metav1.Duration{Duration: tc.cooldown},
+				TargetUsage:                intPtr(tc.targetUsage),
+				AllowedUsageDifference:     intPtr(tc.usageDiff),
+				AllowedFrequencyDifference: intPtr(tc.freqDiff),
+				FallbackFreqPercent:        intPtr(tc.fallbackPct),
+				ScalePercentage:            intPtr(tc.scalePct),
+			}
+			profile := &powerv1.PowerProfile{
+				ObjectMeta: metav1.ObjectMeta{Name: tc.profileName, Namespace: IntelPowerNamespace},
+				Spec:       powerv1.PowerProfileSpec{Name: tc.profileName, CpuScalingPolicy: policy},
+			}
+			workload := &powerv1.PowerWorkload{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tc.profileName + "-" + testNode,
+					Namespace: IntelPowerNamespace,
+				},
+				Spec: powerv1.PowerWorkloadSpec{
+					Name:         tc.profileName + "-" + testNode,
+					PowerProfile: tc.profileName,
+				},
+				Status: powerv1.PowerWorkloadStatus{
+					WorkloadNodes: powerv1.WorkloadNode{
+						Name:   testNode,
+						CpuIds: tc.cpuIDs,
+						Containers: []powerv1.Container{
+							{ExclusiveCPUs: tc.cpuIDs, PodUID: types.UID(tc.podUID)},
+						},
+					},
+				},
+			}
+
+			r, err := createWorkloadReconcilerObject([]runtime.Object{profile, workload})
+			assert.NoError(t, err)
+
+			// Setup environment
+			host, teardown, err := fullDummySystem()
+			assert.NoError(t, err)
+			t.Cleanup(teardown)
+			assert.NoError(t, host.GetSharedPool().SetCpuIDs(tc.cpuIDs))
+			_, err = host.AddExclusivePool(tc.profileName)
+			assert.NoError(t, err)
+			r.PowerLibrary = host
+
+			mgrmk := new(ScalingMgrMock)
+			mgrmk.On("ManageCPUScaling", mock.Anything).Return().Once()
+			r.CPUScalingManager = mgrmk
+
+			dpdkmk := new(DPDKTelemetryClientMock)
+			dpdkmk.On("ListConnections").Return(tc.initialConns).Once()
+			for _, conn := range tc.initialConns {
+				if conn.PodUID != tc.podUID {
+					dpdkmk.On("CloseConnection", conn.PodUID).Return().Once()
+				}
+			}
+			dpdkmk.On("CreateConnection", &scaling.DPDKTelemetryConnectionData{
+				PodUID:      tc.podUID,
+				WatchedCPUs: tc.cpuIDs,
+			}).Return().Once()
+			r.DPDKTelemetryClient = dpdkmk
+
+			// Reconcile workload
+			_, err = r.Reconcile(context.TODO(), reconcile.Request{
+				NamespacedName: client.ObjectKey{
+					Name:      workload.Name,
+					Namespace: IntelPowerNamespace,
+				},
+			})
+			assert.NoError(t, err)
+
+			// Verify scaling manager ManageCPUScaling was called and contains the correct values
+			if assert.Equal(t, 1, len(mgrmk.Calls)) {
+				actualScalingOpts := mgrmk.Calls[0].Arguments.Get(0).([]scaling.CPUScalingOpts)
+				actualIDs := make([]uint, 0, len(actualScalingOpts))
+				for _, o := range actualScalingOpts {
+					actualIDs = append(actualIDs, o.CPU.GetID())
+				}
+				assert.ElementsMatch(t, tc.cpuIDs, actualIDs)
+				assert.Equal(t, tc.sample, actualScalingOpts[0].SamplePeriod)
+				assert.Equal(t, tc.cooldown, actualScalingOpts[0].CooldownPeriod)
+				assert.Equal(t, tc.targetUsage, actualScalingOpts[0].TargetUsage)
+				assert.Equal(t, tc.usageDiff, actualScalingOpts[0].AllowedUsageDifference)
+				assert.Equal(t, tc.freqDiff*1000, actualScalingOpts[0].AllowedFrequencyDifference)
+				assert.Equal(t, float64(tc.scalePct)/100, actualScalingOpts[0].ScaleFactor)
+
+				cpu := host.GetAllCpus().ByID(tc.cpuIDs[0])
+				minFreq, maxFreq := cpu.GetAbsMinMax()
+				fallbackFreq := minFreq + (maxFreq-minFreq)*(uint(tc.fallbackPct))/100
+				assert.Equal(t, int(fallbackFreq), actualScalingOpts[0].FallbackFreq)
+			}
+
+			dpdkmk.AssertExpectations(t)
+			mgrmk.AssertExpectations(t)
+		})
+	}
+}
+
+func TestPowerWorkload_reconcileDPDKTelemetryClient(t *testing.T) {
+	testcases := []struct {
+		name          string
+		existingConns []scaling.DPDKTelemetryConnectionData // connections from workload
+		containers    []powerv1.Container                   // containers from workload
+		expectCreates []scaling.DPDKTelemetryConnectionData // connections to create
+		expectCloses  []string                              // podUIDs to close
+	}{
+		{
+			name:          "Create new connections and merge per pod",
+			existingConns: []scaling.DPDKTelemetryConnectionData{},
+			containers: []powerv1.Container{
+				{PodUID: types.UID("pod-1"), ExclusiveCPUs: []uint{1, 2}},
+				{PodUID: types.UID("pod-1"), ExclusiveCPUs: []uint{4}},
+				{PodUID: types.UID("pod-2"), ExclusiveCPUs: []uint{7}},
+			},
+			expectCreates: []scaling.DPDKTelemetryConnectionData{
+				{PodUID: "pod-1", WatchedCPUs: []uint{1, 2, 4}},
+				{PodUID: "pod-2", WatchedCPUs: []uint{7}},
+			},
+			expectCloses: nil,
+		},
+		{
+			name: "Close stale and create missing, keep existing connections",
+			existingConns: []scaling.DPDKTelemetryConnectionData{
+				{PodUID: "pod-1", WatchedCPUs: []uint{9}},
+				{PodUID: "pod-2", WatchedCPUs: []uint{5}},
+			},
+			containers: []powerv1.Container{
+				{PodUID: types.UID("pod-2"), ExclusiveCPUs: []uint{5}},
+				{PodUID: types.UID("pod-3"), ExclusiveCPUs: []uint{6}},
+			},
+			expectCreates: []scaling.DPDKTelemetryConnectionData{
+				{PodUID: "pod-3", WatchedCPUs: []uint{6}},
+			},
+			expectCloses: []string{"pod-1"},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			dpdkmk := new(DPDKTelemetryClientMock)
+			dpdkmk.On("ListConnections").Return(tc.existingConns).Once()
+			for _, podUID := range tc.expectCloses {
+				dpdkmk.On("CloseConnection", podUID).Return().Once()
+			}
+			for _, createConn := range tc.expectCreates {
+				dpdkmk.On("CreateConnection", mock.MatchedBy(func(d *scaling.DPDKTelemetryConnectionData) bool {
+					return d.PodUID == createConn.PodUID && reflect.DeepEqual(d.WatchedCPUs, createConn.WatchedCPUs)
+				})).Return().Once()
+			}
+
+			r := &PowerWorkloadReconciler{DPDKTelemetryClient: dpdkmk}
+			r.reconcileDPDKTelemetryClient(tc.containers)
+			dpdkmk.AssertExpectations(t)
+		})
 	}
 }
 

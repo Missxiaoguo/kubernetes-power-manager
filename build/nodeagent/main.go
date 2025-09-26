@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
+	"github.com/intel/kubernetes-power-manager/internal/scaling"
 	"github.com/intel/kubernetes-power-manager/pkg/podresourcesclient"
 
 	"github.com/intel/kubernetes-power-manager/controllers"
@@ -113,6 +114,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	dpdkClient := scaling.NewDPDKTelemetryClient(
+		ctrl.Log.WithName("clients").WithName("DPDKClient"),
+	)
+	defer dpdkClient.Close()
+
+	cpuScalingMgr := scaling.NewCPUScalingManager(&powerLibrary, dpdkClient)
+	if err = mgr.Add(cpuScalingMgr); err != nil {
+		setupLog.Error(err, "unable to register runnable", "runnable", "CPUScalingManager")
+		os.Exit(1)
+	}
+
 	if err = (&controllers.PowerProfileReconciler{
 		Client:       mgr.GetClient(),
 		Log:          ctrl.Log.WithName("controllers").WithName("PowerProfile"),
@@ -123,10 +135,12 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.PowerWorkloadReconciler{
-		Client:       mgr.GetClient(),
-		Log:          ctrl.Log.WithName("controllers").WithName("PowerWorkload"),
-		Scheme:       mgr.GetScheme(),
-		PowerLibrary: powerLibrary,
+		Client:              mgr.GetClient(),
+		Log:                 ctrl.Log.WithName("controllers").WithName("PowerWorkload"),
+		Scheme:              mgr.GetScheme(),
+		PowerLibrary:        powerLibrary,
+		CPUScalingManager:   cpuScalingMgr,
+		DPDKTelemetryClient: dpdkClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PowerWorkload")
 		os.Exit(1)

@@ -18,6 +18,7 @@ COPY build/manager/main.go main.go
 COPY api/ api/
 COPY controllers/ controllers/
 COPY pkg/ pkg/
+COPY internal/ internal/
 
 # Build
 RUN CGO_ENABLED=0 GO111MODULE=on GOOS=${TARGETOS:-linux} GOARCH=$TARGETARCH go build -a -o manager main.go

@@ -39,12 +39,12 @@ system-wide uncore.
 
 ## Host
 
-````
+```console
     Name                  string
     ExclusivePools        []Pool
     SharedPool            Pool
     PowerProfiles         Profiles
-````
+```
 
 The Name value is simply the name of the Host.
 
@@ -70,11 +70,11 @@ when the Pod is terminated, it is placed back in the Shared Pool.
 
 ## Pool
 
-````
+```console
     Name            string
     Cores           []Core
     PowerProfile    Profile
-````
+```
 
 The Name value is simply the name of the Pool, which will either be performance, balance-performance, balance-power, or
 shared.
@@ -103,13 +103,13 @@ value of the name and not the actual Power Profile, that can be retrieved throug
 
 ## Profile
 
-````
+```console
     Name     string
     Max      int
     Min      int
     Governor string
     Epp      string
-````
+```
 
 The Profile object is a replica of the Power Profile CRD. It’s just a way that the Power
 Library can get the information about a Power Profile without having to constantly query the Kubernetes API.
@@ -118,12 +118,12 @@ that will set different frequencies based on the core type. This is intended to 
 
 ## CPU
 
-````
+```console
     ID                  int
     MinimumFreq         int
     MaximumFreq         int
     IsReservedSystemCPU bool
-````
+```
 
 The ID value is simply the Core’s ID on the system.
 
@@ -158,16 +158,16 @@ Exclusive Pool will never be given a core from the system that is a part of the 
 returned to the Shared Pool, if there is a Shared Power Workload available, it will take on the values in that, if not
 it is given the absolute values.
 
-# Features
+## Features
 
-## C-States
+### C-States
 
 To save energy on a system, you can command the CPU to go into a low-power mode. Each CPU has several power modes, which
 are collectively called C-States. These work by cutting the clock signal and power from idle CPUs, or CPUs that are not
 executing commands.While you save more energy by sending CPUs into deeper C-State modes, it does take more time for the
 CPU to fully “wake up” from sleep mode, so there is a tradeoff when it comes to deciding the depth of sleep.
 
-### C-State Implementation in the Power Optimization Library
+#### C-State Implementation in the Power Optimization Library
 
 The driver that is used for C-States is the intel_idle driver. Everything associated with C-States in Linux is stored in
 the /sys/devices/system/cpu/cpuN/cpuidle file or the /sys/devices/system/cpu/cpuidle file. To check the driver in use,
@@ -177,9 +177,9 @@ C-States have to be confirmed if they are actually active on the system. If a us
 check on the system if they are activated and if they are not, reject the PowerConfig. The C-States are found in
 /sys/devices/system/cpu/cpuN/cpuidle/stateN/.
 
-### C-State Ranges
+#### C-State Ranges
 
-````
+```console
 C0      Operating State
 C1      Halt
 C1E     Enhanced Halt
@@ -189,11 +189,12 @@ C3      Deep Sleep
 C4      Deeper Sleep
 C4E/C5  Enhanced Deeper Sleep
 C6      Deep Power Down
-````
+```
 
-## Scaling Driver
+### Scaling Driver
 
-### P-state
+#### P-state
+
   The P-state governor feature allows the user to check if the P-state driver is enabled on the system. If the P-state
   driver is enabled while using the Kubernetes Power Manager, users may select a P-state governor per core, which are
   described as "performance" and "powersave" governors in the Power Profiles.
@@ -203,11 +204,13 @@ C6      Deep Power Down
 * Powersave governor - The CPUfreq governor "powersave" sets the CPU statically to the lowest frequency within the
   borders of scaling_min_freq and scaling_max_freq.
 
-### acpi-cpufreq
+#### acpi-cpufreq
+
   The acpi-cpufreq driver setting operates much like the P-state driver but has a different set of available governors. For more information see [here](https://www.kernel.org/doc/html/v4.12/admin-guide/pm/cpufreq.html).
-  One thing to note is that acpi-cpufreq reports the base clock as the frequency hardware limits however the P-state driver uses turbo frequency limits. 
+  One thing to note is that acpi-cpufreq reports the base clock as the frequency hardware limits however the P-state driver uses turbo frequency limits.
   Both drivers can make use of turbo frequency; however, acpi-cpufreq can exceed hardware frequency limits when using turbo frequency. This is important to take into account when setting frequencies for profiles.
-## Topology
+
+### Topology
 
 Topology discovery is done via reading /sys/devices/system/cpuN/topology/{physical_package_id,die_id,core_id}. Based on
 values there, the power library creates objects representing CPU package, die and core, and associates it with the
@@ -215,7 +218,7 @@ corresponding cores. this mapping is tree-like where associations are as importa
 die 0 on package 0 is a different object to die 0 in package
 one, ``topology().Package(0).Die(0) != topology().Package(1).Die(0)``
 
-## Uncore
+### Uncore
 
 The power library provides an abstraction to manage Uncore frequency configuration. The driver allows setting
 frequencies on die by die basis, and the library additionally allows setting frequency system-wide and package-wide with

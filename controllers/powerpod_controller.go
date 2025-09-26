@@ -225,6 +225,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 				powerContainers[i].Workload = workloadName
 				workloadContainer := container
 				workloadContainer.Pod = pod.Name
+				workloadContainer.PodUID = podUID
 				workloadContainer.Workload = workloadName
 				containerList = append(containerList, workloadContainer)
 			}

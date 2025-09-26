@@ -22,6 +22,7 @@ import (
 )
 
 // PowerProfileSpec defines the desired state of PowerProfile
+// +kubebuilder:validation:XValidation:rule="!has(self.cpuScalingPolicy) || (has(self.pstates.governor) && self.pstates.governor == 'userspace')",message="pstates.governor must be 'userspace' when cpuScalingPolicy is set"
 type PowerProfileSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
@@ -50,6 +51,9 @@ type PowerProfileSpec struct {
 	// +kubebuilder:validation:Pattern=`^([1-9][0-9]?|100)%?$`
 	// +kubebuilder:default="100%"
 	CpuCapacity intstr.IntOrString `json:"cpuCapacity,omitempty"`
+
+	// CPU scaling policy
+	CpuScalingPolicy *CpuScalingPolicy `json:"cpuScalingPolicy,omitempty"`
 }
 
 type NodeSelector struct {
@@ -77,7 +81,7 @@ type PStatesConfig struct {
 	Epp string `json:"epp,omitempty"`
 
 	// Governor to be used
-	//+kubebuilder:default=powersave
+	// +kubebuilder:default=powersave
 	Governor string `json:"governor,omitempty"`
 }
 
@@ -95,6 +99,57 @@ type CStatesConfig struct {
 	// This field is mutually exclusive with 'names' — only one of 'names' or 'maxLatencyUs' may be set.
 	// +kubebuilder:validation:Minimum=0
 	MaxLatencyUs *int `json:"maxLatencyUs,omitempty"`
+}
+
+// +kubebuilder:validation:XValidation:rule="duration(self.samplePeriod).getMilliseconds() >= 10 && duration(self.samplePeriod).getMilliseconds() <= 1000",message="samplePeriod must be between 10ms and 1s"
+// +kubebuilder:validation:XValidation:rule="duration(self.cooldownPeriod).getMilliseconds() >= duration(self.samplePeriod).getMilliseconds()",message="cooldownPeriod must be larger than samplePeriod"
+type CpuScalingPolicy struct {
+	// Workload type
+	// +kubebuilder:validation:Enum=polling-dpdk
+	// +kubebuilder:default=polling-dpdk
+	WorkloadType string `json:"workloadType,omitempty"`
+
+	// Time to elapse between two CPU sampling periods for scaling control.
+	// At each sampling period the scaler reads CPU usage and adjusts frequency if needed.
+	// +kubebuilder:validation:Format=duration
+	// +kubebuilder:default="10ms"
+	SamplePeriod *metav1.Duration `json:"samplePeriod,omitempty"`
+
+	// Time to elapse after setting a new frequency target before next scaling control.
+	// +kubebuilder:validation:Format=duration
+	// +kubebuilder:default="30ms"
+	CooldownPeriod *metav1.Duration `json:"cooldownPeriod,omitempty"`
+
+	// Target CPU usage, in percent
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=80
+	TargetUsage *int `json:"targetUsage,omitempty"`
+
+	// Maximum difference between target and actual CPU usage on which
+	// frequency re-evaluation will not happen, in percent points
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=50
+	// +kubebuilder:default=5
+	AllowedUsageDifference *int `json:"allowedUsageDifference,omitempty"`
+
+	// Maximum difference between target and actual CPU frequency on which
+	// frequency re-evaluation will not happen, in MHz
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:default=25
+	AllowedFrequencyDifference *int `json:"allowedFrequencyDifference,omitempty"`
+
+	// Percentage factor of CPU frequency change when scaling
+	// +kubebuilder:validation:Minimum=10
+	// +kubebuilder:validation:Maximum=200
+	// +kubebuilder:default=50
+	ScalePercentage *int `json:"scalePercentage,omitempty"`
+
+	// Frequency to set when CPU usage is not available, in percent of max frequency
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=0
+	FallbackFreqPercent *int `json:"fallbackFreqPercent,omitempty"`
 }
 
 // PowerProfileStatus defines the observed state of PowerProfile

@@ -11,6 +11,7 @@ import (
 	"context"
 
 	"github.com/go-logr/logr"
+	"github.com/intel/kubernetes-power-manager/internal/scaling"
 	"github.com/intel/power-optimization-library/pkg/power"
 	"github.com/stretchr/testify/mock"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -198,6 +199,7 @@ func (m *coreMock) GetID() uint {
 	args := m.Called()
 	return args.Get(0).(uint)
 }
+
 func (m *coreMock) SetPool(pool power.Pool) error {
 	return m.Called(pool).Error(0)
 }
@@ -440,6 +442,47 @@ func (m *frequencySetMock) GetMax() uint {
 func (m *frequencySetMock) GetMin() uint {
 	return m.Called().Get(0).(uint)
 }
+
+// ScalingManager mock
+type ScalingMgrMock struct {
+	scaling.CPUScalingManager
+	mock.Mock
+}
+
+func (m *ScalingMgrMock) ManageCPUScaling(configs []scaling.CPUScalingOpts) {
+	m.Called(configs)
+}
+
+// Satisfy manager.Runnable
+func (m *ScalingMgrMock) Start(ctx context.Context) error { return nil }
+
+// DPDKTelemetryClient mock
+type DPDKTelemetryClientMock struct {
+	scaling.DPDKTelemetryClient
+	mock.Mock
+}
+
+func (cl *DPDKTelemetryClientMock) CreateConnection(data *scaling.DPDKTelemetryConnectionData) {
+	cl.Called(data)
+}
+
+func (cl *DPDKTelemetryClientMock) ListConnections() []scaling.DPDKTelemetryConnectionData {
+	args := cl.Called()
+	return args.Get(0).([]scaling.DPDKTelemetryConnectionData)
+}
+
+func (cl *DPDKTelemetryClientMock) CloseConnection(podUID string) {
+	cl.Called(podUID)
+}
+
+func (cl *DPDKTelemetryClientMock) GetUsagePercent(cpuID uint) (int, error) {
+	args := cl.Called(cpuID)
+	return args.Int(0), args.Error(1)
+}
+
+func (cl *DPDKTelemetryClientMock) Close() { cl.Called() }
+
+func intPtr(v int) *int { return &v }
 
 func setupDummyFiles(cores int, packages int, diesPerPackage int, cpufiles map[string]string) (power.Host, func(), error) {
 	//variables for various files
