@@ -55,12 +55,12 @@ spec:
               cpu: "16"
               hugepages-1Gi: "5Gi"
               memory: "3Gi"
-              power.intel.com/scalingprofile-sample: "16"
+              power.intel.com/application-dpdk: "16"
             limits:
               cpu: "16"
               hugepages-1Gi: "5Gi"
               memory: "3Gi"
-              power.intel.com/scalingprofile-sample: "16"
+              power.intel.com/application-dpdk: "16"
           volumeMounts:
             - mountPath: /hugepages-1Gi
               name: hugepages-1gi
