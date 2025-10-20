@@ -29,13 +29,11 @@ title <b>Kubernetes Power Manager components Diagram
 skinparam roundCorner 15
 node "Power Node Agent" {
 
-rectangle "<b>C-State \n<b>Controller"
 rectangle "<b>Power Node \n<b>Controller"
 rectangle "<b>Power Pod \n<b>Controller" 
 rectangle "<b>Power Profile \n<b>Controller" 
 rectangle "<b>Power Workload \n<b>Controller" 
-rectangle "<b>Time Of Day \n<b>Controller"
-rectangle "<b>Time of Day \n<b>CronJob Controller"
+rectangle "<b>Uncore \n<b>Controller"
 
 }
 

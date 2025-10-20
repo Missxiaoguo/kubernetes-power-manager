@@ -9,20 +9,20 @@ If you have an ongoing need to use this project, are interested in independently
 
 ## Introduction
 
-Utilizing a container orchestration engine like Kubernetes, CPU resources are allocated from a pool of platforms
-entirely based on availability, without taking into account specific features like Intel Speed Select Technology (SST).
+The Kubernetes Power Manager is a Kubernetes Operator that has been developed to provide cluster users with a
+Kubernetes native mechanism to configure power management settings (e.g. c-states, p-states, uncore) through CRDs.
+The main features include the ability to:
+- Configure per-CPU power management (p-states, c-states) for reserved CPUs, shared CPUs and application workload
+  CPUs (guaranteed pods) independently.
+- Modify per-CPU power management configuration at runtime (for reserved, shared or application CPUs).
+- Configure processor level power management (e.g. uncore frequency for Intel processors).
+- Modify p-states for guaranteed pod CPUs running DPDK applications based on DPDK metrics.
 
-The Kubernetes Power Manager is a Kubernetes Operator that has been developed to provide cluster users with a mechanism
-to dynamically request adjustment of worker node power management settings applied to cores allocated to the Pods. The
-power management-related settings can be applied to individual cores or to groups of cores, and each
-may have different policies applied. It is not required that every core in the system be explicitly managed by this
-Kubernetes power manager. When the Power Manager is used to specify core power relatead policies, it overrides the
-default settings
-
-Powerful features from the Intel SST package give users more precise control over CPU performance and power use on a
-per-core basis. Yet, Kubernetes is purposefully built to operate as an abstraction layer between the workload and such
-hardware capabilities as a workload orchestrator. Users of Kubernetes who are running performance-critical workloads
-with particular requirements reliant on hardware capabilities encounter a challenge as a consequence.
+The Kubernetes Power Manager supports Intel, AMD and ARM processor architectures. Modern processors give users more
+precise control over CPU performance and power use on a per-core basis. Yet, Kubernetes is purposefully built to
+operate as an abstraction layer between the workload and such hardware capabilities as a workload orchestrator. Users
+of Kubernetes who are running performance-critical workloads with particular requirements reliant on hardware
+capabilities encounter a challenge as a consequence.
 
 The Kubernetes Power Manager bridges the gap between the container orchestration layer and hardware features enablement.
 
@@ -36,32 +36,22 @@ The Kubernetes Power Manager bridges the gap between the container orchestration
 
 ### Use Cases
 
-- *Unpredictable machine use.*
-  Users may use machine learning through monitoring to determine profiles that predict a peak need for compute, to spin up
-  ahead of time.
 - *Power Optimization over Performance.*
   A user may be interested in fast response time, but not in maximal response time, so may choose to spin up cores on
-  demand and only those cores used but want to remain in power-saving mode the rest of the time.
+  demand but want to remain in power-saving mode the rest of the time. This can be done by configuring min/max CPU
+  frequency ranges and a CPUFreq governor that adjusts the frequency based on CPU usage. In addition, selected c-states
+  can be enabled to provide additional power savings when a CPU is idle.
+- *Performance over Power Optimization.*
+  A user may only be interested in fast response time, so may choose to have cores running at a high frequency at all
+  times and disable most or all c-states to avoid any latency penalties from waking a CPU.
+- *Mixed use.* A user may have a combination of applications - some of which demand the highest performance and
+  response time, and some that are more concerned with power optimization.
+
+The Kubernetes Power Manager supports all of the above use cases.
 
 > Further Info:  Please see the *diagrams-docs* directory for diagrams with a visual breakdown of the power manager and its components.
 
 ## Functionality of the Kubernetes Power Manager
-
-- **SST-CP - (Speed Select Technology - Core Power)** - Intel only
-
-  The user can arrange cores according to priority levels using this capability. When the system has extra power, it can
-  be distributed among the cores according to their priority level. Although it cannot be guaranteed, the system will
-  try to apply the additional power to the cores with the highest priority.
-  There are four levels of priority available:
-
-    1. Performance
-    2. Balance Performance
-    3. Balance Power
-    4. Power
-
-  The Priority level for a core is defined using its EPP (Energy Performance Preference) value, which is one of the
-  options in the Power Profiles. If not all the power is utilized on the CPU, the CPU can put the higher priority cores
-  up to Turbo Frequency (allows the cores to run faster).
 
 - **Frequency Tuning**
 
@@ -81,8 +71,8 @@ The Kubernetes Power Manager bridges the gap between the container orchestration
     - **intel_pstate**
   
       Modern Intel CPUs automatically employ the `intel_pstate` CPU power scaling driver. This driver is integrated rather
-      than a module, giving it precedence over other drivers. For Sandy Bridge and newer CPUs, this driver is currently used
-      automatically. The BIOS P-State settings might be disregarded by Intel P-State.
+      than a module, giving it precedence over other drivers. For Sandy Bridge and newer CPUs, this driver is currently
+      used automatically. The BIOS P-State settings might be disregarded by Intel P-State.
       The Intel P-State driver utilizes the **Performance** and **Powersave** governors.
 
       - ***Performance***: The CPUfreq governor `performance` sets the CPU statically to the highest frequency within the borders of `scaling_min_freq` and `scaling_max_freq`.
@@ -90,10 +80,13 @@ The Kubernetes Power Manager bridges the gap between the container orchestration
 
     - **acpi-cpufreq**
 
-      The acpi-cpufreq driver setting operates much like the P-state driver but has a different set of available governors. For more information see [here](https://www.kernel.org/doc/html/v4.12/admin-guide/pm/cpufreq.html).\
+      The acpi-cpufreq driver setting operates much like the P-state driver but has a different set of available
+      governors. For more information see [here](https://www.kernel.org/doc/html/v4.12/admin-guide/pm/cpufreq.html).
 
-      One thing to note is that acpi-cpufreq reports the base clock as the frequency hardware limits however the P-state driver uses turbo frequency limits.
-      Both drivers can make use of turbo frequency; however, acpi-cpufreq can exceed hardware frequency limits when using turbo frequency.
+      One thing to note is that acpi-cpufreq reports the base clock as the frequency hardware limits however the P-state
+      driver uses turbo frequency limits.
+      Both drivers can make use of turbo frequency; however, acpi-cpufreq can exceed hardware frequency limits when using
+      turbo frequency.
       This is important to take into account when setting frequencies for profiles.
 
     - **intel_cpufreq**
@@ -105,6 +98,23 @@ The Kubernetes Power Manager bridges the gap between the container orchestration
     - **cppc_cpufreq**
 
       This is often the default for aarch64 systems.
+
+  - **Energy Performance Preference (EPP)**
+
+    The user can arrange cores according to priority levels using this capability. When the system has extra power, it can
+    be distributed among the cores according to their priority level. Although it cannot be guaranteed, the system will
+    try to apply the additional power to the cores with the highest priority. This feature requires support from both
+    the underlying processor and the scaling driver.
+    There are four levels of priority available:
+
+      1. Performance
+      2. Balance Performance
+      3. Balance Power
+      4. Power
+
+    The Priority level for a core is defined using its EPP (Energy Performance Preference) value, which is one of the
+    options in the Power Profiles. If not all the power is utilized on the CPU, the CPU can put the higher priority cores
+    up to Turbo Frequency (allows the cores to run faster).
 
 - **CPU Idle Time Management**
 
@@ -129,9 +139,13 @@ The Kubernetes Power Manager bridges the gap between the container orchestration
 
   - **AMD**
 
-    Unlike Intel, AMD does not expose uncore frequency controls (such as LLC, memory controller, or fabric clocks) via a standard kernel interface. There is no equivalent to Intel’s `intel_uncore_frequency` driver or `/sys/devices/system/cpu/intel_uncore_frequency` sysfs interface.
+    Unlike Intel, AMD does not expose uncore frequency controls (such as LLC, memory controller, or fabric clocks) via a
+    standard kernel interface. There is no equivalent to Intel’s `intel_uncore_frequency` driver or
+    `/sys/devices/system/cpu/intel_uncore_frequency` sysfs interface.
 
-    Instead, uncore frequency management on AMD EPYC platforms is supported via the [ESMI library](https://github.com/amd/esmi_ib_library/tree/master), a user-space interface that communicates with hardware using the amd_hsmp kernel driver.
+    Instead, uncore frequency management on AMD EPYC platforms is supported via the
+    [ESMI library](https://github.com/amd/esmi_ib_library/tree/master), a user-space interface that communicates with
+    hardware using the amd_hsmp kernel driver.
     > Note: The *amd_hsmp* driver might not be loaded by default and must be manually enabled:
     >
     > ```console
@@ -148,22 +162,27 @@ The Kubernetes Power Manager bridges the gap between the container orchestration
 
 ## Prerequisites
 
-- **Node Feature Discovery** ([NFD](https://github.com/kubernetes-sigs/node-feature-discovery)) should be deployed in the cluster before running the Kubernetes Power Manager.
-NFD is used to detect node-level features such as *Intel Speed Select Technology - Base Frequency (SST-BF)*.
-Once detected, the user can instruct the Kubernetes Power Manager to deploy the Power Node Agent to Nodes with SST-specific labels, allowing the Power Node Agent to take advantage of such features by configuring cores on the host to optimise performance for containerized workloads.
+- **Node Feature Discovery** ([NFD](https://github.com/kubernetes-sigs/node-feature-discovery)) should be deployed in
+  the cluster before running the Kubernetes Power Manager.
+  NFD is used to detect node-level features such as *Intel Speed Select Technology - Base Frequency (SST-BF)*.
+  Once detected, the user can instruct the Kubernetes Power Manager to deploy the Power Node Agent to Nodes with
+  SST-specific labels, allowing the Power Node Agent to take advantage of such features by configuring cores on the
+  host to optimise performance for containerized workloads.
   
   > **Note: NFD is recommended, but not essential. Node labels can also be applied manually. See
-  the [NFD repo](https://github.com/kubernetes-sigs/node-feature-discovery#feature-labels) for a full list of features labels.**
+  the [NFD repo](https://github.com/kubernetes-sigs/node-feature-discovery#feature-labels) for a full list of features
+  labels.**
 
 - If not using NFD or labels added through NFD, label the node manually with a label of your choosing:
 
   ```console
-  oc label node <node-name> feature.node.kubernetes.io/power-node=true
+  kubectl label node <node-name> feature.node.kubernetes.io/power-node=true
   ```
 
   > Note: Make sure to use the same label in the `PowerConfig`, under `spec.powerNodeSelector`.
 
-- **Important**: In the kubelet configuration file the `cpuManagerPolicy` has to set to `static`, and the `reservedSystemCPUs` must be set to the desired value (full file [here](./examples/example-kubelet-configuration.yaml)):
+- **Important**: In the kubelet configuration file the `cpuManagerPolicy` has to set to `static`, and the
+  `reservedSystemCPUs` must be set to the desired value (full file [here](./examples/example-kubelet-configuration.yaml)):
 
   ```yaml
   apiVersion: kubelet.config.k8s.io/v1beta1
@@ -208,12 +227,7 @@ The Kubernetes Power Manager includes a helm chart for the latest releases, allo
 everything that is needed for the overarching operator and the node agent to run. The following versions are
 supported with helm charts:
 
-- v2.0.0
-- v2.1.0
-- v2.2.0
-- v2.3.0
-- v2.3.1
-- ocp-4.13-v2.3.1
+- TODO
 
 When set up using the provided helm charts, the following will be deployed:
 
@@ -244,57 +258,35 @@ You can use the HELM_CHART and OCP parameters to deploy an older or Openshift sp
 
 Please note when installing older versions that certain features listed in this README may not be supported.
 
-## Working environments (WIP)
-
-The Kubernetes Power Manager has been tested in different environments.  
-The below table are results that have been tested and confirmed to function as desired:
-
-|   OS           |   Kernel                        |  Container runtime         | Kubernetes   |
-| :------------: |  :------------------------:     |  :-----------------------: |  :--------:  |
-| Rocky 8.6      | 6.0.9-1.el8.elrepo.x86_64       | Docker 20.10.18            | v1.25.0      |
-| Ubuntu 20.04   | 5.15.0-50-generic               | Containerd 1.6.9           | 1.25.4       |
-| Ubuntu 20.04   | 5.15.0-50-generic               | cri-o 1.23.4               | 1.25.4       |
-| Ubuntu 20.04   | 5.15.0-50-generic               | Docker 22.6.0              | 1.25.4       |
-| Ubuntu 20.04   | 5.15.0-50-generic               | Containerd 1.6.9           | 1.24.3       |
-| Ubuntu 20.04   | 5.15.0-50-generic               | Containerd 1.6.9           | 1.24.2       |
-| Ubuntu 20.04   | 5.15.0-50-generic               | Containerd 1.6.9           | 1.23.3       |
-| Ubuntu 20.04   | 5.15.0-50-generic               | Docker 20.10.12            | 1.23.3       |
-| Ubuntu 20.04   | 5.10.0-132-generic              | Docker 22.6.0              | 1.25.4       |
-| Ubuntu 20.04   | 5.4.0-132-generic               | Containerd 1.6.9           | 1.25.4       |
-| Ubuntu 20.04   | 5.4.0-122-generic               | Containerd 1.6.9           | 1.24.4       |
-| CentOS 8       | 4.18.0-372.19.1.el8_6.x86_64    |Containerd 1.6.9            | 1.24.3       |
-| Rocky 8.6      | 4.18.0-372.19.1.el8_6.x86_64    | Docker  20.10.18           | 1.25.0       |
-
-> Note: this does not include additional environments.
-
 ## Components
 
 ### Power Optimization Library
 
 The [Power Optimization Library](./power-optimization-library) takes the desired configuration
 for the cores associated with Exclusive Pods and tunes them based on the requested `PowerProfile`. The Power Optimization
-Library will also facilitate the use of the Intel SST (Speed Select Technology) Suite (SST-CP - Speed Select
-Technology-Core Power, and Frequency Tuning) and C-States functionality.
+Library will also facilitate the use of C-States functionality.
 
 ### Power Node Agent
 
-The Power Node Agent is also a containerized application deployed by the Kubernetes Power Manager in a DaemonSet.\
+The Power Node Agent is also a containerized application deployed by the Kubernetes Power Manager in a DaemonSet.
 
-The primary function of the node agent is to communicate with the node's Kubelet PodResources endpoint to discover the exact
-cores that are allocated per container. The node agent watches for Pods that are created in your cluster and examines
+The primary function of the node agent is to communicate with the node's Kubelet PodResources endpoint to discover the
+exact cores that are allocated per container. The node agent watches for Pods that are created in your cluster and examines
 them to determine which `PowerProfile` they have requested and then sets off the chain of events that tunes the
 frequencies of the cores designated to the Pod.
 
-### The Power Config controller
+### Power Config controller
 
-The Kubernetes Power Manager will wait for the `PowerConfig` CR to be created by the user to initiate the deployment of the node agent.
-The `PowerConfig` specifies what Nodes the user wants to place the node agent on.
+The Kubernetes Power Manager will wait for the `PowerConfig` CR to be created by the user to initiate the deployment of
+the node agent. The `PowerConfig` specifies what Nodes the user wants to place the node agent on.
 
 > `spec.powerNodeSelector`: This is a key/value map used for defining a list of node labels that a node must satisfy in order for the Power Node Agent to be deployed.
 
-Once the Power Config controller sees that the `PowerConfig` is created, it deploys the power node agent on each of the Nodes that are specified. `PowerProfiles` should be created separately by the user and are advertised as
+Once the Power Config controller sees that the `PowerConfig` is created, it deploys the power node agent on each of the
+Nodes that are specified. `PowerProfiles` should be created separately by the user and are advertised as
 extended resources that can be requested in the PodSpec. The Kubelet can then keep track of these requests.
-It is important to use as it can specify how many cores on the system can be run at a higher frequency before hitting the heat threshold.
+The extended resources can control how many cores on the system can be run at a higher frequency and help avoid hitting
+the heat threshold which would limit frequencies.
 
 **Note**: Only one `PowerConfig` can be present in a cluster. The Config Controller will ignore and delete and subsequent
 PowerConfigs created after the first.
@@ -312,14 +304,15 @@ spec:
     feature.node.kubernetes.io/power-node: "true"
 ```
 
-### The Power Workload controller
+### Power Workload controller
 
-The Power Workload controller is responsible for the actual tuning of the cores. The Power Workload Controller uses the Power
-Optimization Library and requests that it creates the Pools. The Pools hold the `PowerProfile` associated with the cores and the cores that need to be configured.
+The Power Workload controller is responsible for the actual tuning of the cores. The Power Workload Controller uses the
+Power Optimization Library and requests that it creates the Pools. The Pools hold the `PowerProfile` associated with the
+cores and the cores that need to be configured.
 
 `PowerWorkload` objects are automatically created for each valid non-Shared `PowerProfile` by the Power Profile controller.
-`PowerWorkload` objects can also be created directly by the user via the `PowerWorkload` spec. This is only recommended when
-creating the Shared `PowerWorkload` for a given Node, as this is the responsibility of the user. If no Shared
+`PowerWorkload` objects can also be created directly by the user via the `PowerWorkload` spec. This is only recommended
+when creating the Shared `PowerWorkload` for a given Node, as this is the responsibility of the user. If no Shared
 `PowerWorkload` is created, the cores that remain in the *shared pool* on the Node will remain at their core frequency
 values instead of being tuned to lower frequencies. `PowerWorkloads` are specific to a given node, so one is created for
 each Node with a Pod requesting a `PowerProfile`, based on the `PowerProfile` requested.
@@ -359,13 +352,18 @@ status:
 
 This workload assigns the **performance** `PowerProfile` to cores 2, 3, 66, and 67 on the node *example-node*.
 
-The Shared `PowerWorkload` created by the user is determined by the power workload controller based on the *AllCores* value in the `PowerWorkload` spec.
+The Shared `PowerWorkload` created by the user is determined by the power workload controller based on the *allCores*
+value in the `PowerWorkload` spec.
 
-The reserved CPUs on the Node must also be specified, as these will not be considered for frequency tuning by the controller as they are always being used by Kubernetes’ processes.\
-It is important that the reservedCPUs value directly corresponds to the reservedCPUs value in the user’s Kubelet config to keep them consistent.\
-The user determines the Node for this `PowerWorkload` using the `spec.powerNodeSelector` to match the labels on the Node. The user then specifies the requested `PowerProfile` to use.
+The reserved CPUs on the Node must also be specified, as these will not be considered for frequency tuning by the
+controller as they are always being used by Kubernetes’ processes.
+It is important that the reservedCPUs value directly corresponds to the reservedCPUs value in the user’s Kubelet config to
+keep them consistent.
+The user determines the Node for this `PowerWorkload` using the `spec.powerNodeSelector` to match the labels on the Node.
+The user then specifies the requested `PowerProfile` to use.
 
- The shared `PowerWorkload` must select a unique node through its `spec.powerNodeSelector`, so it is recommended that the `kubernetes.io/hostname` label be used.
+The shared `PowerWorkload` must select a unique node through its `spec.powerNodeSelector`, so it is recommended that the
+`kubernetes.io/hostname` label be used.
 A shared `PowerProfile` can be used for multiple shared `PowerWorkloads`.
 
 **Example:**
@@ -388,7 +386,7 @@ spec:
   powerProfile: "shared-example-node"
 ```
 
-### The Power Profile Controller
+### Power Profile Controller
 
 The Power Profile controller holds values for specific settings which are then applied to cores at host level by the
 Kubernetes Power Manager as requested. `PowerProfiles` are advertised as extended resources and can be requested via the
@@ -400,21 +398,46 @@ PodSpec. All `PowerProfiles` must be created explicitly by the user.
 apiVersion: "power.intel.com/v1"
 kind: PowerProfile
 metadata:
-  name: performance-example-node
+  name: performance-example-application
 spec:
-  name: "performance-example-node"
+  name: "performance-example-application"
+  cpuCapacity: "75%"
+  nodeSelector:
+  labelSelector:
+    matchExpressions:
+    - key: test
+      operator: In
+      values:
+      - test
   pstates:
     max: 3700
     min: 3300
     epp: "performance"
+  cstates:
+  # maxLatencyUs: 100
+    names:
+      C1: true
+      C6: false
 ```
 
-The Shared `PowerProfile` must also be created by the user and does not require a Base PowerProfile. This allows the user to
-have a Shared `PowerProfile` per Node in their cluster, giving more room for different configurations. The Power
+Note:
+- `spec.pstates.min` and `spec.pstates.max` can hold both scalar and percentage values.
+- `spec.cpuCapacity` has been added to configure the node's CPU capacity. It can hold both scalar and percentage values.
+- `spec.nodeSelector` can be used to choose to which node the `PowerProfile` applies to.
+- The PowerProfile CRD has been enhanced to support both P-states (frequency) and C-states (power saving) configuration in
+  a single, unified structure. C-states can be configured either by explicit state names or by maximum latency threshold
+  for more flexible power tuning across different CPU architectures.
+- The `spec.pstates.epp` only applies to processors that support it.
+
+Dynamic scaling for DPDK polling workloads is also supported via `spec.cpuScalingPolicy`.
+See [Dynamic CPU Frequency Scaling for DPDK workloads](docs/dpdk-dynamic-scaling.md) for details.
+
+The Shared `PowerProfile` must also be created by the user and does not require a Base PowerProfile. This allows the user
+to have a Shared `PowerProfile` per Node in their cluster, giving more room for different configurations. The Power
 controller determines that a `PowerProfile` is being designated as `Shared` through the use of the `spec.shared` parameter.
 This flag must be enabled when using a shared pool.
 
-**Example:**
+**Examples:**
 
 ```yaml
 apiVersion: "power.intel.com/v1"
@@ -430,16 +453,6 @@ spec:
     epp: "power"
     governor: "powersave"
 ```
-
-Other considerations:
-
-- `spec.min` and `spec.max` can hold both scalar and percentage values.
-- `spec.cpuCapacity` has been added to configure the node's CPU capacity. It can hold both scalar and percentage values.
-- `spec.nodeSelector` can be used to choose to which node the `PowerProfile` applies to.
-- The PowerProfile CRD has been enhanced to support both P-states (frequency) and C-states (power saving) configuration in a single, unified structure. C-states can be configured either by explicit state names or by maximum latency threshold for more flexible power tuning across different CPU architectures.
-- for ARM systems, `spec.pstates.epp` should be skipped.
-- Dynamic scaling for DPDK polling workloads is also supported via `spec.cpuScalingPolicy`.
-  See [Dynamic CPU Frequency Scaling for DPDK workloads](docs/dpdk-dynamic-scaling.md) for details.
 
 ```yaml
 apiVersion: "power.intel.com/v1"
@@ -467,13 +480,12 @@ spec:
     names:
       C1: true
       C6: false
-  # cpuScalingPolicy: {}
 ```
 
 > **Note: The Power Profile controller will create a corresponding `PowerWorkload` for each valid
 non-Shared `PowerProfile`.**
 
-### The Power Node controller
+### Power Node controller
 
 The Power Node controller provides observability into the node's power management operations. It displays the current state of PowerProfiles, PowerWorkloads, core assignments, and guaranteed pod containers.
 
@@ -515,14 +527,15 @@ The status shows:
 - **sharedPool**: Shared pool profile and core assignments
 - **reservedPools**: Reserved platform cores with custom profiles
 
-### The Power Pod controller
+### Power Pod controller
 
-The Power Pod Controller watches for pods. When a pod comes along the Power Pod Controller checks if the pod is in the guaranteed quality of service class (using exclusive
+The Power Pod Controller watches for pods. When a pod comes along the Power Pod Controller checks if the pod is in the
+guaranteed quality of service class (using exclusive
 cores, [see documentation](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/), taking a core
 out of the shared pool as it is the only option in Kubernetes that can do this operation). Then it examines the Pods to
 determine which PowerProfile has been requested and then updates the appropriate `PowerWorkload`.
 
-> **Note**: the request and the limits must have a matching number of cores and are also in a container-by-container bases.
+> **Note**: the request and the limits must have a matching number of cores and are also on a container-by-container basis.
 Currently the Kubernetes Power Manager supports multiple `PowerProfile` per Pod, but only one `PowerProfile` per container.
 
 ### Uncore Frequency - only applicable to Intel CPUs
@@ -587,9 +600,10 @@ status:
 
     - Once applied, the PowerWorkload controller will get triggered and create the corresponding Pool.
     - All of the cores on the system except for the reservedCPUs will then be brought down to this lower frequency level.
-    - The reservedCPUs will be kept at the system default min and max frequency by default. If the user specifies a `PowerPprofile` along with a set of reserved
-    cores then a separate pool will be created for those cores and that profile. If an invalid profile is supplied the cores will instead be placed in
-    the default reserved pool with system defaults.
+    - The reservedCPUs will be kept at the system default min and max frequency by default. If the user specifies a
+     `PowerProfile` along with a set of reserved
+      cores then a separate pool will be created for those cores and that profile. If an invalid profile is supplied the
+      cores will instead be placed in the default reserved pool with system defaults.
         > Note: In most instances, leaving these cores at system defaults is the best approach to prevent important k8s or kernel related processes from becoming starved.
 
 7. Create the **Performance Pod(s)** - use the example [Pod](examples/example-pod.yaml).
