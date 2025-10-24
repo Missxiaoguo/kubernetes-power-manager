@@ -63,14 +63,15 @@ type PowerProfileReconciler struct {
 
 // Reconcile method that implements the reconcile loop
 func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var err error
 	logger := r.Log.WithValues("powerprofile", req.NamespacedName)
+	logger.Info("Reconciling the power profile")
+
+	var err error
 	if req.Namespace != IntelPowerNamespace {
 		err := fmt.Errorf("incorrect namespace")
 		logger.Error(err, "resource is not in the intel-power namespace, ignoring")
 		return ctrl.Result{Requeue: false}, err
 	}
-	logger.Info("reconciling the power profile")
 
 	// Node name is passed down via the downwards API and used to make sure the PowerProfile is for this node
 	nodeName := os.Getenv("NODE_NAME")

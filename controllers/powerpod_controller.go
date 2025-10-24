@@ -37,7 +37,9 @@ import (
 	podresourcesapi "k8s.io/kubelet/pkg/apis/podresources/v1"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/intel/kubernetes-power-manager/pkg/podresourcesclient"
 	"github.com/intel/kubernetes-power-manager/pkg/podstate"
@@ -68,8 +70,9 @@ type PowerPodReconciler struct {
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=privileged,verbs=use
 
 func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
 	logger := r.Log.WithValues("powerpod", req.NamespacedName)
+	logger.Info("Reconciling the pod")
+
 	pod := &corev1.Pod{}
 	logger.V(5).Info("retrieving pod instance")
 	err := r.Get(context.TODO(), req.NamespacedName, pod)
@@ -84,16 +87,9 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 		logger.Error(err, "error while trying to retrieve the pod")
 		return ctrl.Result{}, err
 	}
-	// First thing to check is if this pod is on the same node as the node agent that intercepted it
+
 	// The NODE_NAME environment variable is passed in via the downwards API in the pod spec
-	logger.V(5).Info("confirming the pod is on the same node as the power node-agent")
 	nodeName := os.Getenv("NODE_NAME")
-	if pod.Spec.NodeName != nodeName {
-		return ctrl.Result{}, nil
-	}
-	if pod.ObjectMeta.Namespace == "kube-system" {
-		return ctrl.Result{}, nil
-	}
 
 	if !pod.ObjectMeta.DeletionTimestamp.IsZero() || pod.Status.Phase == corev1.PodSucceeded {
 		// If the pod's deletion timestamp is not zero, then the pod has been deleted
@@ -293,11 +289,6 @@ func (r *PowerPodReconciler) getPowerProfileRequestsFromContainers(containers []
 		if profileName == "" {
 			logger.V(5).Info("no profile was requested by the container")
 			continue
-		}
-		// checks if pod has been altered by time of day
-		newProf, ok := pod.ObjectMeta.Annotations["PM-altered"]
-		if ok {
-			profileName = newProf
 		}
 		profileAvailable, err := validateProfileAvailabilityOnNode(context.TODO(), r.Client, profileName, pod.Spec.NodeName, r.PowerLibrary, logger)
 		if err != nil {
@@ -535,8 +526,33 @@ func getCleanCoreList(coreIDs string) []uint {
 	return cleanCores
 }
 
+// PowerReleventPodPredicate returns true if this pod should be considered by the controller
+// based on node scope and presence of power profile resource requests.
+func PowerReleventPodPredicate(obj client.Object) bool {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok {
+		return false
+	}
+	if pod.Spec.NodeName != os.Getenv("NODE_NAME") {
+		return false
+	}
+	containers := append(pod.Spec.InitContainers, pod.Spec.Containers...)
+	for _, c := range containers {
+		// No need to check the limits, as if the requests are present,
+		// the limits must be present as well.
+		for rn := range c.Resources.Requests {
+			if strings.HasPrefix(string(rn), ResourcePrefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (r *PowerPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.Pod{}).
+		For(&corev1.Pod{},
+			builder.WithPredicates(
+				predicate.NewPredicateFuncs(PowerReleventPodPredicate))).
 		Complete(r)
 }
