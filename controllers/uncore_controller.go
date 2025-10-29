@@ -24,6 +24,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -55,19 +56,16 @@ type UncoreReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.13.1/pkg/reconcile
 func (r *UncoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var err error
-	nodeName := os.Getenv("NODE_NAME")
-	// uncore is not for this node
-	if req.Name != nodeName {
-		return ctrl.Result{}, nil
-	}
 	logger := r.Log.WithValues("uncore", req.NamespacedName)
+	logger.Info("Reconciling the uncore")
+
+	var err error
 	if req.Namespace != IntelPowerNamespace {
 		err = fmt.Errorf("incorrect namespace")
 		logger.Error(err, "resource is not in the intel-power namespace, ignoring")
 		return ctrl.Result{Requeue: false}, err
 	}
-	logger.Info("Reconciling uncore")
+
 	uncore := &powerv1.Uncore{}
 	defer func() { _ = writeUpdatedStatusErrsIfRequired(ctx, r.Status(), uncore, err) }()
 	// resets all values to allow for CRD updates
@@ -168,7 +166,13 @@ func (r *UncoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 // SetupWithManager sets up the controller with the Manager.
 func (r *UncoreReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&powerv1.Uncore{}).
-		WithEventFilter(predicate.GenerationChangedPredicate{}).
+		For(&powerv1.Uncore{},
+			builder.WithPredicates(
+				predicate.GenerationChangedPredicate{},
+				predicate.NewPredicateFuncs(func(obj client.Object) bool {
+					// Only enqueue the uncore for the current node
+					return obj.GetName() == os.Getenv("NODE_NAME")
+				}),
+			)).
 		Complete(r)
 }

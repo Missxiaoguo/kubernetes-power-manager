@@ -31,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
@@ -54,15 +55,8 @@ type PowerNodeReconciler struct {
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=privileged,verbs=use
 
 func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
-
 	logger := r.Log.WithValues("powernode", req.NamespacedName)
-	logger.V(5).Info("checking if power node and node name match")
 	nodeName := os.Getenv("NODE_NAME")
-	if nodeName != req.NamespacedName.Name {
-		// power node is not on this node
-		return ctrl.Result{}, nil
-	}
 
 	powerProfileStrings := make([]string, 0)
 	powerWorkloadStrings := make([]string, 0)
@@ -311,9 +305,14 @@ func (r *PowerNodeReconciler) itterPods(nodeName string, workload powerv1.PowerW
 }
 
 func (r *PowerNodeReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	pred := predicate.LabelChangedPredicate{}
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&powerv1.PowerNode{}).
-		WithEventFilter(pred).
+		For(&powerv1.PowerNode{},
+			builder.WithPredicates(
+				predicate.LabelChangedPredicate{},
+				predicate.NewPredicateFuncs(func(obj client.Object) bool {
+					// Only enqueue the power node for the current node
+					return obj.GetName() == os.Getenv("NODE_NAME")
+				}),
+			)).
 		Complete(r)
 }

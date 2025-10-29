@@ -2626,3 +2626,115 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 		})
 	}
 }
+
+func TestPowerReleventPodPredicate(t *testing.T) {
+	t.Setenv("NODE_NAME", "TestNode")
+
+	makePod := func(ns, node string, initReqs,
+		reqs map[corev1.ResourceName]resource.Quantity,
+		withInit bool,
+	) *corev1.Pod {
+		pod := &corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "test-pod",
+				Namespace: ns,
+			},
+			Spec: corev1.PodSpec{
+				NodeName: node,
+				Containers: []corev1.Container{
+					{
+						Name: "c1",
+						Resources: corev1.ResourceRequirements{
+							Requests: reqs,
+							Limits:   reqs,
+						},
+					},
+				},
+			},
+		}
+		if withInit {
+			pod.Spec.InitContainers = []corev1.Container{
+				{
+					Name: "ic1",
+					Resources: corev1.ResourceRequirements{
+						Requests: initReqs,
+						Limits:   initReqs,
+					},
+				},
+			}
+		}
+		return pod
+	}
+
+	powerReq := map[corev1.ResourceName]resource.Quantity{
+		corev1.ResourceName(ResourcePrefix + "performance"): *resource.NewQuantity(1, resource.DecimalSI),
+	}
+	cpuMemReq := map[corev1.ResourceName]resource.Quantity{
+		corev1.ResourceCPU:    *resource.NewQuantity(1, resource.DecimalSI),
+		corev1.ResourceMemory: *resource.NewQuantity(128, resource.DecimalSI),
+	}
+
+	cases := []struct {
+		name string
+		obj  client.Object
+		want bool
+	}{
+		{
+			name: "non-pod object returns false",
+			obj:  &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n"}},
+			want: false,
+		},
+		{
+			name: "node mismatch returns false",
+			obj:  makePod(IntelPowerNamespace, "OtherNode", nil, powerReq, false),
+			want: false,
+		},
+		{
+			name: "no power requests returns false",
+			obj:  makePod(IntelPowerNamespace, "TestNode", nil, cpuMemReq, false),
+			want: false,
+		},
+		{
+			name: "container with power request returns true",
+			obj:  makePod(IntelPowerNamespace, "TestNode", nil, powerReq, false),
+			want: true,
+		},
+		{
+			name: "container with power request in other namespace returns true",
+			obj:  makePod("test-namespace", "TestNode", nil, powerReq, true),
+			want: true,
+		},
+		{
+			name: "init container with power request returns true",
+			obj:  makePod(IntelPowerNamespace, "TestNode", powerReq, cpuMemReq, true),
+			want: true,
+		},
+		{
+			name: "multiple containers where one requests power returns true",
+			obj: func() client.Object {
+				pod := makePod(IntelPowerNamespace, "TestNode", nil, cpuMemReq, false)
+				pod.Spec.Containers = append(
+					pod.Spec.Containers,
+					corev1.Container{
+						Name: "c2",
+						Resources: corev1.ResourceRequirements{
+							Requests: powerReq,
+							Limits:   powerReq,
+						},
+					},
+				)
+				return pod
+			}(),
+			want: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := PowerReleventPodPredicate(tc.obj)
+			if got != tc.want {
+				t.Fatalf("PowerReleventPodPredicate() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
