@@ -29,8 +29,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/go-logr/logr"
-	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
 	"github.com/intel/power-optimization-library/pkg/power"
+	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
 )
 
 // UncoreReconciler reconciles a Uncore object

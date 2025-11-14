@@ -172,5 +172,5 @@ spec:
   maturity: alpha
   provider:
     name: Intel Corporation
-    url: https://github.com/intel/kubernetes-power-manager
+    url: https://github.com/openshift-kni/kubernetes-power-manager
   version: 2.3.1

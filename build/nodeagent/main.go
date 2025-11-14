@@ -30,13 +30,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
-	"github.com/intel/kubernetes-power-manager/internal/scaling"
-	"github.com/intel/kubernetes-power-manager/pkg/podresourcesclient"
+	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
+	"github.com/openshift-kni/kubernetes-power-manager/internal/scaling"
+	"github.com/openshift-kni/kubernetes-power-manager/pkg/podresourcesclient"
 
-	"github.com/intel/kubernetes-power-manager/controllers"
-	"github.com/intel/kubernetes-power-manager/pkg/podstate"
 	"github.com/intel/power-optimization-library/pkg/power"
+	"github.com/openshift-kni/kubernetes-power-manager/controllers"
+	"github.com/openshift-kni/kubernetes-power-manager/pkg/podstate"
 	corev1 "k8s.io/api/core/v1"
 	// +kubebuilder:scaffold:imports
 )

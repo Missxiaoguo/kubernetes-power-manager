@@ -28,8 +28,8 @@ import (
 	e "errors"
 
 	"github.com/go-logr/logr"
-	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
 	"github.com/intel/power-optimization-library/pkg/power"
+	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -41,9 +41,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
-	"github.com/intel/kubernetes-power-manager/pkg/podresourcesclient"
-	"github.com/intel/kubernetes-power-manager/pkg/podstate"
-	"github.com/intel/kubernetes-power-manager/pkg/util"
+	"github.com/openshift-kni/kubernetes-power-manager/pkg/podresourcesclient"
+	"github.com/openshift-kni/kubernetes-power-manager/pkg/podstate"
+	"github.com/openshift-kni/kubernetes-power-manager/pkg/util"
 )
 
 const (

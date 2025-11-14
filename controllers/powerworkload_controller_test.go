@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zapcore"
 
-	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
-	"github.com/intel/kubernetes-power-manager/internal/scaling"
 	"github.com/intel/power-optimization-library/pkg/power"
+	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
+	"github.com/openshift-kni/kubernetes-power-manager/internal/scaling"
 	"github.com/stretchr/testify/mock"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"

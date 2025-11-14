@@ -3,19 +3,9 @@
 The Intel Power Optimization Library is an open source library that takes the desired configuration of the user to tune
 the frequencies and set the priority level of the cores.
 
-## DISCONTINUATION OF PROJECT
-
-This project will no longer be maintained by Intel.  
-Intel has ceased development and contributions including, but not limited to, maintenance, bug fixes, new releases, or updates, to this project.  
-Intel no longer accepts patches to this project.  
-If you have an ongoing need to use this project, are interested in independently developing it, or would like to maintain patches for the open source software community, please create your own fork of this project.  
-
 ## Overview
 
 The Power Optimization Library takes allows management of CPUs power/performance on via Pool based management
-
-This library is currently used as part of the
-[Kubernetes Power Manager](https://github.com/intel/kubernetes-power-manager), but could be used with other utilities.
 
 ## Features
 

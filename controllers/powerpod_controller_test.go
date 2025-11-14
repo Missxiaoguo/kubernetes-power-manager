@@ -25,9 +25,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
-	"github.com/intel/kubernetes-power-manager/pkg/podresourcesclient"
-	"github.com/intel/kubernetes-power-manager/pkg/podstate"
+	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
+	"github.com/openshift-kni/kubernetes-power-manager/pkg/podresourcesclient"
+	"github.com/openshift-kni/kubernetes-power-manager/pkg/podstate"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 

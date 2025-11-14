@@ -30,10 +30,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
+	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
 
-	"github.com/intel/kubernetes-power-manager/controllers"
-	"github.com/intel/kubernetes-power-manager/pkg/state"
+	"github.com/openshift-kni/kubernetes-power-manager/controllers"
+	"github.com/openshift-kni/kubernetes-power-manager/pkg/state"
 	// +kubebuilder:scaffold:imports
 )
 
