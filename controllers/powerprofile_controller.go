@@ -23,8 +23,8 @@ import (
 	"strings"
 	"time"
 
-	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
 	"github.com/intel/power-optimization-library/pkg/power"
+	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"

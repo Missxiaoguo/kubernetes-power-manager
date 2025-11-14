@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	powerv1 "github.com/intel/kubernetes-power-manager/api/v1"
-	"github.com/intel/kubernetes-power-manager/pkg/state"
+	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
+	"github.com/openshift-kni/kubernetes-power-manager/pkg/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"go.uber.org/zap/zapcore"

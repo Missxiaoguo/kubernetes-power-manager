@@ -4,31 +4,31 @@ layout:
 plugins:
   go.sdk.operatorframework.io/v2-alpha: {}
 projectName: intel-kubernetes-power-manager
-repo: github.com/intel/kubernetes-power-manager
+repo: github.com/openshift-kni/kubernetes-power-manager
 resources:
 - domain: intel.com
   group: power
   kind: PowerNode
-  path: github.com/intel/kubernetes-power-manager/api/v1
+  path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1
 - domain: intel.com
   group: power
   kind: PowerProfile
-  path: github.com/intel/kubernetes-power-manager/api/v1
+  path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1
 - domain: intel.com
   group: power
   kind: PowerConfig
-  path: github.com/intel/kubernetes-power-manager/api/v1
+  path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1
 - domain: intel.com
   group: power
   kind: PowerWorkload
-  path: github.com/intel/kubernetes-power-manager/api/v1
+  path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1
 - domain: intel.com
   group: power
   kind: Uncore
-  path: github.com/intel/kubernetes-power-manager/api/v1
+  path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1
 version: "3"

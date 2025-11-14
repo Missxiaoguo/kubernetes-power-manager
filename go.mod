@@ -1,4 +1,4 @@
-module github.com/intel/kubernetes-power-manager
+module github.com/openshift-kni/kubernetes-power-manager
 
 go 1.23.8
 
