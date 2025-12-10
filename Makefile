@@ -1,22 +1,50 @@
-export APP_NAME=intel-kubernetes-power-manager
+export PROJECT_NAME=kubernetes-power-manager
+KPM_NAMESPACE ?= intel-power
 # Current Operator version
-VERSION ?= 2.5.0
+VERSION ?= 4.22.0
+# Bundle version (without 'v' prefix for operator-sdk)
+BUNDLE_VERSION := $(shell echo $(VERSION) | sed 's/^v//')
 # parameter used for helm chart image
 HELM_CHART ?= v2.5.0
 HELM_VERSION := $(shell echo $(HELM_CHART) | cut -d "v" -f2)
+
+# CONTROLLER_GEN_VERSION defines the controller-gen version to download from go modules.
+CONTROLLER_GEN_VERSION ?= v0.18.0
+
+# KUSTOMIZE_VERSION defines the kustomize version to download from go modules.
+KUSTOMIZE_VERSION ?= v5@v5.7.1
+
+# OPERATOR_SDK_VERSION defines the operator-sdk version to download from GitHub releases.
+OPERATOR_SDK_VERSION ?= 1.42.0
+
+# OPM_VERSION defines the opm version to download from GitHub releases.
+OPM_VERSION ?= v1.52.0
+
+# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
+ENVTEST_K8S_VERSION ?= 1.32.0
+ENVTEST_VERSION ?= release-0.21
+
 # used to detemine if certain targets should build for openshift
 OCP ?= false
 
-IMAGE_NAME ?= power-operator
-IMAGE_TAG_BASE ?= docker.io/intel/$(IMAGE_NAME)
+IMAGE_REGISTRY ?= quay.io/openshift-kni
+
+IMAGE_NAME ?= $(PROJECT_NAME)-operator
+IMAGE_NAME_AGENT ?= kubernetes-power-node-agent
+IMAGE_TAG_BASE ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME)
+IMAGE_TAG_BASE_AGENT ?= $(IMAGE_REGISTRY)/$(IMAGE_NAME_AGENT)
 
 # Image URL to use all building/pushing image targets
-IMG ?= $(IMAGE_TAG_BASE)-operator:$(VERSION)
-IMG_AGENT ?= docker.io/intel/power-node-agent:$(VERSION)
+IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
+IMG_AGENT ?= $(IMAGE_TAG_BASE_AGENT):$(VERSION)
+
 # Default bundle image tag
-BUNDLE_IMG ?= intel-kubernetes-power-manager-bundle:$(VERSION)
+BUNDLE_IMG ?= $(IMAGE_TAG_BASE)-bundle:$(VERSION)
+# BUNDLE_GEN_FLAGS are the flags passed to the operator-sdk generate bundle command
+BUNDLE_GEN_FLAGS ?= -q --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
+
 # version of ocp being supported
-OCP_VERSION=4.18
+OCP_VERSION=4.21
 # image used for building the dockerfile for ocp
 OCP_IMAGE=registry.access.redhat.com/ubi9/ubi-minimal:9.5-1742914212
 # Platform to build the images for.
@@ -34,15 +62,13 @@ KUBECTL ?= $(LOCALBIN)/kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
-
-## Tool Versions
-KUSTOMIZE_VERSION ?= v5.4.3
-CONTROLLER_TOOLS_VERSION ?= v0.17.2
+OPERATOR_SDK ?= $(LOCALBIN)/operator-sdk
+OPM ?= $(LOCALBIN)/opm
 
 .PHONY: kubectl
 kubectl: $(KUBECTL) ## Use envtest to download kubectl
 $(KUBECTL): $(LOCALBIN) envtest
-	if [ ! -f $(KUBECTL) ]; then \
+	@if [ ! -f $(KUBECTL) ] || ! $(KUBECTL) version 2>/dev/null | grep -q "Client Version: v$(ENVTEST_K8S_VERSION)$$"; then \
 		KUBEBUILDER_ASSETS=$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path); \
 		ln -sf $${KUBEBUILDER_ASSETS}/kubectl $(KUBECTL); \
 	fi
@@ -50,17 +76,41 @@ $(KUBECTL): $(LOCALBIN) envtest
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary. If wrong version is installed, it will be removed before downloading.
 $(KUSTOMIZE): $(LOCALBIN)
-	@if test -x $(LOCALBIN)/kustomize && ! $(LOCALBIN)/kustomize version | grep -q $(KUSTOMIZE_VERSION); then \
-		echo "$(LOCALBIN)/kustomize version is not expected $(KUSTOMIZE_VERSION). Removing it before installing."; \
-		rm -rf $(LOCALBIN)/kustomize; \
+	@if test -x $(KUSTOMIZE) && ! $(KUSTOMIZE) version 2>/dev/null | grep -q "$(KUSTOMIZE_VERSION)"; then \
+		echo "$(KUSTOMIZE) version is not expected $(KUSTOMIZE_VERSION). Removing it before installing."; \
+		rm -rf $(KUSTOMIZE); \
 	fi
-	test -s $(LOCALBIN)/kustomize || GOBIN=$(LOCALBIN) GO111MODULE=on go install sigs.k8s.io/kustomize/kustomize/v5@$(KUSTOMIZE_VERSION)
+	@if [ ! -f $(KUSTOMIZE) ]; then \
+		echo "Downloading kustomize..." ;\
+		GOBIN=$(LOCALBIN) GO111MODULE=on go install sigs.k8s.io/kustomize/kustomize/$(KUSTOMIZE_VERSION) ;\
+		echo "kustomize downloaded successfully." ;\
+	fi
 
 .PHONY: controller-gen
-controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary. If wrong version is installed, it will be overwritten.
+controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary. If wrong version is installed, it will be removed before downloading.
 $(CONTROLLER_GEN): $(LOCALBIN)
-	test -s $(LOCALBIN)/controller-gen && $(LOCALBIN)/controller-gen --version | grep -q $(CONTROLLER_TOOLS_VERSION) || \
-	GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_TOOLS_VERSION)
+	@if test -x $(CONTROLLER_GEN) && ! $(CONTROLLER_GEN) --version 2>/dev/null | grep -q "$(CONTROLLER_GEN_VERSION)"; then \
+		echo "$(CONTROLLER_GEN) version is not expected $(CONTROLLER_GEN_VERSION). Removing it before installing."; \
+		rm -rf $(CONTROLLER_GEN); \
+	fi
+	@if [ ! -f $(CONTROLLER_GEN) ]; then \
+		echo "Downloading controller-gen..." ;\
+		GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION) ;\
+		echo "controller-gen downloaded successfully." ;\
+	fi
+
+.PHONY: envtest
+envtest: $(ENVTEST) ## Download envtest-setup locally if necessary.
+$(ENVTEST): $(LOCALBIN)
+	@if test -x $(ENVTEST) && ! $(ENVTEST) version 2>/dev/null | grep -q "$(ENVTEST_VERSION)"; then \
+		echo "$(ENVTEST) version is not expected $(ENVTEST_VERSION). Removing it before installing."; \
+		rm -rf $(ENVTEST); \
+	fi
+	@if [ ! -f $(ENVTEST) ]; then \
+		echo "Downloading setup-envtest..." ;\
+		GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION) ;\
+		echo "setup-envtest downloaded successfully." ;\
+	fi
 
 # Options for 'bundle-build'
 ifneq ($(origin CHANNELS), undefined)
@@ -70,14 +120,9 @@ ifneq ($(origin DEFAULT_CHANNEL), undefined)
 BUNDLE_DEFAULT_CHANNEL := --default-channel=$(DEFAULT_CHANNEL)
 endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
+
 IMGTOOL ?= docker
 CATALOG_IMG ?= $(IMAGE_TAG_BASE)-catalog:v$(VERSION)
-
-ifneq (, $(IMAGE_REGISTRY))
-IMAGE_TAG_BASE = $(IMAGE_REGISTRY)/$(APP_NAME)
-else
-IMAGE_TAG_BASE = $(APP_NAME)
-endif
 
 TLS_VERIFY ?= false
 
@@ -121,10 +166,11 @@ verify-build: gofmt test race coverage tidy clean verify-test
 
 # Build the Manager and Node Agent images
 images: generate manifests
-	 $(IMGTOOL) build -f build/Dockerfile --platform $(PLATFORM) -t intel/power-operator:v$(VERSION) .
-	 $(IMGTOOL) build -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t intel/power-node-agent:v$(VERSION) .
+	 $(IMGTOOL) build -f build/Dockerfile --platform $(PLATFORM) -t ${IMG} .
+	 $(IMGTOOL) build -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t ${IMG_AGENT} .
 
 images-ocp: generate manifests
+	 echo "Building images for OCP $(IMG) and $(IMG_AGENT)"
 	 $(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" --build-arg="MANIFEST=build/manifests/ocp/power-node-agent-ds.yaml" -f build/Dockerfile --platform $(PLATFORM) -t ${IMG} .
 	 $(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t ${IMG_AGENT} .
 # Run against the configured Kubernetes cluster in ~/.kube/config
@@ -204,17 +250,17 @@ generate: controller-gen
 
 # Build the Manager's image
 build-controller:
-	$(IMGTOOL) build -f build/Dockerfile --platform $(PLATFORM) -t intel-power-operator .
+	$(IMGTOOL) build -f build/Dockerfile --platform $(PLATFORM) -t ${IMG} .
 
 # Build the Node Agent's image
 build-agent:
-	$(IMGTOOL) build -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t intel-power-node-agent .
+	$(IMGTOOL) build -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t ${IMG_AGENT} .
 
 build-controller-ocp:
-	$(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile --platform $(PLATFORM) -t intel/power-operator_ocp-$(OCP_VERSION):v$(VERSION) .
+	$(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile --platform $(PLATFORM) -t ${IMG} .
 
 build-agent-ocp:
-	$(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t intel/power-node-agent_ocp-$(OCP_VERSION):v$(VERSION) .
+	$(IMGTOOL) build --build-arg="BASE_IMAGE=$(OCP_IMAGE)" -f build/Dockerfile.nodeagent --platform $(PLATFORM) -t ${IMG_AGENT} .
 
 .PHONY: docker-push controller-gen kustomize bundle bundle-build bundle-push
 # Push the image
@@ -222,19 +268,17 @@ push:
 	$(IMGTOOL) push ${IMG}
 
 # Generate bundle manifests and metadata, then validate generated files.
-bundle: update manifests kustomize
+bundle: update manifests kustomize operator-sdk
 # directory used to get image name for bundle
 ifeq (false, $(OCP))
-	sed -i 's/\.\.\/manager.*$$/\.\.\/manager/' config/default/kustomization.yaml
+	sed -i 's|^\- \.\./manager/ocp$$|- ../manager|' config/default/kustomization.yaml
 else
-	sed -i 's/\.\.\/manager.*$$/\.\.\/manager\/ocp/' config/default/kustomization.yaml
-	sed -i 's/- .*rbac\.yaml/- \.\/ocp\/rbac.yaml/' config/rbac/kustomization.yaml
-	sed -i 's/- .*role\.yaml/- \.\/ocp\/role.yaml/' config/rbac/kustomization.yaml
+	sed -i 's|^\- \.\./manager$$|- ../manager/ocp|' config/default/kustomization.yaml
 endif
-	operator-sdk generate kustomize manifests -q
+	$(OPERATOR_SDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/manifests | operator-sdk generate bundle -q --use-image-digests --overwrite --version $(VERSION) $(BUNDLE_METADATA_OPTS) 
-	operator-sdk bundle validate ./bundle
+	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --use-image-digests --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)
+	$(OPERATOR_SDK) bundle validate ./bundle
 
 # Build the bundle image.
 bundle-build:
@@ -242,23 +286,48 @@ bundle-build:
 # Push bundle image
 bundle-push:
 	$(IMGTOOL) push $(BUNDLE_IMG)
-.PHONY: opm catalog-build catalog-push coverage update
-OPM_VERSION = v1.26.2
-OPM = ./bin/opm
-opm: ## Download opm locally if necessary.
-ifeq (,$(wildcard $(OPM)))
-ifeq (,$(shell which opm 2>/dev/null))
-	@{ \
-	set -e ;\
-	mkdir -p $(dir $(OPM)) ;\
-	OS=$(shell go env GOOS) && ARCH=$(shell go env GOARCH) && \
-	curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/${OPM_VERSION}/$${OS}-$${ARCH}-opm ;\
-	chmod +x $(OPM) ;\
-	}
-else
-OPM = $(shell which opm)
-endif
-endif
+
+.PHONY: bundle-run
+bundle-run: # Install bundle on cluster using operator sdk.
+	oc create ns $(KPM_NAMESPACE)
+	$(OPERATOR_SDK) --security-context-config restricted -n $(KPM_NAMESPACE) run bundle $(BUNDLE_IMG)
+
+.PHONY: bundle-clean
+bundle-clean: # Uninstall bundle on cluster using operator sdk.
+	$(OPERATOR_SDK) cleanup $(PROJECT_NAME) -n $(KPM_NAMESPACE)
+	oc delete ns $(KPM_NAMESPACE)
+
+.PHONY: operator-sdk
+operator-sdk: $(OPERATOR_SDK) ## Download operator-sdk locally if necessary.
+$(OPERATOR_SDK): $(LOCALBIN)
+	@if test -x $(OPERATOR_SDK) && ! $(OPERATOR_SDK) version 2>/dev/null | grep -q "$(OPERATOR_SDK_VERSION)$$"; then \
+		echo "$(OPERATOR_SDK) version is not expected $(OPERATOR_SDK_VERSION). Removing it before installing."; \
+		rm -rf $(OPERATOR_SDK); \
+	fi
+	@if [ ! -f $(OPERATOR_SDK) ]; then \
+		set -e ;\
+		echo "Downloading operator-sdk $(OPERATOR_SDK_VERSION)..." ;\
+		OS=$$(go env GOOS) && ARCH=$$(go env GOARCH) && \
+		curl -sSLo $(OPERATOR_SDK) https://github.com/operator-framework/operator-sdk/releases/download/v$(OPERATOR_SDK_VERSION)/operator-sdk_$${OS}_$${ARCH} ;\
+		chmod +x $(OPERATOR_SDK) ;\
+		echo "operator-sdk downloaded successfully." ;\
+	fi
+
+.PHONY: opm
+opm: $(OPM) ## Download opm locally if necessary.
+$(OPM): $(LOCALBIN)
+	@if test -x $(OPM) && ! $(OPM) version 2>/dev/null | grep -q "$(OPM_VERSION)$$"; then \
+		echo "$(OPM) version is not expected $(OPM_VERSION). Removing it before installing."; \
+		rm -rf $(OPM); \
+	fi
+	@if [ ! -f $(OPM) ]; then \
+		set -e ;\
+		echo "Downloading opm $(OPM_VERSION)..." ;\
+		OS=$$(go env GOOS) && ARCH=$$(go env GOARCH) && \
+		curl -sSLo $(OPM) https://github.com/operator-framework/operator-registry/releases/download/$(OPM_VERSION)/$${OS}-$${ARCH}-opm ;\
+		chmod +x $(OPM) ;\
+		echo "opm downloaded successfully." ;\
+	fi
 
 .PHONY: catalog-build
 catalog-build: opm ## Build a catalog image.

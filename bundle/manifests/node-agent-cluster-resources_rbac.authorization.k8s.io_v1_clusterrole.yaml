@@ -1,0 +1,33 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: node-agent-cluster-resources
+rules:
+- apiGroups:
+  - ""
+  - batch
+  - power.intel.com
+  resources:
+  - nodes
+  - nodes/status
+  - pods
+  - pods/status
+  - powerprofiles
+  - powerprofiles/status
+  - powerworkloads
+  - powerworkloads/status
+  - powernodes
+  - powernodes/status
+  - uncores
+  - uncores/status
+  verbs:
+  - '*'
+- apiGroups:
+  - security.openshift.io
+  resourceNames:
+  - privileged
+  resources:
+  - securitycontextconstraints
+  verbs:
+  - use
