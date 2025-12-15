@@ -2,10 +2,10 @@
 ARG BASE_IMAGE=gcr.io/distroless/static:nonroot
 
 # Source for the lscpu binary - TARGETPLATFORM architecture
-FROM quay.io/projectquay/golang:1.23 AS lscpu-source
+FROM quay.io/projectquay/golang:1.24 AS lscpu-source
 
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM quay.io/projectquay/golang:1.23 AS builder
+FROM --platform=$BUILDPLATFORM quay.io/projectquay/golang:1.24 AS builder
 ARG TARGETOS \
     TARGETARCH
 

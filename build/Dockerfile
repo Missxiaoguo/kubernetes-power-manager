@@ -1,7 +1,7 @@
 ARG BASE_IMAGE=scratch
 
 # Build the manager binary
-FROM --platform=$BUILDPLATFORM golang:1.23 AS builder
+FROM --platform=$BUILDPLATFORM quay.io/projectquay/golang:1.24 AS builder
 ARG TARGETOS \
     TARGETARCH
 
