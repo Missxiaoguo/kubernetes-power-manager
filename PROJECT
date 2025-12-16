@@ -1,9 +1,10 @@
 domain: intel.com
 layout:
-- go.kubebuilder.io/v2
+- go.kubebuilder.io/v4
 plugins:
-  go.sdk.operatorframework.io/v2-alpha: {}
-projectName: intel-kubernetes-power-manager
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: kubernetes-power-manager
 repo: github.com/openshift-kni/kubernetes-power-manager
 resources:
 - domain: intel.com
