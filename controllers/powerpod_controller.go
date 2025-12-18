@@ -311,7 +311,7 @@ func (r *PowerPodReconciler) getPowerProfileRequestsFromContainers(containers []
 		logger.V(5).Info("reserving cores to container.", "ContainerID", containerID, "Cores", cleanCoreList)
 		// accounts for case where cores aquired through DRA don't match profile requests
 		if len(cleanCoreList) != requestNum {
-			recoverableErrs = append(recoverableErrs, fmt.Errorf(fmt.Sprintf("assigned cores did not match requested profiles. cores:%d, profiles %d", len(cleanCoreList), requestNum)))
+			recoverableErrs = append(recoverableErrs, fmt.Errorf("assigned cores did not match requested profiles. cores:%d, profiles %d", len(cleanCoreList), requestNum))
 			continue
 		}
 		logger.V(5).Info("creating the power container")
