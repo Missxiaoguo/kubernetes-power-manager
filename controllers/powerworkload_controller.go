@@ -363,7 +363,7 @@ func createReservedPool(library power.Host, coreConfig powerv1.ReservedSpec, log
 		}
 
 		logger.Error(err, "error setting retrieving exclusive pool for reserved cores")
-		return fmt.Errorf(fmt.Sprintf("specified profile %s has no existing pool", coreConfig.PowerProfile))
+		return fmt.Errorf("specified profile %s has no existing pool", coreConfig.PowerProfile)
 	}
 	if err := pseudoReservedPool.SetPowerProfile(corePool.GetPowerProfile()); err != nil {
 		if removePoolError := pseudoReservedPool.Remove(); removePoolError != nil {
