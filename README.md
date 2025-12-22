@@ -359,8 +359,8 @@ keep them consistent.
 The user determines the Node for this `PowerWorkload` using the `spec.powerNodeSelector` to match the labels on the Node.
 The user then specifies the requested `PowerProfile` to use.
 
-The shared `PowerWorkload` must select a unique node through its `spec.powerNodeSelector`, so it is recommended that the
-`kubernetes.io/hostname` label be used.
+The shared `PowerWorkload` must select a unique node through its `spec.powerNodeSelector` (create one shared
+`PowerWorkload` per node in multi-node clusters), so it is recommended that the `kubernetes.io/hostname` label be used.
 A shared `PowerProfile` can be used for multiple shared `PowerWorkloads`.
 
 **Example:**

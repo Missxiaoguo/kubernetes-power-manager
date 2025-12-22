@@ -112,6 +112,28 @@ func mocktemplate() reservedPoolMocks {
 		reserved:         reservedmk,
 	}
 }
+
+// mocktemplateCleanupSharedWorkload creates a minimal PowerLibrary mock for the cleanupSharedWorkloadPools() path.
+// It avoids the extra expectations in mocktemplate() that aren't invoked during cleanup.
+func mocktemplateCleanupSharedWorkload(nodeName string) *hostMock {
+	nodemk := new(hostMock)
+	sharedPoolmk := new(poolMock)
+	reservedmk := new(poolMock)
+	exclusiveReservedmk := new(poolMock)
+
+	nodemk.On("GetSharedPool").Return(sharedPoolmk)
+	sharedPoolmk.On("Cpus").Return(&power.CpuList{})
+
+	nodemk.On("GetAllExclusivePools").Return(&power.PoolList{exclusiveReservedmk})
+	exclusiveReservedmk.On("Name").Return(nodeName + "-reserved-[0]")
+	exclusiveReservedmk.On("Cpus").Return(&power.CpuList{})
+	exclusiveReservedmk.On("Remove").Return(nil)
+
+	nodemk.On("GetReservedPool").Return(reservedmk)
+	reservedmk.On("MoveCpus", mock.Anything).Return(nil)
+
+	return nodemk
+}
 func TestPowerWorkload_Reconcile(t *testing.T) {
 	testNode := "TestNode"
 	nodeObj := &corev1.Node{
@@ -164,8 +186,9 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			Namespace: IntelPowerNamespace,
 		},
 		Spec: powerv1.PowerWorkloadSpec{
-			Name:     "shared-" + testNode,
-			AllCores: true,
+			Name:              "shared-" + testNode,
+			AllCores:          true,
+			PowerNodeSelector: map[string]string{"powernode": "selector"},
 			ReservedCPUs: []powerv1.ReservedSpec{
 				{Cores: []uint{0, 1}, PowerProfile: "performance"},
 				{Cores: []uint{2}, PowerProfile: "performance"},
@@ -174,13 +197,14 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 	}
 	tcases := []struct {
 		testCase     string
+		nodeName     string
 		workloadName string
 		clientObjs   []runtime.Object
 		getNodemk    func() *hostMock
 		validateErr  func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool
 	}{
 		{
-			testCase:     "Test Case 1 - pool does not exist",
+			testCase:     "pool does not exist",
 			workloadName: "performance-TestNode",
 			validateErr: func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool {
 				return assert.ErrorContains(t, e, "does not exist in the power library")
@@ -196,7 +220,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			},
 		},
 		{
-			testCase:     "Test Case 2 - workload creation",
+			testCase:     "workload creation",
 			workloadName: "shared-" + testNode,
 			getNodemk:    func() *hostMock { return new(hostMock) },
 			validateErr: func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool {
@@ -236,7 +260,37 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			},
 		},
 		{
-			testCase:     "Test Case 3 - pool deletion err",
+			testCase:     "ignore exclusive workload from other node",
+			workloadName: "performance-OtherNode",
+			getNodemk:    func() *hostMock { return new(hostMock) },
+			validateErr: func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool {
+				assert.NoError(t, e)
+				updated := &powerv1.PowerWorkload{}
+				err := r.Client.Get(context.TODO(), types.NamespacedName{Name: "performance-OtherNode", Namespace: IntelPowerNamespace}, updated)
+				assert.NoError(t, err)
+				// The status is not modified.
+				return assert.Equal(t, "OtherNode", updated.Status.WorkloadNodes.Name)
+			},
+			clientObjs: []runtime.Object{
+				&powerv1.PowerWorkload{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "performance-OtherNode",
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerWorkloadSpec{
+						Name:         "performance-OtherNode",
+						PowerProfile: "performance",
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name: "OtherNode",
+						},
+					},
+				},
+			},
+		},
+		{
+			testCase:     "pool deletion err",
 			workloadName: "performance-TestNode",
 			getNodemk: func() *hostMock {
 				nodemk := new(hostMock)
@@ -250,7 +304,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			},
 		},
 		{
-			testCase:     "Test Case 4 - shared workload with missing shared profile",
+			testCase:     "shared workload with missing shared profile",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				nodemk := new(hostMock)
@@ -267,16 +321,17 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 						Namespace: IntelPowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
-						Name:         "shared-" + testNode,
-						AllCores:     true,
-						PowerProfile: "shared",
+						Name:              "shared-" + testNode,
+						AllCores:          true,
+						PowerNodeSelector: map[string]string{"powernode": "selector"},
+						PowerProfile:      "shared",
 					},
 				},
 				nodeObj,
 			},
 		},
 		{
-			testCase:     "Test Case 5 - shared workload with unavailable shared profile on node",
+			testCase:     "shared workload with unavailable shared profile on node",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				nodemk := new(hostMock)
@@ -304,16 +359,17 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 						Namespace: IntelPowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
-						Name:         "shared-" + testNode,
-						AllCores:     true,
-						PowerProfile: "shared",
+						Name:              "shared-" + testNode,
+						AllCores:          true,
+						PowerNodeSelector: map[string]string{"powernode": "selector"},
+						PowerProfile:      "shared",
 					},
 				},
 				nodeObj,
 			},
 		},
 		{
-			testCase:     "Test Case 6 - shared workload with missing profile for reserved CPUs",
+			testCase:     "shared workload with missing profile for reserved CPUs",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				return new(hostMock)
@@ -366,7 +422,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			},
 		},
 		{
-			testCase:     "Test Case 9 - shared workload on wrong node",
+			testCase:     "shared workload on wrong node",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				sharedPowerWorkloadName = "shared"
@@ -378,7 +434,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			clientObjs: []runtime.Object{sharedSkeleton},
 		},
 		{
-			testCase:     "Test Case 10 - shared workload already exists",
+			testCase:     "shared workload already exists",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				return new(hostMock)
@@ -389,7 +445,86 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			clientObjs: []runtime.Object{sharedSkeleton, nodeObj},
 		},
 		{
-			testCase:     "Test Case 11 - set cpu error",
+			testCase:     "ignore shared workload when claimed by another node",
+			workloadName: "shared-" + testNode,
+			getNodemk:    func() *hostMock { return new(hostMock) },
+			validateErr: func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool {
+				assert.NoError(t, e)
+				return assert.Equal(t, ctrl.Result{}, result)
+			},
+			clientObjs: []runtime.Object{
+				&powerv1.PowerWorkload{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "shared-" + testNode,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerWorkloadSpec{
+						Name:              "shared-" + testNode,
+						AllCores:          true,
+						PowerNodeSelector: map[string]string{"powernode": "selector"},
+						PowerProfile:      "shared",
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name: "OtherNode",
+						},
+					},
+				},
+				nodeObj,
+			},
+		},
+		{
+			testCase:     "shared workload cleans up pools and ownership when node is no longer matched by selector",
+			workloadName: "shared-" + testNode,
+			getNodemk: func() *hostMock {
+				nodemk := new(hostMock)
+				sharedPoolmk := new(poolMock)
+				reservedmk := new(poolMock)
+				exclusiveReservedmk := new(poolMock)
+				// Mock the PowerLibrary calls that are used in cleanupSharedWorkloadPools().
+				nodemk.On("GetSharedPool").Return(sharedPoolmk)
+				sharedPoolmk.On("Cpus").Return(&power.CpuList{})
+
+				nodemk.On("GetAllExclusivePools").Return(&power.PoolList{exclusiveReservedmk})
+				exclusiveReservedmk.On("Name").Return(testNode + "-reserved-[0]")
+				exclusiveReservedmk.On("Cpus").Return(&power.CpuList{})
+				exclusiveReservedmk.On("Remove").Return(nil)
+
+				nodemk.On("GetReservedPool").Return(reservedmk)
+				reservedmk.On("MoveCpus", mock.Anything).Return(nil)
+				return nodemk
+			},
+			validateErr: func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool {
+				assert.NoError(t, e)
+				updated := &powerv1.PowerWorkload{}
+				err := r.Client.Get(context.TODO(), types.NamespacedName{Name: "shared-" + testNode, Namespace: IntelPowerNamespace}, updated)
+				assert.NoError(t, err)
+				return assert.Equal(t, "", updated.Status.WorkloadNodes.Name)
+			},
+			clientObjs: []runtime.Object{
+				&powerv1.PowerWorkload{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "shared-" + testNode,
+						Namespace: IntelPowerNamespace,
+					},
+					Spec: powerv1.PowerWorkloadSpec{
+						Name:              "shared-" + testNode,
+						AllCores:          true,
+						PowerNodeSelector: map[string]string{}, // selector is empty, so the current node is not matched anymore
+						PowerProfile:      "shared",
+						ReservedCPUs:      []powerv1.ReservedSpec{{Cores: []uint{0, 1}}},
+					},
+					Status: powerv1.PowerWorkloadStatus{
+						WorkloadNodes: powerv1.WorkloadNode{
+							Name: testNode,
+						},
+					},
+				},
+				nodeObj,
+			},
+		},
+		{
+			testCase:     "set cpu error",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				nodemk := new(hostMock)
@@ -412,7 +547,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			clientObjs: []runtime.Object{pwrProfileObj, sharedSkeleton, nodeObj},
 		},
 		{
-			testCase:     "Test Case 12 - shared pool creation",
+			testCase:     "shared pool creation",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				template := mocktemplate()
@@ -425,7 +560,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			clientObjs: []runtime.Object{pwrProfileObj, sharedSkeleton, nodeObj},
 		},
 		{
-			testCase:     "Test Case 13 - reserved setProfile error recovery failure",
+			testCase:     "reserved setProfile error recovery failure",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				template := mocktemplate()
@@ -442,7 +577,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			clientObjs: []runtime.Object{pwrProfileObj, sharedSkeleton, nodeObj},
 		},
 		{
-			testCase:     "Test Case 14 - reserved setCpu error recovery failure",
+			testCase:     "reserved setCpu error recovery failure",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				template := mocktemplate()
@@ -458,7 +593,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			clientObjs: []runtime.Object{pwrProfileObj, sharedSkeleton, nodeObj},
 		},
 		{
-			testCase:     "Test Case 15 - reserved SetCpuIDs() and pseudoReservedPool.Remove() errors",
+			testCase:     "reserved SetCpuIDs() and pseudoReservedPool.Remove() errors",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				template := mocktemplate()
@@ -475,7 +610,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			clientObjs: []runtime.Object{pwrProfileObj, sharedSkeleton, nodeObj},
 		},
 		{
-			testCase:     "Test Case 16 - reserved recovery",
+			testCase:     "reserved recovery",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				template := mocktemplate()
@@ -501,7 +636,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			clientObjs: []runtime.Object{pwrProfileObj, sharedSkeleton, nodeObj},
 		},
 		{
-			testCase:     "Test Case 17 - SetPowerProfile() and pseudoReservedPool.Remove() errors",
+			testCase:     "SetPowerProfile() and pseudoReservedPool.Remove() errors",
 			workloadName: "shared-" + testNode,
 			getNodemk: func() *hostMock {
 				template := mocktemplate()
@@ -533,6 +668,9 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 	for _, tc := range tcases {
 		t.Log(tc.testCase)
 		t.Setenv("NODE_NAME", testNode)
+		if tc.nodeName != "" {
+			t.Setenv("NODE_NAME", tc.nodeName)
+		}
 		r, err := createWorkloadReconcilerObject(tc.clientObjs)
 		if err != nil {
 			t.Error(err)
