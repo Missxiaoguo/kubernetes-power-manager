@@ -246,7 +246,7 @@ tls:
 .PHONY: generate build-controller build-agent build-controller-ocp build-agent-ocp
 # Generate code
 generate: controller-gen
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./api/..." paths="./controllers/..."
 
 # Build the Manager's image
 build-controller:
