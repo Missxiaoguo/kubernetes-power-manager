@@ -95,7 +95,7 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 	fi
 	@if [ ! -f $(CONTROLLER_GEN) ]; then \
 		echo "Downloading controller-gen..." ;\
-		GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION) ;\
+		GOBIN=$(LOCALBIN) GOFLAGS="-mod=mod" go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION) ;\
 		echo "controller-gen downloaded successfully." ;\
 	fi
 
