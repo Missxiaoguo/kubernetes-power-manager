@@ -1,5 +1,5 @@
 export PROJECT_NAME=kubernetes-power-manager
-KPM_NAMESPACE ?= intel-power
+KPM_NAMESPACE ?= power-manager
 # Current Operator version
 VERSION ?= 0.0.1
 # Bundle version (without 'v' prefix for operator-sdk)

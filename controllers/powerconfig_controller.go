@@ -39,9 +39,9 @@ import (
 )
 
 const (
-	ExtendedResourcePrefix = "power.intel.com/"
+	ExtendedResourcePrefix = "power.openshift.io/"
 	NodeAgentDSName        = "power-node-agent"
-	IntelPowerNamespace    = "intel-power"
+	IntelPowerNamespace    = "power-manager"
 )
 
 var NodeAgentDaemonSetPath = "/power-manifests/power-node-agent-ds.yaml"
@@ -54,8 +54,8 @@ type PowerConfigReconciler struct {
 	State  *state.PowerNodeData
 }
 
-// +kubebuilder:rbac:groups=power.intel.com,resources=powerconfigs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=power.intel.com,resources=powerconfigs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powerconfigs,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powerconfigs/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=privileged,verbs=use
 
 func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -64,7 +64,7 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 
 	if req.Namespace != IntelPowerNamespace {
 		err := fmt.Errorf("incorrect namespace")
-		logger.Error(err, "resource is not in the intel-power namespace, ignoring")
+		logger.Error(err, "resource is not in the power-manager namespace, ignoring")
 		return ctrl.Result{Requeue: false}, err
 	}
 

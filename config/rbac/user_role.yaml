@@ -6,7 +6,7 @@ metadata:
   name: user-role
 rules:
   - apiGroups:
-      - power.intel.com
+      - power.openshift.io
     resources:
       - powerconfigs
     verbs:
@@ -15,14 +15,14 @@ rules:
       - update
       - watch
   - apiGroups:
-      - power.intel.com
+      - power.openshift.io
     resources:
       - powerconfigs/status
     verbs:
       - get
       - update
   - apiGroups:
-      - power.intel.com
+      - power.openshift.io
     resources:
       - powernodes
     verbs:
@@ -31,7 +31,7 @@ rules:
       - update
       - watch
   - apiGroups:
-      - power.intel.com
+      - power.openshift.io
     resources:
       - powernodes/status
     verbs:
@@ -39,7 +39,7 @@ rules:
       - update
 
   - apiGroups:
-      - power.intel.com
+      - power.openshift.io
     resources:
       - powerprofiles
     verbs:
@@ -48,14 +48,14 @@ rules:
       - update
       - watch
   - apiGroups:
-      - power.intel.com
+      - power.openshift.io
     resources:
       - powerprofiles/status
     verbs:
       - get
       - update
   - apiGroups:
-      - power.intel.com
+      - power.openshift.io
     resources:
       - powerworkloads
     verbs:
@@ -64,7 +64,7 @@ rules:
       - update
       - watch
   - apiGroups:
-      - power.intel.com
+      - power.openshift.io
     resources:
       - powerworkloads/status
     verbs:

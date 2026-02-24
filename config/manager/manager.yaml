@@ -5,13 +5,13 @@ metadata:
     app.kubernetes.io/name: power-operator
     app.kubernetes.io/component: power-operator
     control-plane: controller-manager
-  name: intel-power
+  name: power-manager
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: controller-manager
-  namespace: intel-power
+  namespace: power-manager
   labels:
     control-plane: controller-manager
 spec:
@@ -24,7 +24,7 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
-      serviceAccountName: intel-power-operator
+      serviceAccountName: power-manager-operator
       containers:
         - command:
             - /manager

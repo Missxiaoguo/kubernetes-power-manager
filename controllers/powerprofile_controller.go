@@ -57,8 +57,8 @@ type PowerProfileReconciler struct {
 	PowerLibrary power.Host
 }
 
-// +kubebuilder:rbac:groups=power.intel.com,resources=powerprofiles,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=power.intel.com,resources=powerprofiles/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powerprofiles,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powerprofiles/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=privileged,verbs=use
 
 // Reconcile method that implements the reconcile loop
@@ -69,7 +69,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 	var err error
 	if req.Namespace != IntelPowerNamespace {
 		err := fmt.Errorf("incorrect namespace")
-		logger.Error(err, "resource is not in the intel-power namespace, ignoring")
+		logger.Error(err, "resource is not in the power-manager namespace, ignoring")
 		return ctrl.Result{Requeue: false}, err
 	}
 

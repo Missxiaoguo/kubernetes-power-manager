@@ -1,8 +1,8 @@
-apiVersion: power.intel.com/v1
+apiVersion: power.openshift.io/v1
 kind: PowerProfile
 metadata:
   name: shared
-  namespace: intel-power
+  namespace: power-manager
 spec:
   name: "shared"
   shared: true

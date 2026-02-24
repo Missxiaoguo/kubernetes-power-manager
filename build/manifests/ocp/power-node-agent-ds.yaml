@@ -2,18 +2,18 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: power-node-agent
-  namespace: intel-power
+  namespace: power-manager
 spec:
   selector:
     matchLabels:
       name: power-node-agent-pod
   template:
     metadata:
-      namespace: intel-power
+      namespace: power-manager
       labels:
         name: power-node-agent-pod
     spec:
-      serviceAccountName: intel-power-node-agent
+      serviceAccountName: power-manager-node-agent
       containers:
         - image: quay.io/openshift-kni/kubernetes-power-node-agent:0.0.1
           imagePullPolicy: IfNotPresent

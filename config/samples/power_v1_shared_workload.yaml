@@ -1,4 +1,4 @@
-apiVersion: power.intel.com/v1
+apiVersion: power.openshift.io/v1
 kind: PowerWorkload
 metadata:
   labels:
@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/created-by: kubernetes-power-manager
   # Replace <NODE_NAME> with the Node associated with PowerWorkload 
   name: shared-<NODE_NAME>-workload
-  namespace: intel-power
+  namespace: power-manager
 spec:
   # Replace <NODE_NAME> with the Node associated with PowerWorkload 
   name: "shared-<NODE_NAME>-workload"

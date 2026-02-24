@@ -132,12 +132,12 @@ var defaultResources = corev1.ResourceRequirements{
 	Limits: map[corev1.ResourceName]resource.Quantity{
 		corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
 		corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-		corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+		corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 	},
 	Requests: map[corev1.ResourceName]resource.Quantity{
 		corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
 		corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-		corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+		corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 	},
 }
 
@@ -391,12 +391,12 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 									Limits: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                                 *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                              *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/balance-performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/balance-performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                                 *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                              *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/balance-performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/balance-performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 								},
 							},
@@ -489,12 +489,12 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 									Limits: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("device-plugin"):               *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("device-plugin"):               *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 								},
 							},
@@ -919,12 +919,12 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 									Limits: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(2, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(2, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(2, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(2, resource.DecimalSI),
 									},
 								},
 							},
@@ -1229,11 +1229,11 @@ func TestPowerPod_Reconcile_ControllerReturningNil(t *testing.T) {
 									Limits: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 								},
 							},
@@ -1541,7 +1541,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 					wload := args.Get(2).(*powerv1.PowerWorkload)
 					*wload = *defaultWload
 				})
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.intel.com \"performance\" not found"))
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.openshift.io \"performance\" not found"))
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNode")).Return(nil).Run(func(args mock.Arguments) {
 					pnode := args.Get(2).(*powerv1.PowerNode)
 					*pnode = *defaultNode
@@ -1576,7 +1576,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 					wload := args.Get(2).(*powerv1.PowerWorkload)
 					*wload = *defaultWload
 				})
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.intel.com \"performance\" not found"))
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.openshift.io \"performance\" not found"))
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNode")).Return(fmt.Errorf("client  powernode get error"))
 				return mkcl
 			},
@@ -1671,10 +1671,10 @@ func TestPowerPod_ControlPLaneSocket(t *testing.T) {
 								Name: "test-container-1",
 								Resources: corev1.ResourceRequirements{
 									Limits: map[corev1.ResourceName]resource.Quantity{
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 									Claims: []corev1.ResourceClaim{{Name: "test-claim"}},
 								},
@@ -1736,10 +1736,10 @@ func TestPowerPod_ControlPLaneSocket(t *testing.T) {
 								Name: "test-container-1",
 								Resources: corev1.ResourceRequirements{
 									Limits: map[corev1.ResourceName]resource.Quantity{
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(2, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(2, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(2, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(2, resource.DecimalSI),
 									},
 									Claims: []corev1.ResourceClaim{{Name: "test-claim"}},
 								},
@@ -1983,11 +1983,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2052,11 +2052,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/gpu-optimized": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/gpu-optimized": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/gpu-optimized": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/gpu-optimized": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2126,11 +2126,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                       *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/universal": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/universal": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                       *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/universal": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/universal": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2196,11 +2196,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/zone-specific": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/zone-specific": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/zone-specific": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/zone-specific": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2266,11 +2266,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2279,11 +2279,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                       *resource.NewQuantity(1, resource.DecimalSI),
-								"power.intel.com/universal": *resource.NewQuantity(1, resource.DecimalSI),
+								"power.openshift.io/universal": *resource.NewQuantity(1, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                       *resource.NewQuantity(1, resource.DecimalSI),
-								"power.intel.com/universal": *resource.NewQuantity(1, resource.DecimalSI),
+								"power.openshift.io/universal": *resource.NewQuantity(1, resource.DecimalSI),
 							},
 						},
 					},
@@ -2375,11 +2375,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/nonexistent": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/nonexistent": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/nonexistent": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/nonexistent": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2447,11 +2447,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2460,11 +2460,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(1, resource.DecimalSI),
-								"power.intel.com/gpu-optimized": *resource.NewQuantity(1, resource.DecimalSI),
+								"power.openshift.io/gpu-optimized": *resource.NewQuantity(1, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(1, resource.DecimalSI),
-								"power.intel.com/gpu-optimized": *resource.NewQuantity(1, resource.DecimalSI),
+								"power.openshift.io/gpu-optimized": *resource.NewQuantity(1, resource.DecimalSI),
 							},
 						},
 					},

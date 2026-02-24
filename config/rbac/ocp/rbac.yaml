@@ -1,16 +1,16 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: intel-power-operator
-  namespace: intel-power
+  name: power-manager-operator
+  namespace: power-manager
 
 ---
 
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: intel-power-node-agent
-  namespace: intel-power
+  name: power-manager-node-agent
+  namespace: power-manager
 
 ---
 
@@ -18,9 +18,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: operator-custom-resource-definitions-role
-  namespace: intel-power
+  namespace: power-manager
 rules:
-  - apiGroups: [ "", "power.intel.com", "apps", "coordination.k8s.io" ]
+  - apiGroups: [ "", "power.openshift.io", "apps", "coordination.k8s.io" ]
     resources: [ "powerconfigs", "powerconfigs/status", "powerprofiles", "powerprofiles/status", "events", "daemonsets", "configmaps", "configmaps/status", "leases","uncores" ]
     verbs: [ "*" ]
   - apiGroups:
@@ -37,11 +37,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: operator-custom-resource-definitions-role-binding
-  namespace: intel-power
+  namespace: power-manager
 subjects:
   - kind: ServiceAccount
-    name: intel-power-operator
-    namespace: intel-power
+    name: power-manager-operator
+    namespace: power-manager
 roleRef:
   kind: Role
   name: operator-custom-resource-definitions-role
@@ -54,7 +54,7 @@ kind: ClusterRole
 metadata:
   name: operator-nodes
 rules:
-  - apiGroups: [ "", "power.intel.com", "apps" ]
+  - apiGroups: [ "", "power.openshift.io", "apps" ]
     resources: [ "nodes", "nodes/status", "configmaps", "configmaps/status", "powerconfigs", "powerconfigs/status", "powerprofiles", "powerprofiles/status", "powerworkloads", "powerworkloads/status", "powernodes", "powernodes/status", "events", "daemonsets","uncores", "uncores/status" ]
     verbs: [ "*" ]
 
@@ -66,8 +66,8 @@ metadata:
   name: operator-nodes-binding
 subjects:
   - kind: ServiceAccount
-    name: intel-power-operator
-    namespace: intel-power
+    name: power-manager-operator
+    namespace: power-manager
 roleRef:
   kind: ClusterRole
   name: operator-nodes
@@ -80,7 +80,7 @@ kind: ClusterRole
 metadata:
   name: node-agent-cluster-resources
 rules:
-  - apiGroups: [ "", "batch", "power.intel.com" ]
+  - apiGroups: [ "", "batch", "power.openshift.io" ]
     resources: [ "nodes", "nodes/status", "pods", "pods/status", "powerprofiles", "powerprofiles/status", "powerworkloads", "powerworkloads/status", "powernodes", "powernodes/status", "uncores", "uncores/status" ]
     verbs: [ "*" ]
   - apiGroups:
@@ -99,8 +99,8 @@ metadata:
   name: node-agent-cluster-resources-binding
 subjects:
   - kind: ServiceAccount
-    name: intel-power-node-agent
-    namespace: intel-power
+    name: power-manager-node-agent
+    namespace: power-manager
 roleRef:
   kind: ClusterRole
   name: node-agent-cluster-resources

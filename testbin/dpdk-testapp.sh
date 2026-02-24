@@ -9,21 +9,21 @@ NON_SIBLINGS=false
 
 function setup_dpdk_testapp {
     oc apply -f ../examples/example-dpdk-testapp.yaml
-    oc wait -n intel-power --for=condition=available --timeout=180s deployment/dpdk-testapp
+    oc wait -n power-manager --for=condition=available --timeout=180s deployment/dpdk-testapp
 
-    POD=$(oc get pods -n intel-power -l app=dpdk-testapp \
+    POD=$(oc get pods -n power-manager -l app=dpdk-testapp \
         -ojsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | head -n 1)
 
     # Wait for the pod to be running
-    oc wait --for=jsonpath='{.status.phase}'=Running pod/"$POD" -n intel-power --timeout=120s
+    oc wait --for=jsonpath='{.status.phase}'=Running pod/"$POD" -n power-manager --timeout=120s
 
-    NODE=$(oc get pods -n intel-power -l app=dpdk-testapp \
+    NODE=$(oc get pods -n power-manager -l app=dpdk-testapp \
         -ojsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | head -n 1)
 
     # Wait until PowerNode has exclusive CPUs for server
     SERVER_CPUS=""
     while true; do
-        SERVER_CPUS_RAW=$(oc get powernode "$NODE" -n intel-power -o \
+        SERVER_CPUS_RAW=$(oc get powernode "$NODE" -n power-manager -o \
             jsonpath='{range .status.powerContainers[?(@.name=="server")]}{.exclusiveCpus}{end}' 2>/dev/null)
         if [ -n "$SERVER_CPUS_RAW" ]; then
             SERVER_LIST=$(echo "$SERVER_CPUS_RAW" | tr -d '[]' | tr ',' ' ')
@@ -57,7 +57,7 @@ function setup_dpdk_testapp {
     # Wait until PowerNode has exclusive CPUs for client
     CLIENT_CPUS=""
     while true; do
-        CLIENT_CPUS_RAW=$(oc get powernode "$NODE" -n intel-power -o \
+        CLIENT_CPUS_RAW=$(oc get powernode "$NODE" -n power-manager -o \
             jsonpath='{range .status.powerContainers[?(@.name=="client")]}{.exclusiveCpus}{end}' 2>/dev/null)
         if [ -n "$CLIENT_CPUS_RAW" ]; then
             CLIENT_LIST=$(echo "$CLIENT_CPUS_RAW" | tr -d '[]' | tr ',' ' ')
@@ -90,7 +90,7 @@ function setup_dpdk_testapp {
 
     # Server receives traffic, updates checksums and forwards packets back to client
     echo "Deploying server..."
-    oc exec -n intel-power "$POD" -c server -- \
+    oc exec -n power-manager "$POD" -c server -- \
         tmux new-session -s server -d "dpdk-testpmd --no-pci --lcores $SERVER_CPUS --file-prefix=rte \
         --huge-dir=\"/hugepages-1Gi\" \
         --vdev=\"net_memif0,role=server,socket=/var/run/memif/memif1.sock\" -- \
@@ -101,7 +101,7 @@ function setup_dpdk_testapp {
 
     # Client generates traffic and transmits to server
     echo "Deploying client..."
-    oc exec -n intel-power "$POD" -c client -- \
+    oc exec -n power-manager "$POD" -c client -- \
         tmux new-session -s client -d "dpdk-testpmd --no-pci --lcores $CLIENT_CPUS --file-prefix=client \
         --huge-dir=\"/hugepages-1Gi\" \
         --vdev=\"net_memif0,role=client,socket=/var/run/memif/memif1.sock\" -- \
@@ -110,11 +110,11 @@ function setup_dpdk_testapp {
     echo "Client CPUS: $CLIENT_CPUS"
 
     # Push heavier traffic from the client
-    oc exec -n intel-power "$POD" -c client -- tmux send-keys -t client "set burst 256" C-m
+    oc exec -n power-manager "$POD" -c client -- tmux send-keys -t client "set burst 256" C-m
     # Start packet generation from client
-    oc exec -n intel-power "$POD" -c client -- tmux send-keys -t client "start" C-m
+    oc exec -n power-manager "$POD" -c client -- tmux send-keys -t client "start" C-m
     # Start packet processing from server
-    oc exec -n intel-power "$POD" -c server -- tmux send-keys -t server "start" C-m
+    oc exec -n power-manager "$POD" -c server -- tmux send-keys -t server "start" C-m
     echo "Deployed successfully"
 }
 
@@ -122,11 +122,11 @@ function delete_dpdk_testapp {
     oc delete -f ../examples/example-dpdk-testapp.yaml --ignore-not-found=true
 
     # Wait for the deployment to be deleted if it exists
-    oc wait -n intel-power --for=delete deployment/dpdk-testapp --timeout=120s || true
+    oc wait -n power-manager --for=delete deployment/dpdk-testapp --timeout=120s || true
 
     echo "Waiting for dpdk-testapp pods to terminate..."
     for i in {1..60}; do
-        if [ -z "$(oc get pods -n intel-power -l app=dpdk-testapp --no-headers 2>/dev/null | awk 'NF>0{print}' | head -n1)" ]; then
+        if [ -z "$(oc get pods -n power-manager -l app=dpdk-testapp --no-headers 2>/dev/null | awk 'NF>0{print}' | head -n1)" ]; then
             echo "All dpdk-testapp pods terminated."
             break
         fi

@@ -1,4 +1,4 @@
-domain: intel.com
+domain: openshift.io
 layout:
 - go.kubebuilder.io/v4
 plugins:
@@ -7,27 +7,27 @@ plugins:
 projectName: kubernetes-power-manager
 repo: github.com/openshift-kni/kubernetes-power-manager
 resources:
-- domain: intel.com
+- domain: openshift.io
   group: power
   kind: PowerNode
   path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1
-- domain: intel.com
+- domain: openshift.io
   group: power
   kind: PowerProfile
   path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1
-- domain: intel.com
+- domain: openshift.io
   group: power
   kind: PowerConfig
   path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1
-- domain: intel.com
+- domain: openshift.io
   group: power
   kind: PowerWorkload
   path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1
-- domain: intel.com
+- domain: openshift.io
   group: power
   kind: Uncore
   path: github.com/openshift-kni/kubernetes-power-manager/api/v1

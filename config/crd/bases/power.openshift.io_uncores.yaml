@@ -1,23 +1,23 @@
+---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  creationTimestamp: null
-  name: powerconfigs.power.intel.com
+  name: uncores.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
-    kind: PowerConfig
-    listKind: PowerConfigList
-    plural: powerconfigs
-    singular: powerconfig
+    kind: Uncore
+    listKind: UncoreList
+    plural: uncores
+    singular: uncore
   scope: Namespaced
   versions:
   - name: v1
     schema:
       openAPIV3Schema:
-        description: PowerConfig is the Schema for the powerconfigs API
+        description: Uncore is the Schema for the uncores API
         properties:
           apiVersion:
             description: |-
@@ -37,30 +37,34 @@ spec:
           metadata:
             type: object
           spec:
-            description: PowerConfigSpec defines the desired state of PowerConfig
+            description: UncoreSpec defines the desired state of Uncore
             properties:
-              customDevices:
-                description: The CustomDevices include alternative devices that represent
-                  other resources
+              dieSelector:
                 items:
-                  type: string
+                  properties:
+                    die:
+                      type: integer
+                    max:
+                      type: integer
+                    min:
+                      type: integer
+                    package:
+                      type: integer
+                  required:
+                  - max
+                  - min
+                  - package
+                  type: object
                 type: array
-              powerNodeSelector:
-                additionalProperties:
-                  type: string
-                description: The label on the Nodes you the Operator will look for
-                  to deploy the Node Agent
-                type: object
+              sysMax:
+                type: integer
+              sysMin:
+                type: integer
             type: object
           status:
-            description: PowerConfigStatus defines the observed state of PowerConfig
+            description: UncoreStatus defines the observed state of Uncore
             properties:
               errors:
-                items:
-                  type: string
-                type: array
-              nodes:
-                description: The Nodes that the Node Agent has been deployed to
                 items:
                   type: string
                 type: array
@@ -70,9 +74,3 @@ spec:
     storage: true
     subresources:
       status: {}
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: null
-  storedVersions: null
