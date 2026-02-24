@@ -41,7 +41,6 @@ import (
 const (
 	ExtendedResourcePrefix = "power.openshift.io/"
 	NodeAgentDSName        = "power-node-agent"
-	IntelPowerNamespace    = "power-manager"
 )
 
 var NodeAgentDaemonSetPath = "/power-manifests/power-node-agent-ds.yaml"
@@ -62,7 +61,7 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 	_ = context.Background()
 	logger := r.Log.WithValues("powerconfig", req.NamespacedName)
 
-	if req.Namespace != IntelPowerNamespace {
+	if req.Namespace != PowerNamespace {
 		err := fmt.Errorf("incorrect namespace")
 		logger.Error(err, "resource is not in the power-manager namespace, ignoring")
 		return ctrl.Result{Requeue: false}, err
@@ -140,7 +139,7 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 				logger.V(5).Info("retrieving the power node-agent daemonSet")
 				err = r.Client.Get(c, client.ObjectKey{
 					Name:      NodeAgentDSName,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				}, daemonSet)
 				if err != nil {
 					if !errors.IsNotFound(err) {
@@ -208,7 +207,7 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 
 		powerNode := &powerv1.PowerNode{}
 		err = r.Client.Get(c, client.ObjectKey{
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 			Name:      node.Name,
 		}, powerNode)
 
@@ -217,7 +216,7 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 			if errors.IsNotFound(err) {
 				powerNode = &powerv1.PowerNode{
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						Name:      node.Name,
 					},
 				}
@@ -261,7 +260,7 @@ func (r *PowerConfigReconciler) createDaemonSetIfNotPresent(c context.Context, p
 
 	err = r.Client.Get(c, client.ObjectKey{
 		Name:      NodeAgentDSName,
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 	}, daemonSet)
 	if err != nil {
 		if errors.IsNotFound(err) {

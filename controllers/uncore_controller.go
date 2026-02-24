@@ -60,7 +60,7 @@ func (r *UncoreReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	logger.Info("Reconciling the uncore")
 
 	var err error
-	if req.Namespace != IntelPowerNamespace {
+	if req.Namespace != PowerNamespace {
 		err = fmt.Errorf("incorrect namespace")
 		logger.Error(err, "resource is not in the power-manager namespace, ignoring")
 		return ctrl.Result{Requeue: false}, err

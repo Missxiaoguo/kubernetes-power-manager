@@ -115,7 +115,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 			logger.V(5).Info("retrieving the workload instance", "Workload Name", workloadName)
 			workload := &powerv1.PowerWorkload{}
 			err = r.Get(context.TODO(), client.ObjectKey{
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 				Name:      workloadName,
 			}, workload)
 			if err != nil {
@@ -157,7 +157,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 	logger.V(5).Info("retrieving custom resources from power node")
 	powernode := &powerv1.PowerNode{}
 	err = r.Get(context.TODO(), client.ObjectKey{
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 		Name:      nodeName,
 	}, powernode)
 	if err != nil {

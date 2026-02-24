@@ -117,7 +117,7 @@ func validateProfileAvailabilityOnNode(ctx context.Context, c client.Client, pro
 	powerProfile := &powerv1.PowerProfile{}
 	err := c.Get(ctx, client.ObjectKey{
 		Name:      profileName,
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 	}, powerProfile)
 	if err != nil {
 		if errors.IsNotFound(err) {

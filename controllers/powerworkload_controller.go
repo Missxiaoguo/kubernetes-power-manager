@@ -74,7 +74,7 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 	logger.Info("Reconciling the power workload")
 
 	var err error
-	if req.Namespace != IntelPowerNamespace {
+	if req.Namespace != PowerNamespace {
 		err := fmt.Errorf("incorrect namespace")
 		logger.Error(err, "resource is not in the power-manager namespace, ignoring")
 		return ctrl.Result{Requeue: false}, err
@@ -310,7 +310,7 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 	// when needed.
 	profile := &powerv1.PowerProfile{}
 	err = r.Client.Get(c, client.ObjectKey{
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 		Name:      workload.Spec.PowerProfile,
 	}, profile)
 	if err != nil {
@@ -620,7 +620,7 @@ func (r *PowerWorkloadReconciler) powerProfileToWorkloadRequests(ctx context.Con
 	workload := &powerv1.PowerWorkload{}
 	if err := r.Client.Get(ctx, types.NamespacedName{
 		Name:      workloadName,
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 	}, workload); err != nil {
 		if errors.IsNotFound(err) {
 			return requests
@@ -635,7 +635,7 @@ func (r *PowerWorkloadReconciler) powerProfileToWorkloadRequests(ctx context.Con
 	requests = append(requests, reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Name:      workloadName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 	})
 	r.Log.V(5).Info("Enqueuing PowerWorkload reconciliation requests", "powerProfile", powerProfile.Name)
