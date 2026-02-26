@@ -199,7 +199,7 @@ spec:
                       - /manager
                     env:
                       - name: RELATED_IMAGE_AGENT
-                        value: quay.io/openshift-kni/kubernetes-power-node-agent@sha256:8af1d0e07d5a3e00bd94fa28a7592109f6de5a685a9e07fab2b44963188c65d9
+                        value: quay.io/openshift-kni/kubernetes-power-node-agent:0.0.1
                     image: quay.io/openshift-kni/kubernetes-power-manager-operator:0.0.1
                     imagePullPolicy: IfNotPresent
                     name: manager
@@ -282,7 +282,7 @@ spec:
     name: Intel Corporation
     url: https://github.com/openshift-kni/kubernetes-power-manager
   relatedImages:
-    - image: quay.io/openshift-kni/kubernetes-power-node-agent@sha256:8af1d0e07d5a3e00bd94fa28a7592109f6de5a685a9e07fab2b44963188c65d9
+    - image: quay.io/openshift-kni/kubernetes-power-node-agent:0.0.1
       name: agent
     - image: quay.io/openshift-kni/kubernetes-power-manager-operator:0.0.1
       name: manager
