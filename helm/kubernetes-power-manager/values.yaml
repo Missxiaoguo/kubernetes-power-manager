@@ -69,7 +69,7 @@ operator:
       name: power-manager-operator
     command: /manager
     args: --enable-leader-election
-    image: intel/power-operator:v2.5.0
+    image: $(IMAGE_REGISTRY)/kubernetes-power-manager-operator:$(VERSION)
     name: manager
     cpu:
       limits: 100m

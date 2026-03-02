@@ -1354,7 +1354,7 @@ func TestPowerPod_Reconcile_Delete(t *testing.T) {
 						Namespace:         PowerNamespace,
 						UID:               "abcdefg",
 						DeletionTimestamp: &metav1.Time{Time: time.Date(9999, time.Month(1), 21, 1, 10, 30, 0, time.UTC)},
-						Finalizers:        []string{"intel.com/finalizer"},
+						Finalizers:        []string{"power.openshift.io/finalizer"},
 					},
 					Spec: corev1.PodSpec{
 						NodeName: "TestNode",
@@ -1425,7 +1425,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 			Namespace:         PowerNamespace,
 			UID:               "abcdefg",
 			DeletionTimestamp: &metav1.Time{Time: time.Date(9999, time.Month(1), 21, 1, 10, 30, 0, time.UTC)},
-			Finalizers:        []string{"intel.com/finalizer"},
+			Finalizers:        []string{"power.openshift.io/finalizer"},
 		},
 		Spec: corev1.PodSpec{
 			NodeName: "TestNode",
