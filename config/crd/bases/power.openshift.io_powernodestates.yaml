@@ -1,0 +1,258 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: powernodestates.power.openshift.io
+spec:
+  group: power.openshift.io
+  names:
+    kind: PowerNodeState
+    listKind: PowerNodeStateList
+    plural: powernodestates
+    shortNames:
+    - pns
+    singular: powernodestate
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          PowerNodeState is the Schema for the powernodestates API
+          It provides per-node status for power management configuration
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              PowerNodeStateSpec defines the desired state of PowerNodeState
+              This is intentionally empty as PowerNodeState is a status-only CRD
+            type: object
+          status:
+            description: |-
+              PowerNodeStateStatus defines the observed state of PowerNodeState
+              Each field is owned by a specific controller using Server-Side Apply (SSA)
+            properties:
+              cpuPools:
+                description: |-
+                  CPUPools contains the status of CPU pools on this node
+                  Owned by: PowerNodeConfig controller (shared, reserved) and PowerPod controller (exclusive)
+                properties:
+                  exclusive:
+                    description: |-
+                      Exclusive contains the status of exclusive CPU pools
+                      Owned by: PowerPod controller (exclusive)
+                    items:
+                      description: |-
+                        ExclusiveCPUPoolStatus represents the status of an exclusive CPU pool
+                        assigned to a container
+                      properties:
+                        exclusiveCPUInfo:
+                          items:
+                            description: ExclusiveCPUInfo contains information about
+                              an exclusive CPU pool
+                            properties:
+                              powerContainer:
+                                description: PowerContainers contains information
+                                  about the containers using exclusive CPUs and the
+                                  PowerProfile
+                                items:
+                                  description: PowerContainer contains information
+                                    about a container using exclusive CPUs
+                                  properties:
+                                    cpuIDs:
+                                      description: CPUIDs are the CPU IDs assigned
+                                        to the container
+                                      items:
+                                        type: integer
+                                      type: array
+                                    errors:
+                                      description: Errors contains any errors encountered
+                                        while configuring the container
+                                      items:
+                                        type: string
+                                      type: array
+                                    id:
+                                      description: ID is the ID of the container
+                                      type: string
+                                    name:
+                                      description: Name is the name of the container
+                                      type: string
+                                    pod:
+                                      description: Pod is the name of the pod the
+                                        container is running in
+                                      type: string
+                                    podUID:
+                                      description: PodUID is the UID of the pod the
+                                        container is running in
+                                      type: string
+                                  required:
+                                  - cpuIDs
+                                  - id
+                                  - name
+                                  - pod
+                                  - podUID
+                                  type: object
+                                type: array
+                              powerProfile:
+                                description: PowerProfile is the name of the PowerProfile
+                                  used in these containers
+                                type: string
+                            required:
+                            - powerContainer
+                            - powerProfile
+                            type: object
+                          type: array
+                      required:
+                      - exclusiveCPUInfo
+                      type: object
+                    type: array
+                  reserved:
+                    description: |-
+                      Reserved contains the status of the reserved CPU pools
+                      Owned by: PowerNodeConfig controller (shared, reserved)
+                    items:
+                      description: ReservedCPUPoolStatus represents the status of
+                        a reserved CPU pool
+                      properties:
+                        errors:
+                          description: Errors contains any errors encountered while
+                            configuring this pool
+                          items:
+                            type: string
+                          type: array
+                        powerNodeConfig:
+                          description: PowerNodeConfig is the name of the PowerNodeConfig
+                            applied to this pool
+                          type: string
+                        powerProfileCPUs:
+                          description: PowerProfileCPUs are the PowerProfile and CPUIDs
+                            in this pool
+                          items:
+                            properties:
+                              cpuIDs:
+                                description: CPUIDs are the CPU IDs in this pool
+                                items:
+                                  type: integer
+                                type: array
+                              powerProfile:
+                                description: PowerProfile is the name of the PowerProfile
+                                  applied to this pool
+                                type: string
+                            required:
+                            - cpuIDs
+                            - powerProfile
+                            type: object
+                          type: array
+                      required:
+                      - powerNodeConfig
+                      - powerProfileCPUs
+                      type: object
+                    type: array
+                  shared:
+                    description: |-
+                      Shared contains the status of the shared CPU pool
+                      Owned by: PowerNodeConfig controller (shared, reserved)
+                    properties:
+                      cpuIDs:
+                        description: CPUIDs are the CPU IDs in this pool
+                        items:
+                          type: integer
+                        type: array
+                      errors:
+                        description: Errors contains any errors encountered while
+                          configuring this pool
+                        items:
+                          type: string
+                        type: array
+                      powerNodeConfig:
+                        description: PowerNodeConfig is the name of the PowerNodeConfig
+                          applied to this pool
+                        type: string
+                      powerProfile:
+                        description: PowerProfile is the name of the PowerProfile
+                          applied to this pool
+                        type: string
+                    required:
+                    - cpuIDs
+                    - powerNodeConfig
+                    - powerProfile
+                    type: object
+                type: object
+              customDevices:
+                description: |-
+                  CustomDevices include alternative devices that represent other resources
+                  Owned by: PowerConfig controller
+                items:
+                  type: string
+                type: array
+              powerProfiles:
+                description: |-
+                  PowerProfiles contains the status of power profiles on this node
+                  Owned by: PowerProfile controller
+                items:
+                  description: PowerNodeProfileStatus represents the status of a power
+                    profile on this node
+                  properties:
+                    config:
+                      description: Config is the configuration of the PowerProfile
+                      type: string
+                    errors:
+                      description: Errors contains any errors encountered while applying
+                        this profile on this node
+                      items:
+                        type: string
+                      type: array
+                    name:
+                      description: Name is the name of the PowerProfile CR
+                      type: string
+                  required:
+                  - config
+                  - name
+                  type: object
+                type: array
+              uncore:
+                description: |-
+                  Uncore contains the status of uncore frequency configuration on this node
+                  Owned by: Uncore controller
+                properties:
+                  config:
+                    description: Config is the configuration of the uncore frequency
+                      configuration
+                    type: string
+                  errors:
+                    description: Errors contains any errors encountered while configuring
+                      uncore frequency
+                    items:
+                      type: string
+                    type: array
+                  name:
+                    description: Name is the name of the uncore frequency configuration
+                    type: string
+                required:
+                - config
+                - name
+                type: object
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
