@@ -11,4 +11,4 @@ subjects:
 - apiGroup: rbac.authorization.k8s.io
   kind: User
   name: default
-  namespace: intel-power
+  namespace: power-manager

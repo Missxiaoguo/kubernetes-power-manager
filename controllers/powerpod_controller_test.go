@@ -132,19 +132,19 @@ var defaultResources = corev1.ResourceRequirements{
 	Limits: map[corev1.ResourceName]resource.Quantity{
 		corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
 		corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-		corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+		corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 	},
 	Requests: map[corev1.ResourceName]resource.Quantity{
 		corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
 		corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-		corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+		corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 	},
 }
 
 var defaultProfile = &powerv1.PowerProfile{
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      "performance",
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 	},
 	Spec: powerv1.PowerProfileSpec{
 		Name: "performance",
@@ -154,7 +154,7 @@ var defaultProfile = &powerv1.PowerProfile{
 var defaultWorkload = &powerv1.PowerWorkload{
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      "performance-TestNode",
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 	},
 	Spec: powerv1.PowerWorkloadSpec{
 		Name:         "performance-TestNode",
@@ -188,7 +188,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -208,7 +208,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "performance-TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "performance-TestNode",
@@ -223,7 +223,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -257,7 +257,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-2",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -282,7 +282,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-2",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -324,7 +324,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -349,7 +349,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 				&powerv1.PowerProfile{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "balance-performance",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "balance-performance",
@@ -358,7 +358,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "balance-performance-TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "balance-performance-TestNode",
@@ -375,7 +375,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -391,12 +391,12 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 									Limits: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                                 *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                              *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/balance-performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/balance-performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                                 *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                              *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/balance-performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/balance-performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 								},
 							},
@@ -428,7 +428,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -441,7 +441,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 				&powerv1.PowerNode{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Status: powerv1.PowerNodeStatus{
 						CustomDevices: []string{"device-plugin"},
@@ -456,7 +456,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "performance-TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name: "performance-TestNode",
@@ -477,7 +477,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -489,12 +489,12 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 									Limits: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("device-plugin"):               *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("device-plugin"):               *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 								},
 							},
@@ -528,7 +528,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.podName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -538,7 +538,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 			workload := &powerv1.PowerWorkload{}
 			err = r.Client.Get(context.TODO(), client.ObjectKey{
 				Name:      test_workload,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			}, workload)
 			assert.Nil(t, err)
 
@@ -561,7 +561,7 @@ func TestPowerPod_Duplicate_Containers(t *testing.T) {
 	podResources := []*podresourcesapi.PodResources{
 		{
 			Name:      podName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 			Containers: []*podresourcesapi.ContainerResources{
 				{
 					Name:   "test-container-1",
@@ -581,7 +581,7 @@ func TestPowerPod_Duplicate_Containers(t *testing.T) {
 		&powerv1.PowerWorkload{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      workloadName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 			Spec: powerv1.PowerWorkloadSpec{
 				Name:         workloadName,
@@ -605,7 +605,7 @@ func TestPowerPod_Duplicate_Containers(t *testing.T) {
 		&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      podName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 				UID:       "abcdefg",
 			},
 			Spec: corev1.PodSpec{
@@ -640,7 +640,7 @@ func TestPowerPod_Duplicate_Containers(t *testing.T) {
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
 			Name:      podName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 	}
 
@@ -650,7 +650,7 @@ func TestPowerPod_Duplicate_Containers(t *testing.T) {
 	workload := &powerv1.PowerWorkload{}
 	err = r.Client.Get(context.TODO(), client.ObjectKey{
 		Name:      workloadName,
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 	}, workload)
 	assert.Nil(t, err)
 
@@ -682,7 +682,7 @@ func TestPowerPod_Reconcile_NonExistingWorkload(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -702,7 +702,7 @@ func TestPowerPod_Reconcile_NonExistingWorkload(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -740,7 +740,7 @@ func TestPowerPod_Reconcile_NonExistingWorkload(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.podName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -750,7 +750,7 @@ func TestPowerPod_Reconcile_NonExistingWorkload(t *testing.T) {
 		workload := &powerv1.PowerWorkload{}
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      tc.workloadName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		}, workload)
 		assert.ErrorContains(t, err, "not found")
 	}
@@ -773,7 +773,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -794,7 +794,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -830,7 +830,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -851,7 +851,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: corev1.PodSpec{
 						NodeName: "TestNode",
@@ -886,7 +886,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -907,7 +907,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -919,12 +919,12 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 									Limits: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(2, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(2, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(2, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(2, resource.DecimalSI),
 									},
 								},
 							},
@@ -954,7 +954,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -973,7 +973,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 				&powerv1.PowerProfile{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "balance-performance",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "balance-performance",
@@ -983,7 +983,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -1025,7 +1025,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.podName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -1038,7 +1038,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 			workload := &powerv1.PowerWorkload{}
 			err = r.Client.Get(context.TODO(), client.ObjectKey{
 				Name:      workloadName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			}, workload)
 			assert.Nil(t, err)
 
@@ -1063,11 +1063,11 @@ func TestPowerPod_Reconcile_ControllerReturningNil(t *testing.T) {
 			testCase:  "Test Case 1 - Incorrect Node error",
 			nodeName:  "TestNode",
 			podName:   "test-pod-1",
-			namespace: IntelPowerNamespace,
+			namespace: PowerNamespace,
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -1085,7 +1085,7 @@ func TestPowerPod_Reconcile_ControllerReturningNil(t *testing.T) {
 				&powerv1.PowerProfile{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "balance-performance",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "balance-performance",
@@ -1095,7 +1095,7 @@ func TestPowerPod_Reconcile_ControllerReturningNil(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -1150,7 +1150,7 @@ func TestPowerPod_Reconcile_ControllerReturningNil(t *testing.T) {
 				&powerv1.PowerProfile{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "balance-performance",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "balance-performance",
@@ -1193,11 +1193,11 @@ func TestPowerPod_Reconcile_ControllerReturningNil(t *testing.T) {
 			testCase:  "Test Case 3 - Not Exclusive Pod error",
 			nodeName:  "TestNode",
 			podName:   "test-pod-1",
-			namespace: IntelPowerNamespace,
+			namespace: PowerNamespace,
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -1217,7 +1217,7 @@ func TestPowerPod_Reconcile_ControllerReturningNil(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -1229,11 +1229,11 @@ func TestPowerPod_Reconcile_ControllerReturningNil(t *testing.T) {
 									Limits: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
 										corev1.ResourceName("memory"):                      *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
 										corev1.ResourceName("cpu"):                         *resource.NewQuantity(3, resource.DecimalSI),
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 								},
 							},
@@ -1280,7 +1280,7 @@ func TestPowerPod_Reconcile_ControllerReturningNil(t *testing.T) {
 			workload := &powerv1.PowerWorkload{}
 			err = r.Client.Get(context.TODO(), client.ObjectKey{
 				Name:      workloadName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			}, workload)
 			assert.Nil(t, err)
 
@@ -1309,7 +1309,7 @@ func TestPowerPod_Reconcile_Delete(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -1328,7 +1328,7 @@ func TestPowerPod_Reconcile_Delete(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "performance-TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "performance-TestNode",
@@ -1351,10 +1351,10 @@ func TestPowerPod_Reconcile_Delete(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:              "test-pod-1",
-						Namespace:         IntelPowerNamespace,
+						Namespace:         PowerNamespace,
 						UID:               "abcdefg",
 						DeletionTimestamp: &metav1.Time{Time: time.Date(9999, time.Month(1), 21, 1, 10, 30, 0, time.UTC)},
-						Finalizers:        []string{"intel.com/finalizer"},
+						Finalizers:        []string{"power.openshift.io/finalizer"},
 					},
 					Spec: corev1.PodSpec{
 						NodeName: "TestNode",
@@ -1364,7 +1364,7 @@ func TestPowerPod_Reconcile_Delete(t *testing.T) {
 			guaranteedPod: powerv1.GuaranteedPod{
 				Node:      "TestNode",
 				Name:      "test-pod-1",
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 				UID:       "abcdefg",
 				Containers: []powerv1.Container{
 					{
@@ -1395,7 +1395,7 @@ func TestPowerPod_Reconcile_Delete(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.podName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -1405,7 +1405,7 @@ func TestPowerPod_Reconcile_Delete(t *testing.T) {
 		workload := &powerv1.PowerWorkload{}
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      tc.workloadName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		}, workload)
 		assert.Nil(t, err)
 
@@ -1422,10 +1422,10 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 	var deletedPod = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "test-pod-1",
-			Namespace:         IntelPowerNamespace,
+			Namespace:         PowerNamespace,
 			UID:               "abcdefg",
 			DeletionTimestamp: &metav1.Time{Time: time.Date(9999, time.Month(1), 21, 1, 10, 30, 0, time.UTC)},
-			Finalizers:        []string{"intel.com/finalizer"},
+			Finalizers:        []string{"power.openshift.io/finalizer"},
 		},
 		Spec: corev1.PodSpec{
 			NodeName: "TestNode",
@@ -1434,7 +1434,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 	var defaultPod = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod-1",
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 			UID:       "abcdefg",
 		},
 		Spec: corev1.PodSpec{
@@ -1501,7 +1501,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -1513,7 +1513,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 			guaranteedPod: powerv1.GuaranteedPod{
 				Node:      "TestNode",
 				Name:      "test-pod-1",
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 				UID:       "abcdefg",
 				Containers: []powerv1.Container{
 					{
@@ -1541,7 +1541,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 					wload := args.Get(2).(*powerv1.PowerWorkload)
 					*wload = *defaultWload
 				})
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.intel.com \"performance\" not found"))
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.openshift.io \"performance\" not found"))
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNode")).Return(nil).Run(func(args mock.Arguments) {
 					pnode := args.Get(2).(*powerv1.PowerNode)
 					*pnode = *defaultNode
@@ -1552,7 +1552,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -1576,7 +1576,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 					wload := args.Get(2).(*powerv1.PowerWorkload)
 					*wload = *defaultWload
 				})
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.intel.com \"performance\" not found"))
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.openshift.io \"performance\" not found"))
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNode")).Return(fmt.Errorf("client  powernode get error"))
 				return mkcl
 			},
@@ -1584,7 +1584,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -1606,7 +1606,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.podName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 		r.Client = tc.convertClient(r.Client)
@@ -1640,7 +1640,7 @@ func TestPowerPod_ControlPLaneSocket(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -1661,7 +1661,7 @@ func TestPowerPod_ControlPLaneSocket(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -1671,10 +1671,10 @@ func TestPowerPod_ControlPLaneSocket(t *testing.T) {
 								Name: "test-container-1",
 								Resources: corev1.ResourceRequirements{
 									Limits: map[corev1.ResourceName]resource.Quantity{
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
 									},
 									Claims: []corev1.ResourceClaim{{Name: "test-claim"}},
 								},
@@ -1705,7 +1705,7 @@ func TestPowerPod_ControlPLaneSocket(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container-1",
@@ -1726,7 +1726,7 @@ func TestPowerPod_ControlPLaneSocket(t *testing.T) {
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-pod-1",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						UID:       "abcdefg",
 					},
 					Spec: corev1.PodSpec{
@@ -1736,10 +1736,10 @@ func TestPowerPod_ControlPLaneSocket(t *testing.T) {
 								Name: "test-container-1",
 								Resources: corev1.ResourceRequirements{
 									Limits: map[corev1.ResourceName]resource.Quantity{
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(2, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(2, resource.DecimalSI),
 									},
 									Requests: map[corev1.ResourceName]resource.Quantity{
-										corev1.ResourceName("power.intel.com/performance"): *resource.NewQuantity(2, resource.DecimalSI),
+										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(2, resource.DecimalSI),
 									},
 									Claims: []corev1.ResourceClaim{{Name: "test-claim"}},
 								},
@@ -1773,7 +1773,7 @@ func TestPowerPod_ControlPLaneSocket(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.podName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -1879,7 +1879,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 	basePowerNode := &powerv1.PowerNode{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testNode,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Status: powerv1.PowerNodeStatus{
 			CustomDevices: []string{},
@@ -1889,7 +1889,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 	matchingProfile := &powerv1.PowerProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "performance",
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
 			Name: "performance",
@@ -1906,7 +1906,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 	nonMatchingProfile := &powerv1.PowerProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "gpu-optimized",
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
 			Name: "gpu-optimized",
@@ -1923,7 +1923,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 	universalProfile := &powerv1.PowerProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "universal",
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
 			Name: "universal",
@@ -1934,7 +1934,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 	expressionMatchingProfile := &powerv1.PowerProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "zone-specific",
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
 			Name: "zone-specific",
@@ -1983,11 +1983,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2008,7 +2008,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "performance-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "performance-" + testNode,
@@ -2026,7 +2026,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container",
@@ -2052,11 +2052,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/gpu-optimized": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/gpu-optimized": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/gpu-optimized": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/gpu-optimized": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2077,7 +2077,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "gpu-optimized-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "gpu-optimized-" + testNode,
@@ -2095,7 +2095,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container",
@@ -2126,11 +2126,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                       *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/universal": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/universal": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                       *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/universal": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/universal": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2151,7 +2151,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "universal-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "universal-" + testNode,
@@ -2169,7 +2169,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container",
@@ -2196,11 +2196,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/zone-specific": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/zone-specific": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/zone-specific": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/zone-specific": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2221,7 +2221,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "zone-specific-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "zone-specific-" + testNode,
@@ -2239,7 +2239,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container",
@@ -2266,11 +2266,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2279,11 +2279,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                       *resource.NewQuantity(1, resource.DecimalSI),
-								"power.intel.com/universal": *resource.NewQuantity(1, resource.DecimalSI),
+								"power.openshift.io/universal": *resource.NewQuantity(1, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                       *resource.NewQuantity(1, resource.DecimalSI),
-								"power.intel.com/universal": *resource.NewQuantity(1, resource.DecimalSI),
+								"power.openshift.io/universal": *resource.NewQuantity(1, resource.DecimalSI),
 							},
 						},
 					},
@@ -2308,7 +2308,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "performance-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "performance-" + testNode,
@@ -2325,7 +2325,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "universal-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "universal-" + testNode,
@@ -2343,7 +2343,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "performance-container",
@@ -2375,11 +2375,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/nonexistent": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/nonexistent": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/nonexistent": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/nonexistent": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2399,7 +2399,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 				&powerv1.PowerProfile{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "nonexistent",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "nonexistent",
@@ -2417,7 +2417,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "test-container",
@@ -2447,11 +2447,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                         *resource.NewQuantity(2, resource.DecimalSI),
-								"power.intel.com/performance": *resource.NewQuantity(2, resource.DecimalSI),
+								"power.openshift.io/performance": *resource.NewQuantity(2, resource.DecimalSI),
 							},
 						},
 					},
@@ -2460,11 +2460,11 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Resources: corev1.ResourceRequirements{
 							Limits: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(1, resource.DecimalSI),
-								"power.intel.com/gpu-optimized": *resource.NewQuantity(1, resource.DecimalSI),
+								"power.openshift.io/gpu-optimized": *resource.NewQuantity(1, resource.DecimalSI),
 							},
 							Requests: map[corev1.ResourceName]resource.Quantity{
 								"cpu":                           *resource.NewQuantity(1, resource.DecimalSI),
-								"power.intel.com/gpu-optimized": *resource.NewQuantity(1, resource.DecimalSI),
+								"power.openshift.io/gpu-optimized": *resource.NewQuantity(1, resource.DecimalSI),
 							},
 						},
 					},
@@ -2489,7 +2489,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "performance-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "performance-" + testNode,
@@ -2506,7 +2506,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "gpu-optimized-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "gpu-optimized-" + testNode,
@@ -2524,7 +2524,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					Containers: []*podresourcesapi.ContainerResources{
 						{
 							Name:   "good-container",
@@ -2565,7 +2565,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 					UID:       "test-uid-123",
 				},
 				Spec:   tc.podSpec,
@@ -2584,7 +2584,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			req := reconcile.Request{
 				NamespacedName: client.ObjectKey{
 					Name:      "test-pod",
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 			}
 
@@ -2604,7 +2604,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 				workload := &powerv1.PowerWorkload{}
 				err = r.Client.Get(context.TODO(), client.ObjectKey{
 					Name:      workloadName,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				}, workload)
 				assert.NoError(t, err)
 
@@ -2686,17 +2686,17 @@ func TestPowerReleventPodPredicate(t *testing.T) {
 		},
 		{
 			name: "node mismatch returns false",
-			obj:  makePod(IntelPowerNamespace, "OtherNode", nil, powerReq, false),
+			obj:  makePod(PowerNamespace, "OtherNode", nil, powerReq, false),
 			want: false,
 		},
 		{
 			name: "no power requests returns false",
-			obj:  makePod(IntelPowerNamespace, "TestNode", nil, cpuMemReq, false),
+			obj:  makePod(PowerNamespace, "TestNode", nil, cpuMemReq, false),
 			want: false,
 		},
 		{
 			name: "container with power request returns true",
-			obj:  makePod(IntelPowerNamespace, "TestNode", nil, powerReq, false),
+			obj:  makePod(PowerNamespace, "TestNode", nil, powerReq, false),
 			want: true,
 		},
 		{
@@ -2706,13 +2706,13 @@ func TestPowerReleventPodPredicate(t *testing.T) {
 		},
 		{
 			name: "init container with power request returns true",
-			obj:  makePod(IntelPowerNamespace, "TestNode", powerReq, cpuMemReq, true),
+			obj:  makePod(PowerNamespace, "TestNode", powerReq, cpuMemReq, true),
 			want: true,
 		},
 		{
 			name: "multiple containers where one requests power returns true",
 			obj: func() client.Object {
-				pod := makePod(IntelPowerNamespace, "TestNode", nil, cpuMemReq, false)
+				pod := makePod(PowerNamespace, "TestNode", nil, cpuMemReq, false)
 				pod.Spec.Containers = append(
 					pod.Spec.Containers,
 					corev1.Container{

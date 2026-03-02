@@ -1,5 +1,5 @@
 export PROJECT_NAME=kubernetes-power-manager
-KPM_NAMESPACE ?= intel-power
+KPM_NAMESPACE ?= power-manager
 # Current Operator version
 VERSION ?= 0.0.1
 # Bundle version (without 'v' prefix for operator-sdk)
@@ -196,7 +196,7 @@ endif
 	sed -i 's/^appVersion:.*$$/appVersion: \"$(HELM_CHART)\"/' helm/crds/Chart.yaml 
 	helm install kubernetes-power-manager-crds ./helm/crds
 	helm dependency update ./helm/kubernetes-power-manager
-	helm install kubernetes-power-manager-$(HELM_CHART) ./helm/kubernetes-power-manager --set operator.container.image=intel/power-operator$(OCP_SUFFIX):$(HELM_CHART) $(HELM_FLAG)
+	helm install kubernetes-power-manager-$(HELM_CHART) ./helm/kubernetes-power-manager --set operator.container.image=$(IMAGE_REGISTRY)/kubernetes-power-manager-operator:$(VERSION) $(HELM_FLAG)
 
 helm-uninstall:
 	sed -i 's/^version:.*$$/version: $(HELM_VERSION)/' helm/kubernetes-power-manager/Chart.yaml 

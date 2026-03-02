@@ -13,7 +13,7 @@ usage exposed by the DPDK telemetry socket, computes a windowed utilization for 
 Scaling behavior is configured in the `PowerProfile` under `spec.cpuScalingPolicy`. For example:
 
 ```yaml
-apiVersion: power.intel.com/v1
+apiVersion: power.openshift.io/v1
 kind: PowerProfile
 metadata:
   name: dpdk-scaling
@@ -95,7 +95,7 @@ Then apply filters and limits:
 
     ```sh
     NODE="<node-name>"
-    CPUS=$(oc get powernode "$NODE" -n intel-power -o jsonpath='{range .status.powerContainers[?(@.name=="server")]}{.exclusiveCpus}{end}' | tr -d '[]')
-    PODID=$(oc get powernode "$NODE" -n intel-power -o jsonpath='{range .status.powerContainers[?(@.name=="server")]}{.podUID}{end}')
+    CPUS=$(oc get powernode "$NODE" -n power-manager -o jsonpath='{range .status.powerContainers[?(@.name=="server")]}{.exclusiveCpus}{end}' | tr -d '[]')
+    PODID=$(oc get powernode "$NODE" -n power-manager -o jsonpath='{range .status.powerContainers[?(@.name=="server")]}{.podUID}{end}')
     ./testbin/kpmon.py --cpu "$CPUS" --dpdk-pod-uid "$PODID" --no-siblings [--scroll]
     ```

@@ -1,10 +1,10 @@
-apiVersion: power.intel.com/v1
+apiVersion: power.openshift.io/v1
 kind: PowerWorkload
 metadata:
   # Replace <NODE_NAME> with the Node associated with this PowerWorkload.
   # In a multi-node cluster, create ONE shared PowerWorkload per node.
   name: shared-<NODE_NAME>-workload
-  namespace: intel-power
+  namespace: power-manager
 spec:
   # Replace <NODE_NAME> with the Node associated with this PowerWorkload.
   name: "shared-<NODE_NAME>-workload"

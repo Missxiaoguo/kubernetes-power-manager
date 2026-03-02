@@ -9,5 +9,5 @@ roleRef:
   name: node-agent-cluster-resources
 subjects:
 - kind: ServiceAccount
-  name: intel-power-node-agent
-  namespace: intel-power
+  name: power-manager-node-agent
+  namespace: power-manager

@@ -5,9 +5,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
-  name: cstates.power.intel.com
+  name: cstates.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: CStates
     listKind: CStatesList
@@ -67,9 +67,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
-  name: powerconfigs.power.intel.com
+  name: powerconfigs.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: PowerConfig
     listKind: PowerConfigList
@@ -136,9 +136,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
-  name: powernodes.power.intel.com
+  name: powernodes.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: PowerNode
     listKind: PowerNodeList
@@ -289,9 +289,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
-  name: powerpods.power.intel.com
+  name: powerpods.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: PowerPod
     listKind: PowerPodList
@@ -335,9 +335,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
-  name: powerprofiles.power.intel.com
+  name: powerprofiles.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: PowerProfile
     listKind: PowerProfileList
@@ -408,9 +408,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
-  name: powerworkloads.power.intel.com
+  name: powerworkloads.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: PowerWorkload
     listKind: PowerWorkloadList
@@ -528,9 +528,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
-  name: powerworkloads.power.intel.com
+  name: powerworkloads.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: PowerWorkload
     listKind: PowerWorkloadList
@@ -641,9 +641,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
-  name: timeofdaycronjobs.power.intel.com
+  name: timeofdaycronjobs.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: TimeOfDayCronJob
     listKind: TimeOfDayCronJobList
@@ -856,9 +856,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
-  name: timeofdaycronjobs.power.intel.com
+  name: timeofdaycronjobs.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: TimeOfDayCronJob
     listKind: TimeOfDayCronJobList
@@ -1022,9 +1022,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
-  name: timeofdays.power.intel.com
+  name: timeofdays.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: TimeOfDay
     listKind: TimeOfDayList
@@ -1177,9 +1177,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.9.0
   creationTimestamp: null
-  name: uncores.power.intel.com
+  name: uncores.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: Uncore
     listKind: UncoreList

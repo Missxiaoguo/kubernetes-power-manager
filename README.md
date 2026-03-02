@@ -317,7 +317,7 @@ supported with helm charts:
 
 When set up using the provided helm charts, the following will be deployed:
 
-- The intel-power namespace
+- The power-manager namespace
 - The RBAC rules for the operator and node agent
 - The operator deployment itself
 - The operator's power config
@@ -380,11 +380,11 @@ PowerConfigs created after the first.
 **Example:**
 
 ```yaml
-apiVersion: "power.intel.com/v1"
+apiVersion: "power.openshift.io/v1"
 kind: PowerConfig
 metadata:
   name: power-config
-  namespace: intel-power
+  namespace: power-manager
 spec:
   powerNodeSelector:
     feature.node.kubernetes.io/power-node: "true"
@@ -408,11 +408,11 @@ each Node with a Pod requesting a `PowerProfile`, based on the `PowerProfile` re
 **Example PowerWorkload with exclusive CPUs:**
 
 ```yaml
-apiVersion: "power.intel.com/v1"
+apiVersion: "power.openshift.io/v1"
 kind: PowerWorkload
 metadata:
     name: performance-example-node-workload
-    namespace: intel-power
+    namespace: power-manager
 spec:
    name: "performance-example-node-workload"
    powerProfile: "performance-example-node"
@@ -455,11 +455,11 @@ A shared `PowerProfile` can be used for multiple shared `PowerWorkloads`.
 **Example:**
 
 ```yaml
-apiVersion: "power.intel.com/v1"
+apiVersion: "power.openshift.io/v1"
 kind: PowerWorkload
 metadata:
   name: shared-example-node-workload
-  namespace: intel-power
+  namespace: power-manager
 spec:
   name: "shared-example-node-workload"
   allCores: true
@@ -481,7 +481,7 @@ PodSpec. All `PowerProfiles` must be created explicitly by the user.
 **Example:**
 
 ```yaml
-apiVersion: "power.intel.com/v1"
+apiVersion: "power.openshift.io/v1"
 kind: PowerProfile
 metadata:
   name: performance-example-application
@@ -526,7 +526,7 @@ This flag must be enabled when using a shared pool.
 **Examples:**
 
 ```yaml
-apiVersion: "power.intel.com/v1"
+apiVersion: "power.openshift.io/v1"
 kind: PowerProfile
 metadata:
   name: shared-example-node1
@@ -541,7 +541,7 @@ spec:
 ```
 
 ```yaml
-apiVersion: "power.intel.com/v1"
+apiVersion: "power.openshift.io/v1"
 kind: PowerProfile
 metadata:
   name: shared-example-node2
@@ -633,7 +633,7 @@ Currently the Kubernetes Power Manager supports multiple `PowerProfile` per Pod,
 If any error occurs it will be displayed in the status field of the custom resource, for example:
 
 ```yaml
-apiVersion: power.intel.com/v1
+apiVersion: power.openshift.io/v1
 kind: PowerProfile
   ...
 status:
@@ -644,7 +644,7 @@ status:
 If no errors occurred or were corrected, the list will be empty
 
 ```yaml
-apiVersion: power.intel.com/v1
+apiVersion: power.openshift.io/v1
 kind: PowerProfile
   ...
 status:
@@ -703,12 +703,12 @@ status:
     At this point, if only the *performance* `PowerProfile` has been created, the cluster will contain 2 PowerProfiles and 2 PowerWorkloads:
 
     ```console
-    # kubectl get powerprofiles -n intel-power
+    # kubectl get powerprofiles -n power-manager
     NAME                          AGE
     performance                   59m
     shared-<NODE_NAME>            60m
 
-    # kubectl get powerworkloads -n intel-power
+    # kubectl get powerworkloads -n power-manager
     NAME                                   AGE
     performance-<NODE_NAME>-workload       63m
     shared-<NODE_NAME>-workload            61m

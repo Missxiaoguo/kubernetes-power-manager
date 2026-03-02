@@ -150,7 +150,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 	pwrProfileObj := &powerv1.PowerProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "performance",
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
 			Name: "performance",
@@ -165,7 +165,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 	pwrWorkloadObj := &powerv1.PowerWorkload{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "performance-TestNode",
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerWorkloadSpec{
 			Name:              "performance-TestNode",
@@ -183,7 +183,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 	sharedSkeleton := &powerv1.PowerWorkload{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "shared-" + testNode,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerWorkloadSpec{
 			Name:              "shared-" + testNode,
@@ -228,7 +228,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 				req := reconcile.Request{
 					NamespacedName: client.ObjectKey{
 						Name:      "shared-TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 				}
 
@@ -240,7 +240,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "shared-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:              "shared-" + testNode,
@@ -266,7 +266,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			validateErr: func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool {
 				assert.NoError(t, e)
 				updated := &powerv1.PowerWorkload{}
-				err := r.Client.Get(context.TODO(), types.NamespacedName{Name: "performance-OtherNode", Namespace: IntelPowerNamespace}, updated)
+				err := r.Client.Get(context.TODO(), types.NamespacedName{Name: "performance-OtherNode", Namespace: PowerNamespace}, updated)
 				assert.NoError(t, err)
 				// The status is not modified.
 				return assert.Equal(t, "OtherNode", updated.Status.WorkloadNodes.Name)
@@ -275,7 +275,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "performance-OtherNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:         "performance-OtherNode",
@@ -318,7 +318,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "shared-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:              "shared-" + testNode,
@@ -346,7 +346,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 				&powerv1.PowerProfile{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "shared",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name:   "shared",
@@ -356,7 +356,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "shared-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:              "shared-" + testNode,
@@ -456,7 +456,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "shared-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:              "shared-" + testNode,
@@ -497,7 +497,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			validateErr: func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool {
 				assert.NoError(t, e)
 				updated := &powerv1.PowerWorkload{}
-				err := r.Client.Get(context.TODO(), types.NamespacedName{Name: "shared-" + testNode, Namespace: IntelPowerNamespace}, updated)
+				err := r.Client.Get(context.TODO(), types.NamespacedName{Name: "shared-" + testNode, Namespace: PowerNamespace}, updated)
 				assert.NoError(t, err)
 				return assert.Equal(t, "", updated.Status.WorkloadNodes.Name)
 			},
@@ -505,7 +505,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "shared-" + testNode,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{
 						Name:              "shared-" + testNode,
@@ -698,7 +698,7 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.workloadName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 		result, err := r.Reconcile(context.TODO(), req)
@@ -773,13 +773,13 @@ func TestPowerWorkload_Reconcile_WithCpuScalingPolicy(t *testing.T) {
 				ScalePercentage:            intPtr(tc.scalePct),
 			}
 			profile := &powerv1.PowerProfile{
-				ObjectMeta: metav1.ObjectMeta{Name: tc.profileName, Namespace: IntelPowerNamespace},
+				ObjectMeta: metav1.ObjectMeta{Name: tc.profileName, Namespace: PowerNamespace},
 				Spec:       powerv1.PowerProfileSpec{Name: tc.profileName, CpuScalingPolicy: policy},
 			}
 			workload := &powerv1.PowerWorkload{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      tc.profileName + "-" + testNode,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerWorkloadSpec{
 					Name:         tc.profileName + "-" + testNode,
@@ -829,7 +829,7 @@ func TestPowerWorkload_Reconcile_WithCpuScalingPolicy(t *testing.T) {
 			_, err = r.Reconcile(context.TODO(), reconcile.Request{
 				NamespacedName: client.ObjectKey{
 					Name:      workload.Name,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 			})
 			assert.NoError(t, err)
@@ -964,7 +964,7 @@ func TestPowerWorkload_Reconcile_ClientErrs(t *testing.T) {
 	pwrWorkloadObj := &powerv1.PowerWorkload{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      workloadName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerWorkloadSpec{
 			Name:              "",
@@ -1021,7 +1021,7 @@ func TestPowerWorkload_Reconcile_ClientErrs(t *testing.T) {
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
 			Name:      workloadName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 	}
 
@@ -1068,7 +1068,7 @@ func FuzzPowerWorkloadController(f *testing.F) {
 			&powerv1.PowerProfile{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      prof,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerProfileSpec{
 					Name: prof,
@@ -1084,7 +1084,7 @@ func FuzzPowerWorkloadController(f *testing.F) {
 			&powerv1.PowerWorkload{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      prof + "-" + nodeName,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerWorkloadSpec{
 					Name:     prof + "-" + nodeName,
@@ -1135,7 +1135,7 @@ func FuzzPowerWorkloadController(f *testing.F) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      prof + "-" + nodeName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -1200,7 +1200,7 @@ func TestPowerWorkload_ValidateNodeSelectorAndProfileMatching(t *testing.T) {
 	performanceProfile := &powerv1.PowerProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "performance",
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
 			Name: "performance",
@@ -1217,7 +1217,7 @@ func TestPowerWorkload_ValidateNodeSelectorAndProfileMatching(t *testing.T) {
 	restrictedProfile := &powerv1.PowerProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "restricted",
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
 			Name: "restricted",
@@ -1234,7 +1234,7 @@ func TestPowerWorkload_ValidateNodeSelectorAndProfileMatching(t *testing.T) {
 	sharedProfile := &powerv1.PowerProfile{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "shared",
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
 			Name:   "shared",
@@ -1430,7 +1430,7 @@ func TestPowerWorkload_ValidateNodeSelectorAndProfileMatching(t *testing.T) {
 			workload := &powerv1.PowerWorkload{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "shared-" + testNode,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 				Spec: tc.workloadSpec,
 			}
@@ -1446,7 +1446,7 @@ func TestPowerWorkload_ValidateNodeSelectorAndProfileMatching(t *testing.T) {
 			req := reconcile.Request{
 				NamespacedName: client.ObjectKey{
 					Name:      workload.Name,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 			}
 

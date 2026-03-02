@@ -63,7 +63,7 @@ func createPowerNodeReconcilerObject(objs []runtime.Object) (*PowerNodeReconcile
 var defaultNode = &powerv1.PowerNode{
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      "TestNode",
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 	},
 	Spec: powerv1.PowerNodeSpec{},
 	Status: powerv1.PowerNodeStatus{
@@ -73,7 +73,7 @@ var defaultNode = &powerv1.PowerNode{
 var defaultProf = &powerv1.PowerProfile{
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      "perfromance",
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 	},
 	Spec: powerv1.PowerProfileSpec{
 		Name: "performance",
@@ -87,7 +87,7 @@ var defaultProf = &powerv1.PowerProfile{
 var defaultWload = &powerv1.PowerWorkload{
 	ObjectMeta: metav1.ObjectMeta{
 		Name:      "performance-TestNode",
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 	},
 	Spec: powerv1.PowerWorkloadSpec{
 		Name:         "performance-TestNode",
@@ -131,7 +131,7 @@ var defaultObs = struct {
 var nodeGuaranteedPod = powerv1.GuaranteedPod{
 	Node:      "TestNode",
 	Name:      "test-pod-1",
-	Namespace: IntelPowerNamespace,
+	Namespace: PowerNamespace,
 	UID:       "abcdefg",
 	Containers: []powerv1.Container{
 		{
@@ -162,7 +162,7 @@ func TestPowerNode_Reconcile(t *testing.T) {
 				&powerv1.PowerNode{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerNodeSpec{},
 				},
@@ -222,7 +222,7 @@ func TestPowerNode_Reconcile(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.powerNodeName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -285,7 +285,7 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 					*pod = corev1.Pod{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:        "test-pod-1",
-							Namespace:   IntelPowerNamespace,
+							Namespace:   PowerNamespace,
 							UID:         "abcdefg",
 							Annotations: make(map[string]string),
 						},
@@ -323,7 +323,7 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 					*pod = corev1.Pod{
 						ObjectMeta: metav1.ObjectMeta{
 							Name:        "test-pod-1",
-							Namespace:   IntelPowerNamespace,
+							Namespace:   PowerNamespace,
 							UID:         "abcdefg",
 							Annotations: map[string]string{"PM-updated": "0"},
 						},
@@ -367,7 +367,7 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.powerNodeName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -409,7 +409,7 @@ func FuzzPowerNodeController(f *testing.F) {
 			&powerv1.PowerProfile{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      prof1,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerProfileSpec{
 					Name: prof1,
@@ -418,7 +418,7 @@ func FuzzPowerNodeController(f *testing.F) {
 			&powerv1.PowerProfile{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      prof2,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerProfileSpec{
 					Name: prof2,
@@ -427,7 +427,7 @@ func FuzzPowerNodeController(f *testing.F) {
 			&powerv1.PowerProfile{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      prof3,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerProfileSpec{
 					Name: prof3,
@@ -436,7 +436,7 @@ func FuzzPowerNodeController(f *testing.F) {
 			&powerv1.PowerWorkload{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      prof1 + "-" + nodeName,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerWorkloadSpec{
 					Name:         prof1 + "-" + nodeName,
@@ -446,7 +446,7 @@ func FuzzPowerNodeController(f *testing.F) {
 			&powerv1.PowerNode{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      nodeName,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 				Status: powerv1.PowerNodeStatus{
 					CustomDevices:   []string{devicePlugin},
@@ -464,7 +464,7 @@ func FuzzPowerNodeController(f *testing.F) {
 		pod := powerv1.GuaranteedPod{
 			Node:      "TestNode",
 			Name:      "test-pod-1",
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 			UID:       "abcdefg",
 			Containers: []powerv1.Container{
 				container,
@@ -510,7 +510,7 @@ func FuzzPowerNodeController(f *testing.F) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      nodeName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 

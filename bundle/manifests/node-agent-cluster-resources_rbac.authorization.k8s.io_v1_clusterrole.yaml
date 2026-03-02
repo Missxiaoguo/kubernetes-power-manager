@@ -7,7 +7,7 @@ rules:
 - apiGroups:
   - ""
   - batch
-  - power.intel.com
+  - power.openshift.io
   resources:
   - nodes
   - nodes/status

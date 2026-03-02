@@ -48,9 +48,9 @@ import (
 
 const (
 	PowerProfileAnnotation = "PowerProfile"
-	ResourcePrefix         = "power.intel.com/"
+	ResourcePrefix         = "power.openshift.io/"
 	CPUResource            = "cpu"
-	PowerNamespace         = "intel-power"
+	PowerNamespace         = "power-manager"
 )
 
 // PowerPodReconciler reconciles a Pod object
@@ -64,9 +64,9 @@ type PowerPodReconciler struct {
 }
 
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
-// +kubebuilder:rbac:groups=power.intel.com,resources=powerworkloads/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=power.intel.com,resources=powerprofiles,verbs=get;list;watch
-// +kubebuilder:rbac:groups=power.intel.com,resources=powernodes,verbs=get;list;watch
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powerworkloads/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powerprofiles,verbs=get;list;watch
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powernodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=privileged,verbs=use
 
 func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -115,7 +115,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 			logger.V(5).Info("retrieving the workload instance", "Workload Name", workloadName)
 			workload := &powerv1.PowerWorkload{}
 			err = r.Get(context.TODO(), client.ObjectKey{
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 				Name:      workloadName,
 			}, workload)
 			if err != nil {
@@ -157,7 +157,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 	logger.V(5).Info("retrieving custom resources from power node")
 	powernode := &powerv1.PowerNode{}
 	err = r.Get(context.TODO(), client.ObjectKey{
-		Namespace: IntelPowerNamespace,
+		Namespace: PowerNamespace,
 		Name:      nodeName,
 	}, powernode)
 	if err != nil {

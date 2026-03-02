@@ -37,11 +37,11 @@ spec:
       requests:
         memory: "200Mi"
         cpu: "$CPUs"
-        power.intel.com/$profile: "$CPUs"
+        power.openshift.io/$profile: "$CPUs"
       limits:
         memory: "200Mi"
         cpu: "$CPUs"
-        power.intel.com/$profile: "$CPUs"
+        power.openshift.io/$profile: "$CPUs"
 EOF
 }
 

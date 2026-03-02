@@ -50,8 +50,8 @@ type PowerNodeReconciler struct {
 	PowerLibrary power.Host
 }
 
-// +kubebuilder:rbac:groups=power.intel.com,resources=powernodes,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=power.intel.com,resources=powernodes/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powernodes,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powernodes/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=privileged,verbs=use
 
 func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ctrl.Result, error) {

@@ -58,7 +58,7 @@ func TestUncore_Reconcile_SystemUncore(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				SysMax: &max,
@@ -76,7 +76,7 @@ func TestUncore_Reconcile_SystemUncore(t *testing.T) {
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
 			Name:      nodename,
-			Namespace: "intel-power",
+			Namespace: "power-manager",
 		},
 	}
 
@@ -99,7 +99,7 @@ func TestUncore_Reconcile_TestDieTuning(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -118,7 +118,7 @@ func TestUncore_Reconcile_TestDieTuning(t *testing.T) {
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
 			Name:      nodename,
-			Namespace: "intel-power",
+			Namespace: "power-manager",
 		},
 	}
 
@@ -141,7 +141,7 @@ func TestUncore_Reconcile_PackageTuning(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -160,7 +160,7 @@ func TestUncore_Reconcile_PackageTuning(t *testing.T) {
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
 			Name:      nodename,
-			Namespace: "intel-power",
+			Namespace: "power-manager",
 		},
 	}
 
@@ -181,7 +181,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
 			Name:      nodename,
-			Namespace: "intel-power",
+			Namespace: "power-manager",
 		},
 	}
 
@@ -200,7 +200,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -223,7 +223,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -245,7 +245,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -264,7 +264,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{},
 		},
@@ -281,7 +281,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -300,7 +300,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{},
 		},
@@ -319,7 +319,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -338,7 +338,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -361,7 +361,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -384,7 +384,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				SysMax: &max,
@@ -405,7 +405,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -428,7 +428,7 @@ func TestUncore_Reconcile_InvalidUncores(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -468,7 +468,7 @@ func TestUncore_Reconcile_InvalidFileSystem(t *testing.T) {
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
 			Name:      nodename,
-			Namespace: "intel-power",
+			Namespace: "power-manager",
 		},
 	}
 	max := uint(2400000)
@@ -479,7 +479,7 @@ func TestUncore_Reconcile_InvalidFileSystem(t *testing.T) {
 		&powerv1.Uncore{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      nodename,
-				Namespace: "intel-power",
+				Namespace: "power-manager",
 			},
 			Spec: powerv1.UncoreSpec{
 				DieSelectors: &[]powerv1.DieSelector{
@@ -509,7 +509,7 @@ func TestUncore_Reconcile_UnexpectedClientErr(t *testing.T) {
 	req := reconcile.Request{
 		NamespacedName: client.ObjectKey{
 			Name:      nodename,
-			Namespace: "intel-power",
+			Namespace: "power-manager",
 		},
 	}
 
@@ -583,7 +583,7 @@ func FuzzUncoreReconciler(f *testing.F) {
 	mockpkg.On("Dies").Return(&dielst)
 	mockpkg.On("Die", mock.Anything).Return(mockdie)
 	mockdie.On("SetUncore", mock.Anything).Return(nil)
-	f.Add("node1", "intel-power", true, "node2", true, uint(1400000), uint(2400000), uint(0))
+	f.Add("node1", "power-manager", true, "node2", true, uint(1400000), uint(2400000), uint(0))
 	_, teardown, err := fullDummySystem()
 	assert.Nil(f, err)
 	defer teardown()

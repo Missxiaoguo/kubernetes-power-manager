@@ -4,9 +4,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
   creationTimestamp: null
-  name: uncores.power.intel.com
+  name: uncores.power.openshift.io
 spec:
-  group: power.intel.com
+  group: power.openshift.io
   names:
     kind: Uncore
     listKind: UncoreList

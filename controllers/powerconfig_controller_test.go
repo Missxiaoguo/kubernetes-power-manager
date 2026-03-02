@@ -69,7 +69,7 @@ func TestPowerConfig_Reconcile_Creation(t *testing.T) {
 				&powerv1.PowerConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerConfigSpec{
 						PowerNodeSelector: map[string]string{
@@ -108,7 +108,7 @@ func TestPowerConfig_Reconcile_Creation(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.configName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -121,7 +121,7 @@ func TestPowerConfig_Reconcile_Creation(t *testing.T) {
 		ds := &appsv1.DaemonSet{}
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      NodeAgentDSName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		}, ds)
 		if err != nil {
 			t.Errorf("%s failed: expected daemonSet '%s' to have been created", tc.testCase, NodeAgentDSName)
@@ -130,7 +130,7 @@ func TestPowerConfig_Reconcile_Creation(t *testing.T) {
 		powerNode := &powerv1.PowerNode{}
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      tc.nodeName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		}, powerNode)
 		if err != nil {
 			t.Errorf("%s failed: expected power node object '%s' to have been created", tc.testCase, tc.nodeName)
@@ -155,7 +155,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 				&powerv1.PowerConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerConfigSpec{
 						PowerNodeSelector: map[string]string{
@@ -167,7 +167,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 				&corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						Labels: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
 						},
@@ -189,7 +189,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 				&powerv1.PowerConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerConfigSpec{
 						PowerNodeSelector: map[string]string{
@@ -201,7 +201,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 				&corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						Labels: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
 						},
@@ -223,7 +223,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 				&powerv1.PowerConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerConfigSpec{
 						PowerNodeSelector: map[string]string{
@@ -234,7 +234,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 				&corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						Labels: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
 						},
@@ -262,7 +262,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.configName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -275,7 +275,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 		config := &powerv1.PowerConfig{} // needs error handling
 		_ = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      tc.configName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		}, config)
 		if config.Name != tc.configName {
 			t.Errorf("%s failed: expected power config object '%s' to have been created successfully", tc.testCase, tc.configName)
@@ -284,7 +284,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Creation(t *testing.T) {
 		powerNode := &powerv1.PowerNode{}
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      tc.nodeName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		}, powerNode)
 		if err != nil {
 			t.Error(err)
@@ -317,7 +317,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 				&powerv1.PowerConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerConfigSpec{
 						PowerNodeSelector: map[string]string{
@@ -329,7 +329,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 				&corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						Labels: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
 						},
@@ -352,7 +352,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 				&powerv1.PowerConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerConfigSpec{
 						PowerNodeSelector: map[string]string{
@@ -364,7 +364,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 				&corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						Labels: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
 						},
@@ -387,7 +387,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 				&powerv1.PowerConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-config",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerConfigSpec{
 						PowerNodeSelector: map[string]string{
@@ -399,7 +399,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 				&corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 						Labels: map[string]string{
 							"feature.node.kubernetes.io/power-node": "true",
 						},
@@ -428,7 +428,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.configName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -441,7 +441,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 		config := &powerv1.PowerConfig{} // needs error handling
 		_ = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      tc.configName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		}, config)
 		if config.Name != tc.configName {
 			t.Errorf("%s failed: expected power config object '%s' to have been created successfully", tc.testCase, tc.configName)
@@ -452,7 +452,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 		err = r.Client.Update(context.TODO(), config)
 		_ = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      tc.configName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		}, config)
 		if err != nil {
 			t.Error(err)
@@ -468,7 +468,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 		config = &powerv1.PowerConfig{} // needs error handling
 		_ = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      tc.configName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		}, config)
 		if config.Name != tc.configName {
 			t.Errorf("%s failed: expected power config object '%s' to have been created successfully", tc.testCase, tc.configName)
@@ -477,7 +477,7 @@ func TestPowerConfig_Reconcile_CustomDevices_Update(t *testing.T) {
 		powerNode := &powerv1.PowerNode{}
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      tc.nodeName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		}, powerNode)
 		if err != nil {
 			t.Error(err)
@@ -522,7 +522,7 @@ func TestPowerConfig_Reconcile_Deletion(t *testing.T) {
 				&powerv1.PowerProfile{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "performance",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
 						Name: "performance",
@@ -536,21 +536,21 @@ func TestPowerConfig_Reconcile_Deletion(t *testing.T) {
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "performance-TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerWorkloadSpec{},
 				},
 				&powerv1.PowerNode{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "TestNode",
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerNodeSpec{},
 				},
 				&appsv1.DaemonSet{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      NodeAgentDSName,
-						Namespace: IntelPowerNamespace,
+						Namespace: PowerNamespace,
 					},
 				},
 			},
@@ -570,7 +570,7 @@ func TestPowerConfig_Reconcile_Deletion(t *testing.T) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      tc.configName,
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
@@ -616,7 +616,7 @@ func TestPowerConfig_Reconcile_Deletion(t *testing.T) {
 		ds := &appsv1.DaemonSet{}
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name:      NodeAgentDSName,
-			Namespace: IntelPowerNamespace,
+			Namespace: PowerNamespace,
 		}, ds)
 		if err == nil {
 			t.Errorf("%s failed: expected daemonSet '%s' to have been deleted", tc.testCase, NodeAgentDSName)
@@ -632,7 +632,7 @@ func FuzzPowerConfigController(f *testing.F) {
 			&powerv1.PowerConfig{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      name,
-					Namespace: IntelPowerNamespace,
+					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerConfigSpec{
 					PowerNodeSelector: map[string]string{
@@ -661,7 +661,7 @@ func FuzzPowerConfigController(f *testing.F) {
 		req := reconcile.Request{
 			NamespacedName: client.ObjectKey{
 				Name:      "test-config",
-				Namespace: IntelPowerNamespace,
+				Namespace: PowerNamespace,
 			},
 		}
 
