@@ -102,10 +102,6 @@ type ReservedCPUPoolStatus struct {
 
 	// PowerNodeConfig is the name of the PowerNodeConfig applied to this pool
 	PowerNodeConfig string `json:"powerNodeConfig"`
-
-	// Errors contains any errors encountered while configuring this pool
-	// +optional
-	Errors []string `json:"errors,omitempty"`
 }
 
 type PowerProfileCPUs struct {
@@ -114,6 +110,10 @@ type PowerProfileCPUs struct {
 
 	// CPUIDs are the CPU IDs in this pool
 	CPUIDs []uint `json:"cpuIDs"`
+
+	// Errors contains any errors encountered while configuring this pool
+	// +optional
+	Errors []string `json:"errors,omitempty"`
 }
 
 // ExclusiveCPUPoolStatus represents the status of an exclusive CPU pool
@@ -128,7 +128,7 @@ type ExclusiveCPUInfo struct {
 	PowerProfile string `json:"powerProfile"`
 
 	// PowerContainers contains information about the containers using exclusive CPUs and the PowerProfile
-	PowerContainer []PowerContainer `json:"powerContainer"`
+	PowerContainers []PowerContainer `json:"powerContainers"`
 }
 
 // PowerContainer contains information about a container using exclusive CPUs

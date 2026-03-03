@@ -69,7 +69,7 @@ spec:
                             description: ExclusiveCPUInfo contains information about
                               an exclusive CPU pool
                             properties:
-                              powerContainer:
+                              powerContainers:
                                 description: PowerContainers contains information
                                   about the containers using exclusive CPUs and the
                                   PowerProfile
@@ -116,7 +116,7 @@ spec:
                                   used in these containers
                                 type: string
                             required:
-                            - powerContainer
+                            - powerContainers
                             - powerProfile
                             type: object
                           type: array
@@ -132,12 +132,6 @@ spec:
                       description: ReservedCPUPoolStatus represents the status of
                         a reserved CPU pool
                       properties:
-                        errors:
-                          description: Errors contains any errors encountered while
-                            configuring this pool
-                          items:
-                            type: string
-                          type: array
                         powerNodeConfig:
                           description: PowerNodeConfig is the name of the PowerNodeConfig
                             applied to this pool
@@ -151,6 +145,12 @@ spec:
                                 description: CPUIDs are the CPU IDs in this pool
                                 items:
                                   type: integer
+                                type: array
+                              errors:
+                                description: Errors contains any errors encountered
+                                  while configuring this pool
+                                items:
+                                  type: string
                                 type: array
                               powerProfile:
                                 description: PowerProfile is the name of the PowerProfile
