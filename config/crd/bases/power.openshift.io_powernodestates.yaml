@@ -140,6 +140,8 @@ spec:
                           description: PowerProfileCPUs are the PowerProfile and CPUIDs
                             in this pool
                           items:
+                            description: PowerProfileCPUs contains information about
+                              CPUs in a pool using a specific PowerProfile
                             properties:
                               cpuIDs:
                                 description: CPUIDs are the CPU IDs in this pool
@@ -196,13 +198,6 @@ spec:
                     - powerProfile
                     type: object
                 type: object
-              customDevices:
-                description: |-
-                  CustomDevices include alternative devices that represent other resources
-                  Owned by: PowerConfig controller
-                items:
-                  type: string
-                type: array
               powerProfiles:
                 description: |-
                   PowerProfiles contains the status of power profiles on this node

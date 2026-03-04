@@ -41,11 +41,6 @@ type PowerNodeStateStatus struct {
 	// Owned by: Uncore controller
 	// +optional
 	Uncore *NodeUncoreStatus `json:"uncore,omitempty"`
-
-	// CustomDevices include alternative devices that represent other resources
-	// Owned by: PowerConfig controller
-	// +optional
-	CustomDevices []string `json:"customDevices,omitempty"`
 }
 
 // PowerNodeProfileStatus represents the status of a power profile on this node
@@ -104,6 +99,7 @@ type ReservedCPUPoolStatus struct {
 	PowerNodeConfig string `json:"powerNodeConfig"`
 }
 
+// PowerProfileCPUs contains information about CPUs in a pool using a specific PowerProfile
 type PowerProfileCPUs struct {
 	// PowerProfile is the name of the PowerProfile applied to this pool
 	PowerProfile string `json:"powerProfile"`
@@ -149,6 +145,7 @@ type PowerContainer struct {
 	CPUIDs []uint `json:"cpuIDs"`
 
 	// Errors contains any errors encountered while configuring the container
+	// +optional
 	Errors []string `json:"errors,omitempty"`
 }
 
@@ -161,6 +158,7 @@ type NodeUncoreStatus struct {
 	Config string `json:"config"`
 
 	// Errors contains any errors encountered while configuring uncore frequency
+	// +optional
 	Errors []string `json:"errors,omitempty"`
 }
 

@@ -117,6 +117,11 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
+    - description: PowerNodeState is the Schema for the powernodestates API
+      displayName: Power Node State
+      kind: PowerNodeState
+      name: powernodestates.power.openshift.io
+      version: v1
     - description: PowerConfig is the Schema for the powerconfigs API
       displayName: Power Config
       kind: PowerConfig
