@@ -3,6 +3,7 @@
 # It should be run by config/default
 resources:
   - bases/power.openshift.io_powernodes.yaml
+  - bases/power.openshift.io_powernodestates.yaml
   - bases/power.openshift.io_powerprofiles.yaml
   - bases/power.openshift.io_powerworkloads.yaml
   - bases/power.openshift.io_powerconfigs.yaml
