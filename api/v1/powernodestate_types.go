@@ -30,6 +30,8 @@ type PowerNodeStateStatus struct {
 	// PowerProfiles contains the status of power profiles on this node
 	// Owned by: PowerProfile controller
 	// +optional
+	// +listType=map
+	// +listMapKey=name
 	PowerProfiles []PowerNodeProfileStatus `json:"powerProfiles,omitempty"`
 
 	// CPUPools contains the status of CPU pools on this node

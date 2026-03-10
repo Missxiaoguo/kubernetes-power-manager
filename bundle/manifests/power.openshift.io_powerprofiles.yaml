@@ -238,10 +238,6 @@ spec:
           status:
             description: PowerProfileStatus defines the observed state of PowerProfile
             properties:
-              errors:
-                items:
-                  type: string
-                type: array
               id:
                 description: The ID given to the power profile
                 type: integer

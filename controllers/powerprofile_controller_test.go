@@ -1679,6 +1679,7 @@ func TestPowerProfile_Reconcile_ClientErrs(t *testing.T) {
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(errors.NewNotFound(schema.GroupResource{}, "profile"))
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerWorkload")).Return(nil)
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.CStates")).Return(nil)
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNodeState")).Return(errors.NewNotFound(schema.GroupResource{}, "powernodestate"))
 				mkcl.On("Delete", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("client delete error"))
 				mkcl.On("Status").Return(mkwriter)
 				return mkcl
@@ -1710,8 +1711,10 @@ func TestPowerProfile_Reconcile_ClientErrs(t *testing.T) {
 					}
 				})
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerWorkload")).Return(errors.NewNotFound(schema.GroupResource{}, "profile"))
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNodeState")).Return(errors.NewNotFound(schema.GroupResource{}, "powernodestate"))
 				mkcl.On("Status").Return(mkwriter)
 				mkwriter.On("Update", mock.Anything, mock.Anything).Return(nil)
+				mkwriter.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 				mkcl.On("Create", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("client create error"))
 				return mkcl
 			},
@@ -1728,6 +1731,7 @@ func TestPowerProfile_Reconcile_ClientErrs(t *testing.T) {
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(errors.NewNotFound(schema.GroupResource{}, "profile"))
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerWorkload")).Return(nil)
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.CStates")).Return(nil)
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNodeState")).Return(errors.NewNotFound(schema.GroupResource{}, "powernodestate"))
 				mkcl.On("Delete", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("client delete error"))
 				// mock status call in defer function call
 				mkcl.On("Status").Return(mkwriter)

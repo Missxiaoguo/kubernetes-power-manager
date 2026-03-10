@@ -59,6 +59,8 @@ type PowerProfileReconciler struct {
 
 // +kubebuilder:rbac:groups=power.openshift.io,resources=powerprofiles,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=power.openshift.io,resources=powerprofiles/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powernodestates,verbs=get;list;watch
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powernodestates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=privileged,verbs=use
 
 // Reconcile method that implements the reconcile loop
@@ -67,17 +69,31 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 	logger.Info("Reconciling the power profile")
 
 	var err error
+	// Set to true if the PowerProfile matches this node.
+	var shouldUpdatePowerNodeState bool
+
 	if req.Namespace != PowerNamespace {
-		err := fmt.Errorf("incorrect namespace")
+		err = fmt.Errorf("incorrect namespace")
 		logger.Error(err, "resource is not in the power-manager namespace, ignoring")
-		return ctrl.Result{Requeue: false}, err
+		return ctrl.Result{}, err
 	}
 
 	// Node name is passed down via the downwards API and used to make sure the PowerProfile is for this node
 	nodeName := os.Getenv("NODE_NAME")
-
 	profile := &powerv1.PowerProfile{}
-	defer func() { _ = writeUpdatedStatusErrsIfRequired(c, r.Status(), profile, err) }()
+
+	// Defer the function to update the PowerNodeState with any errors.
+	defer func() {
+		// Only update PowerNodeState if the profile's nodeSelector matches this node.
+		if !shouldUpdatePowerNodeState {
+			return
+		}
+
+		// Write any errors (validation or infrastructure) to PowerNodeState.
+		if updateErr := updatePowerNodeStateWithProfileInfo(c, r.Client, nodeName, profile, err, &logger); updateErr != nil {
+			logger.Error(updateErr, "failed to update PowerNodeState with profile errors")
+		}
+	}()
 	err = r.Client.Get(context.TODO(), req.NamespacedName, profile)
 	logger.V(5).Info("retrieving the power profile instances")
 	if err != nil {
@@ -97,13 +113,21 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 				if pool == nil {
 					notFoundErr := fmt.Errorf("pool not found")
 					logger.Error(notFoundErr, fmt.Sprintf("attempted to remove the non existing pool %s", req.Name))
-					return ctrl.Result{Requeue: false}, notFoundErr
+					return ctrl.Result{}, notFoundErr
 				}
 				err = pool.Remove()
 				if err != nil {
 					logger.Error(err, "error deleting the power profile from the library")
 					return ctrl.Result{}, err
 				}
+
+				// Remove the profile from PowerNodeState.
+				err = removeProfileFromPowerNodeState(context.TODO(), r.Client, nodeName, req.Name, &logger)
+				if err != nil {
+					logger.Error(err, "error removing profile from PowerNodeState")
+					// Don't return error - pool was already removed.
+				}
+
 				return ctrl.Result{}, nil
 			}
 
@@ -132,6 +156,13 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 				return ctrl.Result{}, err
 			}
 
+			// Remove the profile from PowerNodeState.
+			err = removeProfileFromPowerNodeState(context.TODO(), r.Client, nodeName, req.NamespacedName.Name, &logger)
+			if err != nil {
+				logger.Error(err, "error removing profile from PowerNodeState")
+				// Don't return error - extended resources were already cleaned up.
+			}
+
 			return ctrl.Result{}, nil
 		}
 
@@ -155,8 +186,12 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 			return ctrl.Result{}, err
 		}
 
+		// Don't update PowerNodeState since this profile doesn't apply to this node.
 		return ctrl.Result{}, nil
 	}
+
+	// Profile matches this node - PowerNodeState should be updated.
+	shouldUpdatePowerNodeState = true
 
 	// Make sure the EPP value is one of the correct ones or empty in the case of a user-created profile.
 	logger.V(5).Info("confirming EPP value is one of the correct values")
@@ -192,7 +227,7 @@ func (r *PowerProfileReconciler) Reconcile(c context.Context, req ctrl.Request) 
 		profile.Spec.CStates.Names, profile.Spec.CStates.MaxLatencyUs)
 	if err != nil {
 		logger.Error(err, "could not create the power profile")
-		return ctrl.Result{Requeue: false}, err
+		return ctrl.Result{}, err
 	}
 	// An exclusive pool should be created for both shared and non-shared profiles.
 	profileFromLibrary := r.PowerLibrary.GetExclusivePool(profile.Spec.Name)
@@ -417,6 +452,13 @@ func (r *PowerProfileReconciler) cleanupProfileFromNode(profile *powerv1.PowerPr
 	if err != nil {
 		logger.Error(err, "error removing extended resources")
 		return err
+	}
+
+	// Remove the profile from PowerNodeState since it no longer applies to this node.
+	err = removeProfileFromPowerNodeState(context.TODO(), r.Client, nodeName, profile.Spec.Name, logger)
+	if err != nil {
+		logger.Error(err, "error removing profile from PowerNodeState")
+		// Don't return error - extended resources were already cleaned up
 	}
 
 	logger.V(5).Info("Successfully cleaned up PowerProfile extended resources from node", "profile", profile.Spec.Name, "nodeName", nodeName)

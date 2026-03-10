@@ -29,10 +29,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const queuetime = time.Second * 5
+const FieldOwnerPowerProfileController = "powerprofile-controller"
 
 // ValidEppValues defines the valid EPP (Energy Performance Preference) values
 var ValidEppValues = []string{"performance", "balance_performance", "balance_power", "power"}
@@ -147,10 +149,175 @@ func validateProfileAvailabilityOnNode(ctx context.Context, c client.Client, pro
 }
 
 // formatIntOrStringValue extracts the actual value from IntOrString as a string
-// Returns the integer value as string for Int type, or the string value for String type
+// Returns the integer value as string for Int type, or the string value for String type.
 func formatIntOrStringValue(value intstr.IntOrString) string {
 	if value.Type == intstr.Int {
 		return strconv.Itoa(int(value.IntVal))
 	}
 	return value.StrVal
+}
+
+// formatIntOrStringOrEmpty formats an IntOrString pointer, returning empty string if nil
+func formatIntOrStringOrEmpty(value *intstr.IntOrString) string {
+	if value == nil {
+		return ""
+	}
+	return formatIntOrStringValue(*value)
+}
+
+// getPowerNodeState retrieves a PowerNodeState for the given node with common validation and error handling.
+// Returns (powerNodeState, nil) if found.
+// Returns (nil, nil) if NotFound (caller should treat as no-op).
+// Returns (nil, error) for validation errors or other Get errors.
+func getPowerNodeState(ctx context.Context, c client.Client, nodeName string, logger *logr.Logger) (*powerv1.PowerNodeState, error) {
+	if nodeName == "" {
+		return nil, fmt.Errorf("nodeName cannot be empty")
+	}
+
+	powerNodeStateName := fmt.Sprintf("%s-power-state", nodeName)
+
+	powerNodeState := &powerv1.PowerNodeState{}
+	err := c.Get(ctx, client.ObjectKey{Name: powerNodeStateName, Namespace: PowerNamespace}, powerNodeState)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			logger.V(5).Info("PowerNodeState not found", "powerNodeState", powerNodeStateName)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get PowerNodeState: %w", err)
+	}
+
+	return powerNodeState, nil
+}
+
+// applyPowerNodeStateProfilesStatus applies the given PowerProfiles to the PowerNodeState status using Server-Side Apply.
+func applyPowerNodeStateProfilesStatus(ctx context.Context, c client.Client, powerNodeStateName string, profiles []powerv1.PowerNodeProfileStatus) error {
+	patchNodeState := &powerv1.PowerNodeState{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "power.openshift.io/v1",
+			Kind:       "PowerNodeState",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      powerNodeStateName,
+			Namespace: PowerNamespace,
+		},
+		Status: powerv1.PowerNodeStateStatus{
+			PowerProfiles: profiles,
+		},
+	}
+
+	return c.Status().Patch(ctx, patchNodeState, client.Apply, client.FieldOwner(FieldOwnerPowerProfileController), client.ForceOwnership)
+}
+
+// updatePowerNodeStateWithProfileInfo updates the PowerNodeState CR for a given node with the validation
+// results of a PowerProfile using Server-Side Apply (SSA). Uses retry.RetryOnConflict to handle concurrent updates safely.
+func updatePowerNodeStateWithProfileInfo(ctx context.Context, c client.Client, nodeName string, profile *powerv1.PowerProfile, profileErrors error, logger *logr.Logger) error {
+	if nodeName == "" {
+		return fmt.Errorf("nodeName cannot be empty")
+	}
+
+	// Serialize the PowerProfile spec to a readable config string (done once, outside retry loop).
+	cstatesString := prettifyCStatesMap(profile.Spec.CStates.Names)
+	if cstatesString == "" && profile.Spec.CStates.MaxLatencyUs != nil {
+		cstatesString = fmt.Sprintf("maxLatency: %d", *profile.Spec.CStates.MaxLatencyUs)
+	}
+	config := fmt.Sprintf(
+		"Min: %s, Max: %s, Governor: %s, EPP: %s, C-States: %s",
+		formatIntOrStringOrEmpty(profile.Spec.PStates.Min), formatIntOrStringOrEmpty(profile.Spec.PStates.Max),
+		profile.Spec.PStates.Governor, profile.Spec.PStates.Epp, cstatesString)
+
+	// Convert errors to string slice.
+	errList := util.UnpackErrsToStrings(profileErrors)
+
+	// Create the PowerNodeProfileStatus entry for this profile.
+	profileStatus := powerv1.PowerNodeProfileStatus{Name: profile.Spec.Name, Config: config, Errors: *errList}
+
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fresh read on each retry attempt.
+		powerNodeState, err := getPowerNodeState(ctx, c, nodeName, logger)
+		if err != nil {
+			return err
+		}
+		if powerNodeState == nil {
+			// PowerNodeState not found, nothing to update.
+			return nil
+		}
+
+		// Get the existing PowerProfiles list and update/append this profile.
+		existingProfiles := make([]powerv1.PowerNodeProfileStatus, len(powerNodeState.Status.PowerProfiles))
+		copy(existingProfiles, powerNodeState.Status.PowerProfiles)
+
+		found := false
+		for i, existing := range existingProfiles {
+			if existing.Name == profile.Spec.Name {
+				// Update existing entry (including errors).
+				existingProfiles[i] = profileStatus
+				found = true
+				break
+			}
+		}
+		if !found {
+			// Append new entry.
+			existingProfiles = append(existingProfiles, profileStatus)
+		}
+
+		// Apply the status using Server-Side Apply.
+		err = applyPowerNodeStateProfilesStatus(ctx, c, powerNodeState.Name, existingProfiles)
+		if err != nil {
+			return err
+		}
+
+		logger.Info("Updated PowerNodeState with profile validation results",
+			"powerNodeState", powerNodeState.Name,
+			"profile", profile.Spec.Name,
+			"errors", len(*errList))
+
+		return nil
+	})
+}
+
+// removeProfileFromPowerNodeState removes a PowerProfile entry from the PowerNodeState status.
+// Uses retry.RetryOnConflict to handle concurrent updates safely.
+func removeProfileFromPowerNodeState(ctx context.Context, c client.Client, nodeName string, profileName string, logger *logr.Logger) error {
+	if nodeName == "" {
+		return fmt.Errorf("nodeName cannot be empty")
+	}
+
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		// Fresh read on each retry attempt.
+		powerNodeState, err := getPowerNodeState(ctx, c, nodeName, logger)
+		if err != nil {
+			return err
+		}
+		if powerNodeState == nil {
+			// PowerNodeState not found, nothing to clean up.
+			return nil
+		}
+
+		// Filter out the profile to be removed.
+		updatedProfiles := make([]powerv1.PowerNodeProfileStatus, 0)
+		for _, existing := range powerNodeState.Status.PowerProfiles {
+			if existing.Name != profileName {
+				updatedProfiles = append(updatedProfiles, existing)
+			}
+		}
+
+		// If nothing changed, no need to update.
+		if len(updatedProfiles) == len(powerNodeState.Status.PowerProfiles) {
+			logger.V(5).Info("Profile not found in PowerNodeState, nothing to remove", "profile", profileName)
+			return nil
+		}
+
+		// Apply the status using Server-Side Apply.
+		err = applyPowerNodeStateProfilesStatus(ctx, c, powerNodeState.Name, updatedProfiles)
+		if err != nil {
+			return err
+		}
+
+		logger.Info("Removed profile from PowerNodeState",
+			"powerNodeState", powerNodeState.Name,
+			"profile", profileName)
+
+		return nil
+	})
 }
