@@ -140,17 +140,17 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 				// Delete all the PowerNodeStates CRs.
 				powerNodeStates := &powerv1.PowerNodeStateList{}
 				err = r.Client.List(c, powerNodeStates)
-				logger.V(5).Info("retrieving all power node states in the cluster")
+				logger.V(5).Info("retrieving all PowerNodeStates in the cluster")
 				if err != nil {
-					logger.Error(err, "error retrieving power node states")
+					logger.Error(err, "error retrieving PowerNodeStates")
 					return ctrl.Result{}, err
 				}
 
 				for _, nodeState := range powerNodeStates.Items {
-					logger.V(5).Info(fmt.Sprintf("deleting power node state %s", nodeState.Name))
+					logger.V(5).Info(fmt.Sprintf("deleting PowerNodeState %s", nodeState.Name))
 					err = r.Client.Delete(c, &nodeState)
 					if err != nil {
-						logger.Error(err, fmt.Sprintf("error deleting power node state '%s' from cluster", nodeState.Name))
+						logger.Error(err, fmt.Sprintf("error deleting PowerNodeState '%s' from cluster", nodeState.Name))
 						return ctrl.Result{}, err
 					}
 				}
@@ -231,9 +231,9 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 			Name:      node.Name,
 		}, powerNode)
 
-		logger.V(5).Info(fmt.Sprintf("creating the power node CRD %s", node.Name))
 		if err != nil {
 			if errors.IsNotFound(err) {
+				logger.V(5).Info(fmt.Sprintf("creating the power node CR %s", node.Name))
 				powerNode = &powerv1.PowerNode{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: PowerNamespace,
@@ -243,7 +243,7 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 
 				err = r.Client.Create(c, powerNode)
 				if err != nil {
-					logger.Error(err, "error creating the power node CRD")
+					logger.Error(err, "error creating the power node CR")
 					return ctrl.Result{}, err
 				}
 			} else {
@@ -267,9 +267,9 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 			Name:      powerNodeStateName,
 		}, powerNodeState)
 
-		logger.V(5).Info(fmt.Sprintf("creating the power node state CR %s", powerNodeStateName))
 		if err != nil {
 			if errors.IsNotFound(err) {
+				logger.V(5).Info(fmt.Sprintf("creating the PowerNodeState CR %s", powerNodeStateName))
 				powerNodeState = &powerv1.PowerNodeState{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: PowerNamespace,
@@ -279,7 +279,7 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 
 				err = r.Client.Create(c, powerNodeState)
 				if err != nil {
-					logger.Error(err, "error creating the power node state CR")
+					logger.Error(err, "error creating the PowerNodeState CR")
 					return ctrl.Result{}, err
 				}
 			} else {
