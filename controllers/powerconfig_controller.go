@@ -55,6 +55,8 @@ type PowerConfigReconciler struct {
 
 // +kubebuilder:rbac:groups=power.openshift.io,resources=powerconfigs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=power.openshift.io,resources=powerconfigs/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powernodestates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=power.openshift.io,resources=powernodestates/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=privileged,verbs=use
 
 func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -64,7 +66,7 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 	if req.Namespace != PowerNamespace {
 		err := fmt.Errorf("incorrect namespace")
 		logger.Error(err, "resource is not in the power-manager namespace, ignoring")
-		return ctrl.Result{Requeue: false}, err
+		return ctrl.Result{}, err
 	}
 
 	configs := &powerv1.PowerConfigList{}
@@ -131,6 +133,24 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 					err = r.Client.Delete(c, &node)
 					if err != nil {
 						logger.Error(err, fmt.Sprintf("error deleting power node '%s' from cluster", node.Name))
+						return ctrl.Result{}, err
+					}
+				}
+
+				// Delete all the PowerNodeStates CRs.
+				powerNodeStates := &powerv1.PowerNodeStateList{}
+				err = r.Client.List(c, powerNodeStates)
+				logger.V(5).Info("retrieving all PowerNodeStates in the cluster")
+				if err != nil {
+					logger.Error(err, "error retrieving PowerNodeStates")
+					return ctrl.Result{}, err
+				}
+
+				for _, nodeState := range powerNodeStates.Items {
+					logger.V(5).Info(fmt.Sprintf("deleting PowerNodeState %s", nodeState.Name))
+					err = r.Client.Delete(c, &nodeState)
+					if err != nil {
+						logger.Error(err, fmt.Sprintf("error deleting PowerNodeState '%s' from cluster", nodeState.Name))
 						return ctrl.Result{}, err
 					}
 				}
@@ -211,9 +231,9 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 			Name:      node.Name,
 		}, powerNode)
 
-		logger.V(5).Info(fmt.Sprintf("creating the power node CRD %s", node.Name))
 		if err != nil {
 			if errors.IsNotFound(err) {
+				logger.V(5).Info(fmt.Sprintf("creating the power node CR %s", node.Name))
 				powerNode = &powerv1.PowerNode{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: PowerNamespace,
@@ -223,7 +243,7 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 
 				err = r.Client.Create(c, powerNode)
 				if err != nil {
-					logger.Error(err, "error creating the power node CRD")
+					logger.Error(err, "error creating the power node CR")
 					return ctrl.Result{}, err
 				}
 			} else {
@@ -237,6 +257,34 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 		if err != nil {
 			logger.Error(err, "failed to update power node with custom devices.")
 			return ctrl.Result{}, err
+		}
+
+		// Create PowerNodeState for this node if it doesn't exist
+		powerNodeState := &powerv1.PowerNodeState{}
+		powerNodeStateName := fmt.Sprintf("%s-power-state", node.Name)
+		err = r.Client.Get(c, client.ObjectKey{
+			Namespace: PowerNamespace,
+			Name:      powerNodeStateName,
+		}, powerNodeState)
+
+		if err != nil {
+			if errors.IsNotFound(err) {
+				logger.V(5).Info(fmt.Sprintf("creating the PowerNodeState CR %s", powerNodeStateName))
+				powerNodeState = &powerv1.PowerNodeState{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: PowerNamespace,
+						Name:      powerNodeStateName,
+					},
+				}
+
+				err = r.Client.Create(c, powerNodeState)
+				if err != nil {
+					logger.Error(err, "error creating the PowerNodeState CR")
+					return ctrl.Result{}, err
+				}
+			} else {
+				return ctrl.Result{}, err
+			}
 		}
 	}
 

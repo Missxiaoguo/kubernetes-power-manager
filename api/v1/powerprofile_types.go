@@ -155,8 +155,7 @@ type CpuScalingPolicy struct {
 // PowerProfileStatus defines the observed state of PowerProfile
 type PowerProfileStatus struct {
 	// The ID given to the power profile
-	ID           int `json:"id,omitempty"`
-	StatusErrors `json:",inline,omitempty"`
+	ID int `json:"id,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -178,13 +177,6 @@ type PowerProfileList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PowerProfile `json:"items"`
-}
-
-func (prfl *PowerProfile) SetStatusErrors(errs *[]string) {
-	prfl.Status.Errors = *errs
-}
-func (prfl *PowerProfile) GetStatusErrors() *[]string {
-	return &prfl.Status.Errors
 }
 
 func init() {

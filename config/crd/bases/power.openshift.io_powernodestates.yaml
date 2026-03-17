@@ -223,6 +223,9 @@ spec:
                   - name
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               uncore:
                 description: |-
                   Uncore contains the status of uncore frequency configuration on this node

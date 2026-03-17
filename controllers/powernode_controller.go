@@ -105,8 +105,9 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 		if cstatesString == "" && cstatesLatency != nil {
 			cstatesString = fmt.Sprintf("maxLatency: %d", *cstatesLatency)
 		}
+		maxFreq, minFreq := pstates.GetMaxFreq(), pstates.GetMinFreq()
 		profileString := fmt.Sprintf("%s: %s || %s || %s || %s || %s",
-			profileFromLibrary.Name(), formatIntOrStringValue(pstates.GetMaxFreq()), formatIntOrStringValue(pstates.GetMinFreq()), pstates.GetEpp(), pstates.GetGovernor(), cstatesString)
+			profileFromLibrary.Name(), formatIntOrString(&maxFreq), formatIntOrString(&minFreq), pstates.GetEpp(), pstates.GetGovernor(), cstatesString)
 		powerProfileStrings = append(powerProfileStrings, profileString)
 	}
 
@@ -169,8 +170,9 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 	if len(sharedCores) > 0 && sharedProfile != nil {
 		cores := prettifyCoreList(sharedCores)
 		pstates := sharedProfile.GetPStates()
+		maxFreq, minFreq := pstates.GetMaxFreq(), pstates.GetMinFreq()
 		powerNode.Status.SharedPool = fmt.Sprintf("%s || %v || %v || %s",
-			sharedProfile.Name(), formatIntOrStringValue(pstates.GetMaxFreq()), formatIntOrStringValue(pstates.GetMinFreq()), cores)
+			sharedProfile.Name(), formatIntOrString(&maxFreq), formatIntOrString(&minFreq), cores)
 	} else {
 		powerNode.Status.SharedPool = ""
 	}
@@ -181,8 +183,9 @@ func (r *PowerNodeReconciler) Reconcile(c context.Context, req ctrl.Request) (ct
 		if strings.Contains(pool.Name(), nodeName+"-reserved-") {
 			cores := prettifyCoreList(pool.Cpus().IDs())
 			pstates := pool.GetPowerProfile().GetPStates()
+			maxFreq, minFreq := pstates.GetMaxFreq(), pstates.GetMinFreq()
 			powerNode.Status.ReservedPools = append(powerNode.Status.ReservedPools,
-				fmt.Sprintf("%s || %s || %s", formatIntOrStringValue(pstates.GetMaxFreq()), formatIntOrStringValue(pstates.GetMinFreq()), cores))
+				fmt.Sprintf("%s || %s || %s", formatIntOrString(&maxFreq), formatIntOrString(&minFreq), cores))
 		}
 	}
 	logger.V(5).Info("configurating the cores to the reserved pool")

@@ -19,6 +19,8 @@ rules:
   - powerworkloads/status
   - powernodes
   - powernodes/status
+  - powernodestates
+  - powernodestates/status
   - uncores
   - uncores/status
   verbs:

@@ -34,6 +34,16 @@ import (
 
 const queuetime = time.Second * 5
 
+// FieldOwnerPowerProfileController is the base field manager name for PowerProfile controller.
+const FieldOwnerPowerProfileController = "powerprofile-controller"
+
+// powerProfileFieldManager returns the field manager name for a specific PowerProfile.
+// Using per-profile field managers enables SSA to track ownership at the element level
+// for the map-type PowerProfiles list (with listMapKey=name).
+func powerProfileFieldManager(profileName string) string {
+	return fmt.Sprintf("%s.%s", FieldOwnerPowerProfileController, profileName)
+}
+
 // ValidEppValues defines the valid EPP (Energy Performance Preference) values
 var ValidEppValues = []string{"performance", "balance_performance", "balance_power", "power"}
 
@@ -146,11 +156,125 @@ func validateProfileAvailabilityOnNode(ctx context.Context, c client.Client, pro
 	return match, nil
 }
 
-// formatIntOrStringValue extracts the actual value from IntOrString as a string
-// Returns the integer value as string for Int type, or the string value for String type
-func formatIntOrStringValue(value intstr.IntOrString) string {
+// formatIntOrString formats an IntOrString pointer as a string.
+// Returns empty string if nil, the integer value as string for Int type,
+// or the string value for String type.
+func formatIntOrString(value *intstr.IntOrString) string {
+	if value == nil {
+		return ""
+	}
 	if value.Type == intstr.Int {
 		return strconv.Itoa(int(value.IntVal))
 	}
 	return value.StrVal
+}
+
+// applyPowerNodeStateProfilesStatus applies the given PowerProfiles to the PowerNodeState status using Server-Side Apply.
+// The fieldManager parameter enables per-profile ownership - each profile should use a unique field manager
+// (e.g., "powerprofile-controller.profile-name") so that SSA can track ownership at the element level
+// for the map-type PowerProfiles list.
+func applyPowerNodeStateProfilesStatus(ctx context.Context, c client.Client, powerNodeStateName string, profiles []powerv1.PowerNodeProfileStatus, fieldManager string) error {
+	patchNodeState := &powerv1.PowerNodeState{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "power.openshift.io/v1",
+			Kind:       "PowerNodeState",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      powerNodeStateName,
+			Namespace: PowerNamespace,
+		},
+		Status: powerv1.PowerNodeStateStatus{
+			PowerProfiles: profiles,
+		},
+	}
+
+	return c.Status().Patch(ctx, patchNodeState, client.Apply, client.FieldOwner(fieldManager), client.ForceOwnership)
+}
+
+// updatePowerNodeStateWithProfileInfo updates the PowerNodeState CR for a given node with the validation
+// results of a PowerProfile using Server-Side Apply (SSA).
+//
+// This function uses per-profile field managers (e.g., "powerprofile-controller.profile-name") to enable
+// concurrent updates from different profile controllers. Since PowerProfiles is a map-type list keyed by
+// name, SSA merges entries by key - each controller only owns its own profile entry.
+func updatePowerNodeStateWithProfileInfo(ctx context.Context, c client.Client, nodeName string, profile *powerv1.PowerProfile, profileErrors error, logger *logr.Logger) error {
+	if nodeName == "" {
+		return fmt.Errorf("nodeName cannot be empty")
+	}
+
+	powerNodeStateName := fmt.Sprintf("%s-power-state", nodeName)
+
+	// Serialize the PowerProfile spec to a readable config string.
+	cstatesString := prettifyCStatesMap(profile.Spec.CStates.Names)
+	if cstatesString == "" && profile.Spec.CStates.MaxLatencyUs != nil {
+		cstatesString = fmt.Sprintf("maxLatency: %d", *profile.Spec.CStates.MaxLatencyUs)
+	}
+	config := fmt.Sprintf(
+		"Min: %s, Max: %s, Governor: %s, EPP: %s, C-States: %s",
+		formatIntOrString(profile.Spec.PStates.Min), formatIntOrString(profile.Spec.PStates.Max),
+		profile.Spec.PStates.Governor, profile.Spec.PStates.Epp, cstatesString)
+
+	// Convert errors to string slice.
+	errList := util.UnpackErrsToStrings(profileErrors)
+
+	// Create the PowerNodeProfileStatus entry for this profile.
+	profileStatus := powerv1.PowerNodeProfileStatus{Name: profile.Spec.Name, Config: config, Errors: *errList}
+
+	// Use per-profile field manager for proper SSA ownership.
+	// With listType=map and listMapKey=name on PowerProfiles, each field manager owns only
+	// the entries it applies, allowing concurrent updates without conflicts.
+	fieldManager := powerProfileFieldManager(profile.Spec.Name)
+
+	// Apply only this profile entry - SSA merges it into the existing list by name.
+	// No need to read existing profiles first.
+	err := applyPowerNodeStateProfilesStatus(ctx, c, powerNodeStateName, []powerv1.PowerNodeProfileStatus{profileStatus}, fieldManager)
+	if err != nil {
+		// If PowerNodeState doesn't exist yet, that's okay - it will be created by PowerConfig controller
+		if errors.IsNotFound(err) {
+			logger.V(5).Info("PowerNodeState not found, skipping profile status update", "powerNodeState", powerNodeStateName)
+			return nil
+		}
+		return err
+	}
+
+	logger.Info("Updated PowerNodeState with profile validation results",
+		"powerNodeState", powerNodeStateName,
+		"profile", profile.Spec.Name,
+		"errors", len(*errList))
+
+	return nil
+}
+
+// removeProfileFromPowerNodeState removes a PowerProfile entry from the PowerNodeState status.
+//
+// This function uses per-profile field managers to release ownership of the profile entry.
+// By applying an empty list with the profile's field manager, SSA removes that entry while
+// preserving entries owned by other field managers.
+func removeProfileFromPowerNodeState(ctx context.Context, c client.Client, nodeName string, profileName string, logger *logr.Logger) error {
+	if nodeName == "" {
+		return fmt.Errorf("nodeName cannot be empty")
+	}
+
+	powerNodeStateName := fmt.Sprintf("%s-power-state", nodeName)
+
+	// Use the same per-profile field manager as updatePowerNodeStateWithProfileInfo.
+	// Applying an empty list releases ownership, causing SSA to remove the entry.
+	fieldManager := powerProfileFieldManager(profileName)
+
+	// Apply empty list to release ownership of this profile entry.
+	err := applyPowerNodeStateProfilesStatus(ctx, c, powerNodeStateName, []powerv1.PowerNodeProfileStatus{}, fieldManager)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// PowerNodeState doesn't exist, nothing to clean up.
+			logger.V(5).Info("PowerNodeState not found, nothing to remove", "powerNodeState", powerNodeStateName)
+			return nil
+		}
+		return err
+	}
+
+	logger.Info("Removed profile from PowerNodeState",
+		"powerNodeState", powerNodeStateName,
+		"profile", profileName)
+
+	return nil
 }

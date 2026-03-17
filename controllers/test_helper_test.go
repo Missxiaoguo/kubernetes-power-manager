@@ -692,6 +692,13 @@ func (m *mockResourceWriter) Update(ctx context.Context, obj client.Object, opts
 	return m.Called(ctx, obj).Error(0)
 }
 
+func (m *mockResourceWriter) Patch(ctx context.Context, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
+	if len(opts) != 0 {
+		return m.Called(ctx, obj, patch, opts).Error(0)
+	}
+	return m.Called(ctx, obj, patch).Error(0)
+}
+
 type mgrMock struct {
 	mock.Mock
 	manager.Manager

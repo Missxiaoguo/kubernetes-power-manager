@@ -890,10 +890,11 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyValidationErrors(t *testing.T) {
 
 func TestPowerProfile_Reconcile_IncorrectEppValue(t *testing.T) {
 	tcases := []struct {
-		testCase    string
-		nodeName    string
-		profileName string
-		clientObjs  []runtime.Object
+		testCase      string
+		nodeName      string
+		profileName   string
+		clientObjs    []runtime.Object
+		expectedError string
 	}{
 		{
 			testCase:    "Test Case 1 - Epp value incorrect",
@@ -915,54 +916,49 @@ func TestPowerProfile_Reconcile_IncorrectEppValue(t *testing.T) {
 					},
 				},
 			},
+			expectedError: "EPP value not allowed",
 		},
 	}
 	for _, tc := range tcases {
-		t.Setenv("NODE_NAME", tc.nodeName)
+		t.Run(tc.testCase, func(t *testing.T) {
+			t.Setenv("NODE_NAME", tc.nodeName)
 
-		r, err := createProfileReconcilerObject(tc.clientObjs)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error creating the reconciler object", tc.testCase)
-		}
+			r, err := createProfileReconcilerObject(tc.clientObjs)
+			if err != nil {
+				t.Fatalf("error creating the reconciler object: %v", err)
+			}
 
-		nodemk := new(hostMock)
-		// Mock GetAllCpus to return an empty CpuList
-		nodemk.On("GetAllCpus").Return(new(power.CpuList))
-		r.PowerLibrary = nodemk
+			nodemk := new(hostMock)
+			// Mock GetAllCpus to return an empty CpuList
+			nodemk.On("GetAllCpus").Return(new(power.CpuList))
+			r.PowerLibrary = nodemk
 
-		req := reconcile.Request{
-			NamespacedName: client.ObjectKey{
+			req := reconcile.Request{
+				NamespacedName: client.ObjectKey{
+					Name:      tc.profileName,
+					Namespace: PowerNamespace,
+				},
+			}
+
+			// Reconcile should return an error for invalid EPP values
+			_, err = r.Reconcile(context.TODO(), req)
+			assert.Error(t, err, "expected an error for invalid EPP value")
+			assert.ErrorContains(t, err, tc.expectedError)
+
+			// Profile should still exist (controller doesn't delete it, just returns error)
+			profile := &powerv1.PowerProfile{}
+			err = r.Client.Get(context.TODO(), client.ObjectKey{
 				Name:      tc.profileName,
 				Namespace: PowerNamespace,
-			},
-		}
+			}, profile)
+			assert.NoError(t, err, "profile should still exist after invalid EPP error")
 
-		_, err = r.Reconcile(context.TODO(), req)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error reconciling object", tc.testCase)
-		}
-
-		profile := &powerv1.PowerProfile{}
-		err = r.Client.Get(context.TODO(), client.ObjectKey{
-			Name:      tc.profileName,
-			Namespace: PowerNamespace,
-		}, profile)
-		if err == nil {
-			t.Errorf("%s failed: expected the power profile %s to not exist", tc.testCase, tc.profileName)
-		}
-
-		workloads := &powerv1.PowerWorkloadList{}
-		err = r.Client.List(context.TODO(), workloads)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving the power workload objects", tc.testCase)
-		}
-
-		if len(workloads.Items) > 0 {
-			t.Errorf("%s - failed: expected the number of power workload objects to be zero", tc.testCase)
-		}
+			// No workloads should be created for invalid profile
+			workloads := &powerv1.PowerWorkloadList{}
+			err = r.Client.List(context.TODO(), workloads)
+			assert.NoError(t, err, "error retrieving workloads")
+			assert.Empty(t, workloads.Items, "expected no power workload objects to be created")
+		})
 	}
 }
 
@@ -1056,7 +1052,7 @@ func TestPowerProfile_Reconcile_DeleteProfile(t *testing.T) {
 					},
 					Status: corev1.NodeStatus{
 						Capacity: map[corev1.ResourceName]resource.Quantity{
-							CPUResource:                   *resource.NewQuantity(42, resource.DecimalSI),
+							CPUResource:                      *resource.NewQuantity(42, resource.DecimalSI),
 							"power.openshift.io/performance": *resource.NewQuantity(42, resource.DecimalSI),
 						},
 					},
@@ -1660,6 +1656,7 @@ func TestPowerProfile_Reconcile_ClientErrs(t *testing.T) {
 			convertClient: func(c client.Client) client.Client {
 				mkwriter := new(mockResourceWriter)
 				mkwriter.On("Update", mock.Anything, mock.Anything).Return(nil)
+				mkwriter.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 				mkcl := new(errClient)
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("client get error"))
 				// mock status call in defer function call
@@ -1675,10 +1672,12 @@ func TestPowerProfile_Reconcile_ClientErrs(t *testing.T) {
 			convertClient: func(c client.Client) client.Client {
 				mkwriter := new(mockResourceWriter)
 				mkwriter.On("Update", mock.Anything, mock.Anything).Return(nil)
+				mkwriter.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 				mkcl := new(errClient)
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(errors.NewNotFound(schema.GroupResource{}, "profile"))
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerWorkload")).Return(nil)
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.CStates")).Return(nil)
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNodeState")).Return(errors.NewNotFound(schema.GroupResource{}, "powernodestate"))
 				mkcl.On("Delete", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("client delete error"))
 				mkcl.On("Status").Return(mkwriter)
 				return mkcl
@@ -1710,8 +1709,10 @@ func TestPowerProfile_Reconcile_ClientErrs(t *testing.T) {
 					}
 				})
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerWorkload")).Return(errors.NewNotFound(schema.GroupResource{}, "profile"))
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNodeState")).Return(errors.NewNotFound(schema.GroupResource{}, "powernodestate"))
 				mkcl.On("Status").Return(mkwriter)
 				mkwriter.On("Update", mock.Anything, mock.Anything).Return(nil)
+				mkwriter.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 				mkcl.On("Create", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("client create error"))
 				return mkcl
 			},
@@ -1724,10 +1725,12 @@ func TestPowerProfile_Reconcile_ClientErrs(t *testing.T) {
 			convertClient: func(c client.Client) client.Client {
 				mkwriter := new(mockResourceWriter)
 				mkwriter.On("Update", mock.Anything, mock.Anything).Return(nil)
+				mkwriter.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 				mkcl := new(errClient)
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(errors.NewNotFound(schema.GroupResource{}, "profile"))
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerWorkload")).Return(nil)
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.CStates")).Return(nil)
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNodeState")).Return(errors.NewNotFound(schema.GroupResource{}, "powernodestate"))
 				mkcl.On("Delete", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("client delete error"))
 				// mock status call in defer function call
 				mkcl.On("Status").Return(mkwriter)
