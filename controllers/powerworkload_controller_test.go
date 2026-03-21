@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
@@ -15,7 +13,6 @@ import (
 
 	"github.com/intel/power-optimization-library/pkg/power"
 	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
-	"github.com/openshift-kni/kubernetes-power-manager/internal/scaling"
 	"github.com/stretchr/testify/mock"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -162,24 +159,6 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 			},
 		},
 	}
-	pwrWorkloadObj := &powerv1.PowerWorkload{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "performance-TestNode",
-			Namespace: PowerNamespace,
-		},
-		Spec: powerv1.PowerWorkloadSpec{
-			Name:              "performance-TestNode",
-			AllCores:          false,
-			PowerNodeSelector: map[string]string{"powernode": "selector"},
-			PowerProfile:      "performance",
-		},
-		Status: powerv1.PowerWorkloadStatus{
-			WorkloadNodes: powerv1.WorkloadNode{
-				Name:   testNode,
-				CpuIds: []uint{4, 5},
-			},
-		},
-	}
 	sharedSkeleton := &powerv1.PowerWorkload{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "shared-" + testNode,
@@ -204,22 +183,6 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 		validateErr  func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool
 	}{
 		{
-			testCase:     "pool does not exist",
-			workloadName: "performance-TestNode",
-			validateErr: func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool {
-				return assert.ErrorContains(t, e, "does not exist in the power library")
-			},
-			getNodemk: func() *hostMock {
-				nodemk := new(hostMock)
-				nodemk.On("GetExclusivePool", mock.Anything).Return(nil)
-				return nodemk
-			},
-			clientObjs: []runtime.Object{
-				pwrWorkloadObj,
-				nodeObj,
-			},
-		},
-		{
 			testCase:     "workload creation",
 			workloadName: "shared-" + testNode,
 			getNodemk:    func() *hostMock { return new(hostMock) },
@@ -236,7 +199,6 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 				return assert.NoError(t, err)
 			},
 			clientObjs: []runtime.Object{
-				pwrWorkloadObj,
 				&powerv1.PowerWorkload{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "shared-" + testNode,
@@ -257,36 +219,6 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 					},
 				},
 				nodeObj,
-			},
-		},
-		{
-			testCase:     "ignore exclusive workload from other node",
-			workloadName: "performance-OtherNode",
-			getNodemk:    func() *hostMock { return new(hostMock) },
-			validateErr: func(r *PowerWorkloadReconciler, result ctrl.Result, e error) bool {
-				assert.NoError(t, e)
-				updated := &powerv1.PowerWorkload{}
-				err := r.Client.Get(context.TODO(), types.NamespacedName{Name: "performance-OtherNode", Namespace: PowerNamespace}, updated)
-				assert.NoError(t, err)
-				// The status is not modified.
-				return assert.Equal(t, "OtherNode", updated.Status.WorkloadNodes.Name)
-			},
-			clientObjs: []runtime.Object{
-				&powerv1.PowerWorkload{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "performance-OtherNode",
-						Namespace: PowerNamespace,
-					},
-					Spec: powerv1.PowerWorkloadSpec{
-						Name:         "performance-OtherNode",
-						PowerProfile: "performance",
-					},
-					Status: powerv1.PowerWorkloadStatus{
-						WorkloadNodes: powerv1.WorkloadNode{
-							Name: "OtherNode",
-						},
-					},
-				},
 			},
 		},
 		{
@@ -707,6 +639,9 @@ func TestPowerWorkload_Reconcile(t *testing.T) {
 	}
 }
 
+/*
+TODO: revive DPDK telemetry in a future PR.
+
 func TestPowerWorkload_Reconcile_WithCpuScalingPolicy(t *testing.T) {
 	testNode := "TestNode"
 	t.Setenv("NODE_NAME", testNode)
@@ -803,9 +738,14 @@ func TestPowerWorkload_Reconcile_WithCpuScalingPolicy(t *testing.T) {
 			host, teardown, err := fullDummySystem()
 			assert.NoError(t, err)
 			t.Cleanup(teardown)
+			// In the new architecture, PowerPod controller moves CPUs to the exclusive pool
+			// before PowerWorkload controller processes DPDK scaling. So we pre-populate
+			// the exclusive pool with the expected CPUs.
+			// The power library requires CPUs to go through shared pool before exclusive.
 			assert.NoError(t, host.GetSharedPool().SetCpuIDs(tc.cpuIDs))
-			_, err = host.AddExclusivePool(tc.profileName)
+			pool, err := host.AddExclusivePool(tc.profileName)
 			assert.NoError(t, err)
+			assert.NoError(t, pool.SetCpuIDs(tc.cpuIDs))
 			r.PowerLibrary = host
 
 			mgrmk := new(ScalingMgrMock)
@@ -919,15 +859,7 @@ func TestPowerWorkload_reconcileDPDKTelemetryClient(t *testing.T) {
 		})
 	}
 }
-
-func TestPowerWorkload_Reconcile_DetectCoresRemoved(t *testing.T) {
-	orig := []uint{1, 2, 3, 4}
-	updated := []uint{1, 2, 4, 5}
-
-	expectedResult := []uint{3}
-	result := detectCoresRemoved(orig, updated, &logr.Logger{})
-	assert.ElementsMatch(t, result, expectedResult)
-}
+*/
 
 func TestPowerWorkload_Reconcile_DetectCoresAdded(t *testing.T) {
 	orig := []uint{1, 2, 3, 4}

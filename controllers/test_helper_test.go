@@ -108,6 +108,22 @@ type poolMock struct {
 	power.Pool
 }
 
+// createMockPoolWithCPUs creates a poolMock that returns the given CPU IDs
+// and sets up MoveCpuIDs to succeed by default
+func createMockPoolWithCPUs(cpuIDs []uint) *poolMock {
+	pm := new(poolMock)
+	// Create a CpuList with mock Cpus that return the given IDs
+	cpuList := make(power.CpuList, len(cpuIDs))
+	for i, id := range cpuIDs {
+		cpu := new(coreMock)
+		cpu.On("GetID").Return(id)
+		cpuList[i] = cpu
+	}
+	pm.On("Cpus").Return(&cpuList)
+	pm.On("MoveCpuIDs", mock.Anything).Return(nil)
+	return pm
+}
+
 func (m *poolMock) SetCStates(states power.CStates) error {
 	return m.Called(states).Error(0)
 }

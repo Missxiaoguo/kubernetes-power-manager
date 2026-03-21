@@ -135,6 +135,16 @@ func TestPowerConfig_Reconcile_Creation(t *testing.T) {
 		if err != nil {
 			t.Errorf("%s failed: expected power node object '%s' to have been created", tc.testCase, tc.nodeName)
 		}
+
+		powerNodeState := &powerv1.PowerNodeState{}
+		powerNodeStateName := fmt.Sprintf("%s-power-state", tc.nodeName)
+		err = r.Client.Get(context.TODO(), client.ObjectKey{
+			Name:      powerNodeStateName,
+			Namespace: PowerNamespace,
+		}, powerNodeState)
+		if err != nil {
+			t.Errorf("%s failed: expected PowerNodeState '%s' to have been created", tc.testCase, powerNodeStateName)
+		}
 	}
 }
 
@@ -547,6 +557,12 @@ func TestPowerConfig_Reconcile_Deletion(t *testing.T) {
 					},
 					Spec: powerv1.PowerNodeSpec{},
 				},
+				&powerv1.PowerNodeState{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "TestNode-power-state",
+						Namespace: PowerNamespace,
+					},
+				},
 				&appsv1.DaemonSet{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      NodeAgentDSName,
@@ -611,6 +627,17 @@ func TestPowerConfig_Reconcile_Deletion(t *testing.T) {
 
 		if len(powerNodes.Items) != tc.expectedNumberOfObjects {
 			t.Errorf("%s failed: expected number of power node objects is %v, got %v", tc.testCase, tc.expectedNumberOfObjects, len(powerNodes.Items))
+		}
+
+		powerNodeStates := &powerv1.PowerNodeStateList{}
+		err = r.Client.List(context.TODO(), powerNodeStates)
+		if err != nil {
+			t.Error(err)
+			t.Fatalf("%s - error retrieving PowerNodeState objects", tc.testCase)
+		}
+
+		if len(powerNodeStates.Items) != tc.expectedNumberOfObjects {
+			t.Errorf("%s failed: expected number of PowerNodeState objects is %v, got %v", tc.testCase, tc.expectedNumberOfObjects, len(powerNodeStates.Items))
 		}
 
 		ds := &appsv1.DaemonSet{}
