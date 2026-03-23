@@ -91,7 +91,6 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// Write any errors (validation or infrastructure) to PowerNodeState.
 		// If the status update fails and the main reconcile succeeded, requeue after a short delay to retry.
 		// We use RequeueAfter instead of returning an error because the profile reconcile itself succeeded.
-		// an error because the profile reconcile itself succeeded.
 		if updateErr := updatePowerNodeStateWithProfileInfo(ctx, r.Client, nodeName, profile, err, &logger); updateErr != nil {
 			logger.Error(updateErr, "failed to update PowerNodeState with profile errors")
 			if retErr == nil {
