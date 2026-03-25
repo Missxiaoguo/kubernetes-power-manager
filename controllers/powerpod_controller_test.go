@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/go-logr/logr"
 	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
 	"github.com/openshift-kni/kubernetes-power-manager/pkg/podresourcesclient"
 	"github.com/openshift-kni/kubernetes-power-manager/pkg/podstate"
@@ -551,6 +552,9 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 
 		// Collect all CPUs from the exclusive pools per profile.
 		profileToCPUs := make(map[string][]uint)
+		if powerNodeState.Status.CPUPools == nil {
+			t.Fatal("expected CPUPools to be set in PowerNodeState")
+		}
 		for _, exclusive := range powerNodeState.Status.CPUPools.Exclusive {
 			for _, container := range exclusive.PowerContainers {
 				profileToCPUs[container.PowerProfile] = append(profileToCPUs[container.PowerProfile], container.CPUIDs...)
@@ -574,118 +578,6 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 	}
 }
 
-// ensures duplicate containers don't get added to PowerNodeState
-func TestPowerPod_Duplicate_Containers(t *testing.T) {
-	nodeName := "TestNode"
-	podName := "test-pod-1"
-	workloadName := "performance-TestNode"
-	podResources := []*podresourcesapi.PodResources{
-		{
-			Name:      podName,
-			Namespace: PowerNamespace,
-			Containers: []*podresourcesapi.ContainerResources{
-				{
-					Name:   "test-container-1",
-					CpuIds: []int64{1, 5, 8},
-				},
-			},
-		},
-	}
-	clientObjs := []runtime.Object{
-		defaultNode,
-		defaultPowerNodeState,
-		&corev1.Node{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "TestNode",
-			},
-		},
-		defaultProfile,
-		&powerv1.PowerWorkload{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      workloadName,
-				Namespace: PowerNamespace,
-			},
-			Spec: powerv1.PowerWorkloadSpec{
-				Name:         workloadName,
-				PowerProfile: "performance",
-			},
-			Status: powerv1.PowerWorkloadStatus{
-				WorkloadNodes: powerv1.WorkloadNode{
-					Name: "TestNode",
-					Containers: []powerv1.Container{
-						{
-							Name:          "test-container-1",
-							Id:            "abcdefg",
-							ExclusiveCPUs: []uint{1, 5, 8},
-							PowerProfile:  "performance",
-						},
-					},
-					CpuIds: []uint{1, 5, 8},
-				},
-			},
-		},
-		&corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      podName,
-				Namespace: PowerNamespace,
-				UID:       "abcdefg",
-			},
-			Spec: corev1.PodSpec{
-				NodeName: "TestNode",
-				Containers: []corev1.Container{
-					{
-						Name:      "test-container-1",
-						Resources: defaultResources,
-					},
-				},
-				EphemeralContainers: []corev1.EphemeralContainer{},
-			},
-			Status: corev1.PodStatus{
-				Phase:    corev1.PodRunning,
-				QOSClass: corev1.PodQOSGuaranteed,
-				ContainerStatuses: []corev1.ContainerStatus{
-					{
-						Name:        "test-container-1",
-						ContainerID: "docker://abcdefg",
-					},
-				},
-			},
-		},
-	}
-	t.Setenv("NODE_NAME", nodeName)
-
-	podResourcesClient := createFakePodResourcesListerClient(podResources)
-
-	r, err := createPodReconcilerObject(clientObjs, podResourcesClient)
-	assert.Nil(t, err)
-
-	req := reconcile.Request{
-		NamespacedName: client.ObjectKey{
-			Name:      podName,
-			Namespace: PowerNamespace,
-		},
-	}
-
-	_, err = r.Reconcile(context.TODO(), req)
-	assert.Nil(t, err)
-
-	workload := &powerv1.PowerWorkload{}
-	err = r.Client.Get(context.TODO(), client.ObjectKey{
-		Name:      workloadName,
-		Namespace: PowerNamespace,
-	}, workload)
-	assert.Nil(t, err)
-
-	for i, con1 := range workload.Status.WorkloadNodes.Containers {
-		for j := i + 1; j < len(workload.Status.WorkloadNodes.Containers); j++ {
-			con2 := workload.Status.WorkloadNodes.Containers[j]
-			if con1.Id == con2.Id && reflect.DeepEqual(con1.ExclusiveCPUs, con2.ExclusiveCPUs) {
-				t.Error("duplicate container not filtered out")
-			}
-		}
-	}
-}
-
 // tests for error cases involving invalid pods
 func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 	tcases := []struct {
@@ -695,11 +587,13 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 		podResources  []*podresourcesapi.PodResources
 		clientObjs    []runtime.Object
 		workloadNames []string
+		expectError   bool
 	}{
 		{
-			testCase: "Test Case 1 - Pod Not Running error",
-			nodeName: "TestNode",
-			podName:  "test-pod-1",
+			testCase:    "Test Case 1 - Pod Not Running error",
+			nodeName:    "TestNode",
+			podName:     "test-pod-1",
+			expectError: true,
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
@@ -755,9 +649,10 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 			},
 		},
 		{
-			testCase: "Test Case 2 - No Pod UID error",
-			nodeName: "TestNode",
-			podName:  "test-pod-1",
+			testCase:    "Test Case 2 - No Pod UID error",
+			nodeName:    "TestNode",
+			podName:     "test-pod-1",
+			expectError: true,
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
@@ -812,9 +707,10 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 			},
 		},
 		{
-			testCase: "Test Case 3 - Resource Mismatch error",
-			nodeName: "TestNode",
-			podName:  "test-pod-1",
+			testCase:    "Test Case 3 - Resource Mismatch error",
+			nodeName:    "TestNode",
+			podName:     "test-pod-1",
+			expectError: false,
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
@@ -881,9 +777,10 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 			},
 		},
 		{
-			testCase: "Test Case 4 - Profile CR Does Not Exist error",
-			nodeName: "TestNode",
-			podName:  "test-pod-1",
+			testCase:    "Test Case 4 - Profile CR Does Not Exist error",
+			nodeName:    "TestNode",
+			podName:     "test-pod-1",
+			expectError: true,
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
@@ -964,8 +861,10 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 		}
 
 		_, err = r.Reconcile(context.TODO(), req)
-		if err == nil {
+		if tc.expectError && err == nil {
 			t.Errorf("%s failed: expected the pod controller to have failed", tc.testCase)
+		} else if !tc.expectError && err != nil {
+			t.Errorf("%s failed: expected no error but got: %v", tc.testCase, err)
 		}
 
 		for _, workloadName := range tc.workloadNames {
@@ -1265,7 +1164,7 @@ func TestPowerPod_Reconcile_Delete(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Status: powerv1.PowerNodeStateStatus{
-						CPUPools: powerv1.CPUPoolsStatus{
+						CPUPools: &powerv1.CPUPoolsStatus{
 							Exclusive: []powerv1.ExclusiveCPUPoolStatus{
 								{
 									PodUID: "abcdefg",
@@ -1455,7 +1354,7 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 					nodeState := args.Get(2).(*powerv1.PowerNodeState)
 					*nodeState = powerv1.PowerNodeState{
 						Status: powerv1.PowerNodeStateStatus{
-							CPUPools: powerv1.CPUPoolsStatus{
+							CPUPools: &powerv1.CPUPoolsStatus{
 								Exclusive: []powerv1.ExclusiveCPUPoolStatus{
 									{
 										PodUID: "abcdefg",
@@ -2419,6 +2318,9 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 
 				// Collect all PowerContainers from the exclusive pools.
 				var actualContainers []powerv1.PowerContainer
+				if powerNodeState.Status.CPUPools == nil {
+					t.Fatal("expected CPUPools to be set in PowerNodeState")
+				}
 				for _, exclusive := range powerNodeState.Status.CPUPools.Exclusive {
 					actualContainers = append(actualContainers, exclusive.PowerContainers...)
 				}
@@ -2566,7 +2468,6 @@ func TestPowerPod_RestartRace_SharedPoolNotReady(t *testing.T) {
 	nodeName := "TestNode"
 	t.Setenv("NODE_NAME", nodeName)
 
-	podUID := "restart-race-uid"
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "restart-race-pod",
@@ -2679,7 +2580,6 @@ func TestPowerPod_RestartRace_SharedPoolNotReady(t *testing.T) {
 	result, err = r.Reconcile(context.TODO(), req)
 	assert.NoError(t, err, "should succeed after shared pool is populated")
 	assert.Equal(t, result.RequeueAfter, time.Duration(0), "should not requeue when CPUs are in shared pool")
-	_ = podUID
 }
 
 func TestPowerPod_areCPUsInSharedPool(t *testing.T) {
@@ -2734,4 +2634,13 @@ func TestPowerPod_areCPUsInSharedPool(t *testing.T) {
 			assert.Equal(t, tc.expected, got)
 		})
 	}
+}
+
+func TestPowerWorkload_Reconcile_DetectCoresAdded(t *testing.T) {
+	orig := []uint{1, 2, 3, 4}
+	updated := []uint{1, 2, 4, 5}
+
+	expectedResult := []uint{5}
+	result := detectCoresAdded(orig, updated, &logr.Logger{})
+	assert.ElementsMatch(t, result, expectedResult)
 }

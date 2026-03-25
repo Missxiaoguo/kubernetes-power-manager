@@ -79,15 +79,11 @@ func createPodReconcilerWithEnvTest(
 	}
 }
 
-func TestSSA_PodReconcile_SinglePod(t *testing.T) {
-	cl, cleanup := setupEnvTest(t)
-	defer cleanup()
+// createPodReconcilePrereqs creates the common prerequisite resources for pod reconciliation
+// envtests: Node, PowerNode, PowerNodeState, and the specified PowerProfiles.
+func createPodReconcilePrereqs(t *testing.T, cl client.Client, ctx context.Context, nodeName string, profileNames ...string) {
+	t.Helper()
 
-	nodeName := "test-node"
-	t.Setenv("NODE_NAME", nodeName)
-	ctx := context.TODO()
-
-	// Create prerequisite resources.
 	require.NoError(t, cl.Create(ctx, &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
 		Status: corev1.NodeStatus{
@@ -100,10 +96,23 @@ func TestSSA_PodReconcile_SinglePod(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: nodeName, Namespace: PowerNamespace},
 	}))
 	createTestPowerNodeState(t, cl, fmt.Sprintf("%s-power-state", nodeName))
-	require.NoError(t, cl.Create(ctx, &powerv1.PowerProfile{
-		ObjectMeta: metav1.ObjectMeta{Name: "performance", Namespace: PowerNamespace},
-		Spec:       powerv1.PowerProfileSpec{Name: "performance"},
-	}))
+	for _, name := range profileNames {
+		require.NoError(t, cl.Create(ctx, &powerv1.PowerProfile{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: PowerNamespace},
+			Spec:       powerv1.PowerProfileSpec{Name: name},
+		}))
+	}
+}
+
+func TestSSA_PodReconcile_SinglePod(t *testing.T) {
+	cl, cleanup := setupEnvTest(t)
+	defer cleanup()
+
+	nodeName := "test-node"
+	t.Setenv("NODE_NAME", nodeName)
+	ctx := context.TODO()
+
+	createPodReconcilePrereqs(t, cl, ctx, nodeName, "performance")
 
 	// Create a guaranteed pod requesting the performance PowerProfile.
 	pod := &corev1.Pod{
@@ -169,6 +178,7 @@ func TestSSA_PodReconcile_SinglePod(t *testing.T) {
 		Name: fmt.Sprintf("%s-power-state", nodeName), Namespace: PowerNamespace,
 	}, pns))
 
+	require.NotNil(t, pns.Status.CPUPools)
 	require.Len(t, pns.Status.CPUPools.Exclusive, 1)
 	assert.Equal(t, string(pod.UID), pns.Status.CPUPools.Exclusive[0].PodUID)
 	assert.Equal(t, "test-pod", pns.Status.CPUPools.Exclusive[0].Pod)
@@ -198,27 +208,7 @@ func TestSSA_PodReconcile_TwoPodsMerge(t *testing.T) {
 	t.Setenv("NODE_NAME", nodeName)
 	ctx := context.TODO()
 
-	// Create prerequisite resources.
-	require.NoError(t, cl.Create(ctx, &corev1.Node{
-		ObjectMeta: metav1.ObjectMeta{Name: nodeName},
-		Status: corev1.NodeStatus{
-			Capacity: corev1.ResourceList{
-				corev1.ResourceCPU: *resource.NewQuantity(16, resource.DecimalSI),
-			},
-		},
-	}))
-	require.NoError(t, cl.Create(ctx, &powerv1.PowerNode{
-		ObjectMeta: metav1.ObjectMeta{Name: nodeName, Namespace: PowerNamespace},
-	}))
-	createTestPowerNodeState(t, cl, fmt.Sprintf("%s-power-state", nodeName))
-	require.NoError(t, cl.Create(ctx, &powerv1.PowerProfile{
-		ObjectMeta: metav1.ObjectMeta{Name: "performance", Namespace: PowerNamespace},
-		Spec:       powerv1.PowerProfileSpec{Name: "performance"},
-	}))
-	require.NoError(t, cl.Create(ctx, &powerv1.PowerProfile{
-		ObjectMeta: metav1.ObjectMeta{Name: "balance-performance", Namespace: PowerNamespace},
-		Spec:       powerv1.PowerProfileSpec{Name: "balance-performance"},
-	}))
+	createPodReconcilePrereqs(t, cl, ctx, nodeName, "performance", "balance-performance")
 
 	// --- Create pod-1 with two containers requesting different profiles. ---
 	pod1Obj := &corev1.Pod{
@@ -344,6 +334,7 @@ func TestSSA_PodReconcile_TwoPodsMerge(t *testing.T) {
 		Name: fmt.Sprintf("%s-power-state", nodeName), Namespace: PowerNamespace,
 	}, pns))
 
+	require.NotNil(t, pns.Status.CPUPools)
 	require.Len(t, pns.Status.CPUPools.Exclusive, 2, "both pods should be present via correct SSA merge")
 
 	// Collect entries by podUID for stable assertions.
@@ -381,6 +372,89 @@ func TestSSA_PodReconcile_TwoPodsMerge(t *testing.T) {
 	assert.True(t, managers[fmt.Sprintf("powerpod-controller.%s", uid2)], "expected field manager for pod-2")
 }
 
+// TestSSA_PodReconcile_NoDuplicateContainers verifies that reconciling the same pod
+// multiple times does not create duplicate container entries in PowerNodeState.
+func TestSSA_PodReconcile_NoDuplicateContainers(t *testing.T) {
+	cl, cleanup := setupEnvTest(t)
+	defer cleanup()
+
+	nodeName := "test-node"
+	t.Setenv("NODE_NAME", nodeName)
+	ctx := context.TODO()
+
+	createPodReconcilePrereqs(t, cl, ctx, nodeName, "performance")
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-pod", Namespace: PowerNamespace,
+		},
+		Spec: corev1.PodSpec{
+			NodeName: nodeName,
+			Containers: []corev1.Container{{
+				Name:  "perf-container",
+				Image: "perf-pod",
+				Resources: corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{
+						corev1.ResourceCPU:    *resource.NewQuantity(3, resource.DecimalSI),
+						corev1.ResourceMemory: *resource.NewQuantity(128, resource.DecimalSI),
+						corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+					},
+					Limits: corev1.ResourceList{
+						corev1.ResourceCPU:    *resource.NewQuantity(3, resource.DecimalSI),
+						corev1.ResourceMemory: *resource.NewQuantity(128, resource.DecimalSI),
+						corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
+					},
+				},
+			}},
+		},
+	}
+	require.NoError(t, cl.Create(ctx, pod))
+	pod.Status = corev1.PodStatus{
+		Phase:    corev1.PodRunning,
+		QOSClass: corev1.PodQOSGuaranteed,
+		ContainerStatuses: []corev1.ContainerStatus{{
+			Name: "perf-container", ContainerID: "cri-o://container-abc",
+		}},
+	}
+	require.NoError(t, cl.Status().Update(ctx, pod))
+
+	r := createPodReconcilerWithEnvTest(t, cl,
+		[]*podresourcesapi.PodResources{{
+			Name: "test-pod", Namespace: PowerNamespace,
+			Containers: []*podresourcesapi.ContainerResources{{
+				Name: "perf-container", CpuIds: []int64{1, 5, 8},
+			}},
+		}},
+		[]uint{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
+	)
+
+	req := reconcile.Request{
+		NamespacedName: client.ObjectKey{Name: "test-pod", Namespace: PowerNamespace},
+	}
+
+	// Reconcile the same pod twice.
+	_, err := r.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	_, err = r.Reconcile(ctx, req)
+	require.NoError(t, err)
+
+	// Verify PowerNodeState has exactly one entry with one container — no duplicates.
+	pns := &powerv1.PowerNodeState{}
+	require.NoError(t, cl.Get(ctx, client.ObjectKey{
+		Name: fmt.Sprintf("%s-power-state", nodeName), Namespace: PowerNamespace,
+	}, pns))
+
+	require.NotNil(t, pns.Status.CPUPools)
+	require.Len(t, pns.Status.CPUPools.Exclusive, 1, "should have exactly one pod entry")
+	assert.Equal(t, string(pod.UID), pns.Status.CPUPools.Exclusive[0].PodUID)
+	require.Len(t, pns.Status.CPUPools.Exclusive[0].PowerContainers, 1, "should have exactly one container — no duplicates")
+	pc := pns.Status.CPUPools.Exclusive[0].PowerContainers[0]
+	assert.Equal(t, "perf-container", pc.Name)
+	assert.Equal(t, "performance", pc.PowerProfile)
+	assert.ElementsMatch(t, []uint{1, 5, 8}, pc.CPUIDs)
+}
+
 func TestSSA_ExclusivePoolFieldManagerOwnership(t *testing.T) {
 	cl, cleanup := setupEnvTest(t)
 	defer cleanup()
@@ -395,14 +469,14 @@ func TestSSA_ExclusivePoolFieldManagerOwnership(t *testing.T) {
 	logger := ctrl.Log.WithName("testing")
 
 	// Add pod 1.
-	err := r.updatePowerNodeStateExclusiveStatus(nodeName, "uid-1", "pod-1",
+	err := r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, "uid-1", "pod-1",
 		[]powerv1.PowerContainer{
 			{Name: "c1", ID: "cid-1", PowerProfile: "performance", CPUIDs: []uint{1, 2}},
 		}, &logger)
 	require.NoError(t, err)
 
 	// Add pod 2.
-	err = r.updatePowerNodeStateExclusiveStatus(nodeName, "uid-2", "pod-2",
+	err = r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, "uid-2", "pod-2",
 		[]powerv1.PowerContainer{
 			{Name: "c2", ID: "cid-2", PowerProfile: "balance-power", CPUIDs: []uint{3, 4}},
 		}, &logger)
@@ -413,6 +487,7 @@ func TestSSA_ExclusivePoolFieldManagerOwnership(t *testing.T) {
 	err = cl.Get(ctx, client.ObjectKey{Name: pnsName, Namespace: PowerNamespace}, pns)
 	require.NoError(t, err)
 
+	require.NotNil(t, pns.Status.CPUPools)
 	assert.Len(t, pns.Status.CPUPools.Exclusive, 2, "both pod entries should be present")
 }
 
@@ -429,20 +504,20 @@ func TestSSA_ExclusivePoolPodRemovalPreservesOtherPods(t *testing.T) {
 	logger := ctrl.Log.WithName("testing")
 
 	// Add two pods.
-	err := r.updatePowerNodeStateExclusiveStatus(nodeName, "uid-1", "pod-1",
+	err := r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, "uid-1", "pod-1",
 		[]powerv1.PowerContainer{
 			{Name: "c1", ID: "cid-1", PowerProfile: "performance", CPUIDs: []uint{1, 2}},
 		}, &logger)
 	require.NoError(t, err)
 
-	err = r.updatePowerNodeStateExclusiveStatus(nodeName, "uid-2", "pod-2",
+	err = r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, "uid-2", "pod-2",
 		[]powerv1.PowerContainer{
 			{Name: "c2", ID: "cid-2", PowerProfile: "performance", CPUIDs: []uint{3, 4}},
 		}, &logger)
 	require.NoError(t, err)
 
 	// Remove pod 1 by applying empty containers.
-	err = r.updatePowerNodeStateExclusiveStatus(nodeName, "uid-1", "pod-1",
+	err = r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, "uid-1", "pod-1",
 		[]powerv1.PowerContainer{}, &logger)
 	require.NoError(t, err)
 
@@ -451,6 +526,7 @@ func TestSSA_ExclusivePoolPodRemovalPreservesOtherPods(t *testing.T) {
 	err = cl.Get(ctx, client.ObjectKey{Name: pnsName, Namespace: PowerNamespace}, pns)
 	require.NoError(t, err)
 
+	require.NotNil(t, pns.Status.CPUPools)
 	assert.Len(t, pns.Status.CPUPools.Exclusive, 1, "only pod-2 should remain")
 	assert.Equal(t, "uid-2", pns.Status.CPUPools.Exclusive[0].PodUID)
 }

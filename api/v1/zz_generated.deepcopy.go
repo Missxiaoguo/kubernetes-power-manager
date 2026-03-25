@@ -634,7 +634,11 @@ func (in *PowerNodeStateStatus) DeepCopyInto(out *PowerNodeStateStatus) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	in.CPUPools.DeepCopyInto(&out.CPUPools)
+	if in.CPUPools != nil {
+		in, out := &in.CPUPools, &out.CPUPools
+		*out = new(CPUPoolsStatus)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Uncore != nil {
 		in, out := &in.Uncore, &out.Uncore
 		*out = new(NodeUncoreStatus)

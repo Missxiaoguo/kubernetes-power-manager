@@ -341,28 +341,6 @@ func (r *PowerWorkloadReconciler) patchWorkloadStatusOwnerNode(ctx context.Conte
 	})
 }
 
-func detectCoresAdded(originalCoreList []uint, updatedCoreList []uint, logger *logr.Logger) []uint {
-	var coresAdded []uint
-	logger.V(5).Info("detecting if cores are added to the cores list")
-	for _, core := range updatedCoreList {
-		if !validateCoreIsInCoreList(core, originalCoreList) {
-			coresAdded = append(coresAdded, core)
-		}
-	}
-
-	return coresAdded
-}
-
-func validateCoreIsInCoreList(core uint, coreList []uint) bool {
-	for _, c := range coreList {
-		if c == core {
-			return true
-		}
-	}
-
-	return false
-}
-
 func createReservedPool(library power.Host, coreConfig powerv1.ReservedSpec, logger *logr.Logger) error {
 	pseudoReservedPool, err := library.AddExclusivePool(os.Getenv("NODE_NAME") + "-reserved-" + fmt.Sprintf("%v", coreConfig.Cores))
 	if err != nil {

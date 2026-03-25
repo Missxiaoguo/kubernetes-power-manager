@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -266,7 +267,7 @@ func (r *PowerNodeReconciler) itterPods(nodeName string, workload powerv1.PowerW
 	for _, container := range guaranteedPod.Containers {
 		if workload.Name == (container.PowerProfile + "-" + nodeName) {
 			for _, core := range container.ExclusiveCPUs {
-				if !validateCoreIsInCoreList(core, poolFromLibrary.Cpus().IDs()) {
+				if !slices.Contains(poolFromLibrary.Cpus().IDs(), core) {
 					if err := r.Client.Get(context.TODO(), types.NamespacedName{Namespace: guaranteedPod.Namespace, Name: guaranteedPod.Name}, pod); err != nil {
 						logger.Error(err, "could not retrieve the pod")
 						return err

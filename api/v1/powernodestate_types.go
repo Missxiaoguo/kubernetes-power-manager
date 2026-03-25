@@ -36,10 +36,8 @@ type PowerNodeStateStatus struct {
 
 	// CPUPools contains the status of CPU pools on this node
 	// Owned by: PowerNodeConfig controller (shared, reserved) and PowerPod controller (exclusive)
-	// Note: omitempty is intentionally not used here to ensure cpuPools is always serialized
-	// as an object (not null) when used with Server-Side Apply patches.
 	// +optional
-	CPUPools CPUPoolsStatus `json:"cpuPools"`
+	CPUPools *CPUPoolsStatus `json:"cpuPools,omitempty"`
 
 	// Uncore contains the status of uncore frequency configuration on this node
 	// Owned by: Uncore controller
@@ -61,9 +59,6 @@ type PowerNodeProfileStatus struct {
 }
 
 // CPUPoolsStatus contains the status of all CPU pools on this node
-// Note: omitempty is intentionally not used on Exclusive to ensure it is always serialized
-// as an array (not null/omitted) for SSA removal via empty list. Reserved uses omitempty
-// so that controllers which don't own it can avoid claiming SSA ownership of the atomic list.
 type CPUPoolsStatus struct {
 	// Shared contains the status of the shared CPU pool
 	// Owned by: PowerNodeConfig controller (shared, reserved)

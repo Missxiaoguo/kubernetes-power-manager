@@ -54,8 +54,6 @@ spec:
                 description: |-
                   CPUPools contains the status of CPU pools on this node
                   Owned by: PowerNodeConfig controller (shared, reserved) and PowerPod controller (exclusive)
-                  Note: omitempty is intentionally not used here to ensure cpuPools is always serialized
-                  as an object (not null) when used with Server-Side Apply patches.
                 properties:
                   exclusive:
                     description: |-

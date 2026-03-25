@@ -185,12 +185,6 @@ func applyPowerNodeStateProfilesStatus(ctx context.Context, c client.Client, pow
 		},
 		Status: powerv1.PowerNodeStateStatus{
 			PowerProfiles: profiles,
-			// CPUPools must be present (not null) to satisfy CRD validation.
-			// Only Exclusive is initialized (no omitempty); Reserved uses omitempty
-			// and is left nil so this controller doesn't claim SSA ownership of it.
-			CPUPools: powerv1.CPUPoolsStatus{
-				Exclusive: []powerv1.ExclusiveCPUPoolStatus{},
-			},
 		},
 	}
 

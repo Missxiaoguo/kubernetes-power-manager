@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zapcore"
 
@@ -860,15 +859,6 @@ func TestPowerWorkload_reconcileDPDKTelemetryClient(t *testing.T) {
 	}
 }
 */
-
-func TestPowerWorkload_Reconcile_DetectCoresAdded(t *testing.T) {
-	orig := []uint{1, 2, 3, 4}
-	updated := []uint{1, 2, 4, 5}
-
-	expectedResult := []uint{5}
-	result := detectCoresAdded(orig, updated, &logr.Logger{})
-	assert.ElementsMatch(t, result, expectedResult)
-}
 
 func TestPowerWorkload_Reconcile_WrongNamespace(t *testing.T) {
 	// ensure request for wrong namespace is ignored

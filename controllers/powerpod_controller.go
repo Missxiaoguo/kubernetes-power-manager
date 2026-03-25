@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -67,13 +68,13 @@ type PowerPodReconciler struct {
 // +kubebuilder:rbac:groups=power.openshift.io,resources=powernodes,verbs=get;list;watch
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=privileged,verbs=use
 
-func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *PowerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Log.WithValues("powerpod", req.NamespacedName)
 	logger.Info("Reconciling the pod")
 
 	pod := &corev1.Pod{}
 	logger.V(5).Info("retrieving pod instance")
-	err := r.Get(context.TODO(), req.NamespacedName, pod)
+	err := r.Get(ctx, req.NamespacedName, pod)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Delete the Pod from the internal state in case it was never deleted
@@ -100,7 +101,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 		currentNodeState := &powerv1.PowerNodeState{}
 
 		// Get the PowerNodeState to find this pod's CPU assignments and move them back to the shared pool.
-		err = r.Get(context.TODO(), client.ObjectKey{Namespace: PowerNamespace, Name: powerNodeStateName}, currentNodeState)
+		err = r.Get(ctx, client.ObjectKey{Namespace: PowerNamespace, Name: powerNodeStateName}, currentNodeState)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				logger.Info("WARNING: PowerNodeState not found during pod deletion, CPUs may remain in exclusive pool", "powerNodeState", powerNodeStateName)
@@ -108,7 +109,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 				logger.Error(err, "failed to get PowerNodeState")
 				return ctrl.Result{}, err
 			}
-		} else {
+		} else if currentNodeState.Status.CPUPools != nil {
 			// Move the pod's CPUs back to the shared pool.
 			for _, exclusive := range currentNodeState.Status.CPUPools.Exclusive {
 				if exclusive.PodUID == string(pod.GetUID()) {
@@ -125,7 +126,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 		}
 
 		// Remove the pod's entry from PowerNodeState via SSA (passing empty containers).
-		if err := r.updatePowerNodeStateExclusiveStatus(nodeName, string(pod.GetUID()), pod.Name, nil, &logger); err != nil {
+		if err := r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, string(pod.GetUID()), pod.Name, nil, &logger); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -144,7 +145,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 	// Get customDevices that need to be considered in the pod.
 	logger.V(5).Info("retrieving custom resources from power node")
 	powernode := &powerv1.PowerNode{}
-	err = r.Get(context.TODO(), client.ObjectKey{
+	err = r.Get(ctx, client.ObjectKey{
 		Namespace: PowerNamespace,
 		Name:      nodeName,
 	}, powernode)
@@ -171,7 +172,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 	}
 
 	// Get the power containers requested by containers in the pod.
-	powerContainers, recoveryErrs := r.getPowerProfileRequestsFromContainers(admissibleContainers, powernode.Status.CustomDevices, pod, &logger)
+	powerContainers, recoveryErrs := r.getPowerProfileRequestsFromContainers(ctx, admissibleContainers, powernode.Status.CustomDevices, pod, &logger)
 	logger.V(5).Info("retrieved power profiles and containers from pod requests")
 
 	// Reconcile CPU pools and track errors per container.
@@ -216,7 +217,7 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 	}
 
 	// Update PowerNodeState status with container info (errors are already on each PowerContainer).
-	if err := r.updatePowerNodeStateExclusiveStatus(nodeName, string(podUID), pod.Name, powerContainers, &logger); err != nil {
+	if err := r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, string(podUID), pod.Name, powerContainers, &logger); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -250,15 +251,25 @@ func (r *PowerPodReconciler) Reconcile(c context.Context, req ctrl.Request) (ctr
 	return ctrl.Result{}, nil
 }
 
-func (r *PowerPodReconciler) getPowerProfileRequestsFromContainers(containers []corev1.Container, customDevices []string, pod *corev1.Pod, logger *logr.Logger) ([]powerv1.PowerContainer, []error) {
+func (r *PowerPodReconciler) getPowerProfileRequestsFromContainers(ctx context.Context, containers []corev1.Container, customDevices []string, pod *corev1.Pod, logger *logr.Logger) ([]powerv1.PowerContainer, []error) {
 	logger.V(5).Info("get the power profiles from the containers")
 	var recoverableErrs []error
 	powerContainers := make([]powerv1.PowerContainer, 0)
 	for _, container := range containers {
 		logger.V(5).Info("retrieving the requested power profile from the container spec")
+		containerID := strings.TrimPrefix(getContainerID(pod, container.Name), "docker://")
+
 		profileName, requestNum, err := getContainerProfileFromRequests(container, customDevices, logger)
 		if err != nil {
-			recoverableErrs = append(recoverableErrs, err)
+			// Pod spec validation errors are not recoverable (pod spec is immutable).
+			// Store the error in PowerNodeState for visibility but don't trigger requeue.
+			logger.Error(err, "pod spec validation error", "container", container.Name)
+			powerContainers = append(powerContainers, powerv1.PowerContainer{
+				Name:   container.Name,
+				ID:     containerID,
+				CPUIDs: []uint{},
+				Errors: []string{err.Error()},
+			})
 			continue
 		}
 
@@ -267,7 +278,7 @@ func (r *PowerPodReconciler) getPowerProfileRequestsFromContainers(containers []
 			logger.V(5).Info("no profile was requested by the container")
 			continue
 		}
-		profileAvailable, err := validateProfileAvailabilityOnNode(context.TODO(), r.Client, profileName, pod.Spec.NodeName, r.PowerLibrary, logger)
+		profileAvailable, err := validateProfileAvailabilityOnNode(ctx, r.Client, profileName, pod.Spec.NodeName, r.PowerLibrary, logger)
 		if err != nil {
 			logger.Error(err, "error checking if power profile is available on node")
 			continue
@@ -278,17 +289,15 @@ func (r *PowerPodReconciler) getPowerProfileRequestsFromContainers(containers []
 
 			// Add the container with its error so it appears in PowerNodeState.
 			// CPU pool reconciliation will be skipped for containers with errors.
-			containerID := getContainerID(pod, container.Name)
 			powerContainers = append(powerContainers, powerv1.PowerContainer{
 				Name:         container.Name,
-				ID:           strings.TrimPrefix(containerID, "docker://"),
+				ID:           containerID,
 				PowerProfile: profileName,
 				CPUIDs:       []uint{},
 				Errors:       []string{errMsg},
 			})
 			continue
 		}
-		containerID := getContainerID(pod, container.Name)
 		coreIDs, err := r.PodResourcesClient.GetContainerCPUs(pod.GetName(), container.Name)
 		if err != nil {
 			logger.V(5).Info("error getting CoreIDs.", "ContainerID", containerID)
@@ -306,7 +315,7 @@ func (r *PowerPodReconciler) getPowerProfileRequestsFromContainers(containers []
 		logger.V(5).Info("creating the power container.", "ContainerID", containerID, "Cores", cleanCoreList, "Profile", profileName)
 		powerContainers = append(powerContainers, powerv1.PowerContainer{
 			Name:         container.Name,
-			ID:           strings.TrimPrefix(containerID, "docker://"),
+			ID:           containerID,
 			CPUIDs:       cleanCoreList,
 			PowerProfile: profileName,
 		})
@@ -389,6 +398,18 @@ func getAdmissibleContainers(pod *corev1.Pod, customDevices []string, resourceCl
 	}
 	logger.V(5).Info("containers requesting exclusive resources are: ", "Containers", admissibleContainers)
 	return admissibleContainers
+}
+
+func detectCoresAdded(originalCoreList []uint, updatedCoreList []uint, logger *logr.Logger) []uint {
+	var coresAdded []uint
+	logger.V(5).Info("detecting if cores are added to the cores list")
+	for _, core := range updatedCoreList {
+		if !slices.Contains(originalCoreList, core) {
+			coresAdded = append(coresAdded, core)
+		}
+	}
+
+	return coresAdded
 }
 
 func doesContainerRequireExclusiveCPUs(pod *corev1.Pod, container *corev1.Container, logger *logr.Logger) bool {
@@ -488,6 +509,7 @@ func PowerReleventPodPredicate(obj client.Object) bool {
 // information for this pod's containers, including any errors encountered.
 // When powerContainers is empty, it removes the pod's entry from PowerNodeState via SSA.
 func (r *PowerPodReconciler) updatePowerNodeStateExclusiveStatus(
+	ctx context.Context,
 	nodeName string,
 	podUID string,
 	podName string,
@@ -522,18 +544,23 @@ func (r *PowerPodReconciler) updatePowerNodeStateExclusiveStatus(
 			Namespace: PowerNamespace,
 		},
 		Status: powerv1.PowerNodeStateStatus{
-			CPUPools: powerv1.CPUPoolsStatus{
-				// Reserved is left nil (omitted via omitempty) so this controller
-				// doesn't claim SSA ownership of the atomic Reserved list.
+			CPUPools: &powerv1.CPUPoolsStatus{
 				Exclusive: exclusiveStatus,
 			},
 		},
 	}
 
 	logger.V(5).Info("updating PowerNodeState status with SSA", "fieldManager", fieldManager)
-	if err := r.Status().Patch(context.TODO(), patchNodeState, client.Apply, client.FieldOwner(fieldManager), client.ForceOwnership); err != nil {
+	if err := r.Status().Patch(ctx, patchNodeState, client.Apply, client.FieldOwner(fieldManager), client.ForceOwnership); err != nil {
 		if errors.IsNotFound(err) {
-			logger.V(5).Info("PowerNodeState not found, skipping exclusive pool status update", "powerNodeState", powerNodeStateName)
+			if len(powerContainers) > 0 {
+				// Creation path: CPUs were already moved to exclusive in POL but status wasn't recorded.
+				// Return error to requeue so we retry once PowerConfig re-creates the CR.
+				logger.Info("PowerNodeState not found, requeueing to record exclusive pool status", "powerNodeState", powerNodeStateName)
+				return err
+			}
+			// Deletion path: nothing to clean up from a non-existent CR.
+			logger.V(5).Info("PowerNodeState not found, skipping exclusive pool status cleanup", "powerNodeState", powerNodeStateName)
 			return nil
 		}
 		logger.Error(err, "failed to update PowerNodeState status")
@@ -546,18 +573,9 @@ func (r *PowerPodReconciler) updatePowerNodeStateExclusiveStatus(
 // areCPUsInSharedPool checks if all specified CPUs are currently in the shared pool.
 // Returns false if any CPU is still in the reserved pool (shared workload not yet processed).
 func (r *PowerPodReconciler) areCPUsInSharedPool(cpuIDs []uint) bool {
-	sharedPool := r.PowerLibrary.GetSharedPool()
-	sharedCPUIDs := sharedPool.Cpus().IDs()
-
+	sharedCPUIDs := r.PowerLibrary.GetSharedPool().Cpus().IDs()
 	for _, cpuID := range cpuIDs {
-		found := false
-		for _, sharedCPUID := range sharedCPUIDs {
-			if cpuID == sharedCPUID {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if !slices.Contains(sharedCPUIDs, cpuID) {
 			return false
 		}
 	}
