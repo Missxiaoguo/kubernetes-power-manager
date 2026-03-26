@@ -32,7 +32,7 @@ type PowerNodeStateStatus struct {
 	// +optional
 	// +listType=map
 	// +listMapKey=name
-	PowerProfiles []PowerNodeProfileStatus `json:"powerProfiles,omitempty"`
+	PowerProfiles []PowerNodeProfileStatus `json:"powerProfiles,omitzero"`
 
 	// CPUPools contains the status of CPU pools on this node
 	// Owned by: PowerNodeConfig controller (shared, reserved) and PowerPod controller (exclusive)
@@ -75,7 +75,7 @@ type CPUPoolsStatus struct {
 	// +optional
 	// +listType=map
 	// +listMapKey=podUID
-	Exclusive []ExclusiveCPUPoolStatus `json:"exclusive"`
+	Exclusive []ExclusiveCPUPoolStatus `json:"exclusive,omitzero"`
 }
 
 // SharedCPUPoolStatus represents the status of the shared CPU pool

@@ -469,14 +469,14 @@ func TestSSA_ExclusivePoolFieldManagerOwnership(t *testing.T) {
 	logger := ctrl.Log.WithName("testing")
 
 	// Add pod 1.
-	err := r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, "uid-1", "pod-1",
+	err := r.addPowerNodeStatusExclusiveEntry(ctx, nodeName, "uid-1", "pod-1",
 		[]powerv1.PowerContainer{
 			{Name: "c1", ID: "cid-1", PowerProfile: "performance", CPUIDs: []uint{1, 2}},
 		}, &logger)
 	require.NoError(t, err)
 
 	// Add pod 2.
-	err = r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, "uid-2", "pod-2",
+	err = r.addPowerNodeStatusExclusiveEntry(ctx, nodeName, "uid-2", "pod-2",
 		[]powerv1.PowerContainer{
 			{Name: "c2", ID: "cid-2", PowerProfile: "balance-power", CPUIDs: []uint{3, 4}},
 		}, &logger)
@@ -504,21 +504,20 @@ func TestSSA_ExclusivePoolPodRemovalPreservesOtherPods(t *testing.T) {
 	logger := ctrl.Log.WithName("testing")
 
 	// Add two pods.
-	err := r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, "uid-1", "pod-1",
+	err := r.addPowerNodeStatusExclusiveEntry(ctx, nodeName, "uid-1", "pod-1",
 		[]powerv1.PowerContainer{
 			{Name: "c1", ID: "cid-1", PowerProfile: "performance", CPUIDs: []uint{1, 2}},
 		}, &logger)
 	require.NoError(t, err)
 
-	err = r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, "uid-2", "pod-2",
+	err = r.addPowerNodeStatusExclusiveEntry(ctx, nodeName, "uid-2", "pod-2",
 		[]powerv1.PowerContainer{
 			{Name: "c2", ID: "cid-2", PowerProfile: "performance", CPUIDs: []uint{3, 4}},
 		}, &logger)
 	require.NoError(t, err)
 
-	// Remove pod 1 by applying empty containers.
-	err = r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, "uid-1", "pod-1",
-		[]powerv1.PowerContainer{}, &logger)
+	// Remove pod 1.
+	err = r.removePowerNodeStatusExclusiveEntry(ctx, nodeName, "uid-1", &logger)
 	require.NoError(t, err)
 
 	// Only pod 2 should remain.

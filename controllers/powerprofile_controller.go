@@ -91,7 +91,7 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// Write any errors (validation or infrastructure) to PowerNodeState.
 		// If the status update fails and the main reconcile succeeded, requeue after a short delay to retry.
 		// We use RequeueAfter instead of returning an error because the profile reconcile itself succeeded.
-		if updateErr := updatePowerNodeStateWithProfileInfo(ctx, r.Client, nodeName, profile, err, &logger); updateErr != nil {
+		if updateErr := addPowerNodeStatusProfileEntry(ctx, r.Client, nodeName, profile, err, &logger); updateErr != nil {
 			logger.Error(updateErr, "failed to update PowerNodeState with profile errors")
 			if retErr == nil {
 				result = ctrl.Result{RequeueAfter: queuetime}
@@ -126,7 +126,7 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				}
 
 				// Remove the profile from PowerNodeState.
-				err = removeProfileFromPowerNodeState(ctx, r.Client, nodeName, req.Name, &logger)
+				err = removePowerNodeStatusProfileEntry(ctx, r.Client, nodeName, req.Name, &logger)
 				if err != nil {
 					logger.Error(err, "error removing profile from PowerNodeState")
 					// Pool was already removed, but requeue to retry the status cleanup.
@@ -144,7 +144,7 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			}
 
 			// Remove the profile from PowerNodeState.
-			err = removeProfileFromPowerNodeState(ctx, r.Client, nodeName, req.NamespacedName.Name, &logger)
+			err = removePowerNodeStatusProfileEntry(ctx, r.Client, nodeName, req.NamespacedName.Name, &logger)
 			if err != nil {
 				logger.Error(err, "error removing profile from PowerNodeState")
 				// Extended resources were already cleaned up, but requeue to retry the status cleanup.
@@ -402,7 +402,7 @@ func (r *PowerProfileReconciler) cleanupProfileFromNode(ctx context.Context, pro
 	}
 
 	// Remove the profile from PowerNodeState since it no longer applies to this node.
-	err = removeProfileFromPowerNodeState(ctx, r.Client, nodeName, profile.Spec.Name, logger)
+	err = removePowerNodeStatusProfileEntry(ctx, r.Client, nodeName, profile.Spec.Name, logger)
 	if err != nil {
 		logger.Error(err, "error removing profile from PowerNodeState")
 		// Return the error so the caller can requeue to retry status cleanup.

@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -77,91 +78,7 @@ func Test_writeStatusErrors(t *testing.T) {
 
 }
 
-func Test_applyPowerNodeStateProfilesStatus(t *testing.T) {
-	ctx := context.Background()
-
-	tcases := []struct {
-		testCase            string
-		powerNodeStateName  string
-		profiles            []powerv1.PowerNodeProfileStatus
-		setupMockClient     func(*powerv1.PowerNodeState) client.Client
-		expectError         bool
-		verifyPatchedObject func(*testing.T, *powerv1.PowerNodeState)
-	}{
-		{
-			testCase:           "Successfully apply profiles status",
-			powerNodeStateName: "test-node-power-state",
-			profiles: []powerv1.PowerNodeProfileStatus{
-				{Name: "profile-1", Config: "config-1", Errors: []string{}},
-			},
-			expectError: false,
-			setupMockClient: func(capturedPatch *powerv1.PowerNodeState) client.Client {
-				clientMockObj := mock.Mock{}
-				clientFuncs := interceptor.Funcs{
-					SubResourcePatch: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-						if pns, ok := obj.(*powerv1.PowerNodeState); ok {
-							*capturedPatch = *pns
-						}
-						return clientMockObj.MethodCalled("SubResourcePatch", ctx, client, subResourceName, obj, patch, opts).Error(0)
-					},
-				}
-				mockClient := fakeClient.NewClientBuilder().WithInterceptorFuncs(clientFuncs).Build()
-				// Mock the SubResourcePatch method to return a nil, which means the profile status was applied successfully.
-				clientMockObj.On("SubResourcePatch", ctx, mock.Anything, "status", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-				return mockClient
-			},
-			verifyPatchedObject: func(t *testing.T, pns *powerv1.PowerNodeState) {
-				// Verify TypeMeta and ObjectMeta are set for SSA.
-				assert.Equal(t, "power.openshift.io/v1", pns.APIVersion)
-				assert.Equal(t, "PowerNodeState", pns.Kind)
-				assert.Equal(t, "test-node-power-state", pns.Name)
-				assert.Equal(t, PowerNamespace, pns.Namespace)
-
-				// Verify the profile status patch contains the expected profile.
-				assert.Len(t, pns.Status.PowerProfiles, 1)
-				assert.Equal(t, "profile-1", pns.Status.PowerProfiles[0].Name)
-			},
-		},
-		{
-			testCase:           "Error patching status",
-			powerNodeStateName: "test-node-power-state",
-			profiles:           []powerv1.PowerNodeProfileStatus{},
-			expectError:        true,
-			setupMockClient: func(capturedPatch *powerv1.PowerNodeState) client.Client {
-				clientMockObj := mock.Mock{}
-				patchErr := fmt.Errorf("patch error")
-				clientFuncs := interceptor.Funcs{
-					SubResourcePatch: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-						return clientMockObj.MethodCalled("SubResourcePatch", ctx, client, subResourceName, obj, patch, opts).Error(0)
-					},
-				}
-				mockClient := fakeClient.NewClientBuilder().WithInterceptorFuncs(clientFuncs).Build()
-				// Mock the SubResourcePatch method to return the patch error.
-				clientMockObj.On("SubResourcePatch", ctx, mock.Anything, "status", mock.Anything, mock.Anything, mock.Anything).Return(patchErr)
-				return mockClient
-			},
-		},
-	}
-
-	for _, tc := range tcases {
-		t.Run(tc.testCase, func(t *testing.T) {
-			capturedPatch := &powerv1.PowerNodeState{}
-			mockClient := tc.setupMockClient(capturedPatch)
-			err := applyPowerNodeStateProfilesStatus(ctx, mockClient, tc.powerNodeStateName, tc.profiles, "test-field-manager")
-
-			if tc.expectError {
-				assert.Error(t, err, tc.testCase)
-			} else {
-				assert.Nil(t, err, tc.testCase)
-				if tc.verifyPatchedObject != nil {
-					tc.verifyPatchedObject(t, capturedPatch)
-				}
-			}
-		})
-	}
-}
-
-func Test_updatePowerNodeStateWithProfileInfo(t *testing.T) {
+func Test_addPowerNodeStatusProfileEntry(t *testing.T) {
 	ctx := context.Background()
 	logger := logr.Discard()
 
@@ -280,9 +197,9 @@ func Test_updatePowerNodeStateWithProfileInfo(t *testing.T) {
 			},
 		},
 		{
-			testCase:    "PowerNodeState not found should return nil",
+			testCase:    "PowerNodeState not found should return error to requeue",
 			nodeName:    "test-node",
-			expectError: false,
+			expectError: true,
 			setupMockClient: func(capturedPatch *powerv1.PowerNodeState) client.Client {
 				clientMockObj := mock.Mock{}
 				clientFuncs := interceptor.Funcs{
@@ -321,7 +238,7 @@ func Test_updatePowerNodeStateWithProfileInfo(t *testing.T) {
 		t.Run(tc.testCase, func(t *testing.T) {
 			capturedPatch := &powerv1.PowerNodeState{}
 			mockClient := tc.setupMockClient(capturedPatch)
-			err := updatePowerNodeStateWithProfileInfo(ctx, mockClient, tc.nodeName, profile, tc.profileErr, &logger)
+			err := addPowerNodeStatusProfileEntry(ctx, mockClient, tc.nodeName, profile, tc.profileErr, &logger)
 
 			if tc.expectError {
 				assert.Error(t, err, tc.testCase)
@@ -339,110 +256,62 @@ func Test_updatePowerNodeStateWithProfileInfo(t *testing.T) {
 	}
 }
 
-func Test_removeProfileFromPowerNodeState(t *testing.T) {
+func Test_removePowerNodeStatusProfileEntry(t *testing.T) {
 	ctx := context.Background()
 	logger := logr.Discard()
+	scheme := runtime.NewScheme()
+	_ = powerv1.AddToScheme(scheme)
+	_ = v1.AddMetaToScheme(scheme)
 
 	tcases := []struct {
-		testCase                string
-		nodeName                string
-		profileName             string
-		setupMockClient         func(*powerv1.PowerNodeState) client.Client
-		expectError             bool
-		expectedErrMsg          string
-		verifyPatchedObject     func(*testing.T, *powerv1.PowerNodeState)
-		shouldVerifyPatchObject bool
+		testCase            string
+		nodeName            string
+		profileName         string
+		setupMockClient     func() client.Client
+		expectError         bool
+		expectedErrMsg      string
+		capturedObj         *client.Object
+		verifyPatchedObject func(*testing.T, client.Object)
 	}{
 		{
 			testCase:    "Empty nodeName should return error",
 			nodeName:    "",
 			profileName: "test-profile",
 			expectError: true,
-			setupMockClient: func(pns *powerv1.PowerNodeState) client.Client {
+			setupMockClient: func() client.Client {
 				return fakeClient.NewClientBuilder().Build()
 			},
 			expectedErrMsg: "nodeName cannot be empty",
-		},
-		{
-			testCase:                "Successfully apply empty profiles list for SSA removal",
-			nodeName:                "test-node",
-			profileName:             "test-profile",
-			expectError:             false,
-			shouldVerifyPatchObject: true,
-			setupMockClient: func(capturedPatch *powerv1.PowerNodeState) client.Client {
-				clientMockObj := mock.Mock{}
-				clientFuncs := interceptor.Funcs{
-					SubResourcePatch: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-						// Capture the patched object.
-						if pns, ok := obj.(*powerv1.PowerNodeState); ok {
-							*capturedPatch = *pns
-						}
-						return clientMockObj.MethodCalled("SubResourcePatch", ctx, client, subResourceName, obj, patch, opts).Error(0)
-					},
-				}
-				mockClient := fakeClient.NewClientBuilder().WithInterceptorFuncs(clientFuncs).Build()
-				// Mock the SubResourcePatch method to return a nil, which means the profile was removed successfully.
-				clientMockObj.On("SubResourcePatch", ctx, mock.Anything, "status", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-				return mockClient
-			},
-			verifyPatchedObject: func(t *testing.T, pns *powerv1.PowerNodeState) {
-				// Verify TypeMeta and ObjectMeta are set for SSA.
-				assert.Equal(t, "power.openshift.io/v1", pns.APIVersion, "APIVersion should be set for SSA")
-				assert.Equal(t, "PowerNodeState", pns.Kind, "Kind should be set for SSA")
-				assert.Equal(t, "test-node-power-state", pns.Name)
-				assert.Equal(t, PowerNamespace, pns.Namespace)
-
-				// Verify we're applying an empty profiles list.
-				// Note: The fake client doesn't fully implement SSA ownership semantics.
-				assert.Len(t, pns.Status.PowerProfiles, 0, "Should apply empty profiles list")
-			},
 		},
 		{
 			testCase:    "PowerNodeState not found should return nil",
 			nodeName:    "test-node",
 			profileName: "test-profile",
 			expectError: false,
-			setupMockClient: func(pns *powerv1.PowerNodeState) client.Client {
-				clientMockObj := mock.Mock{}
-				clientFuncs := interceptor.Funcs{
-					SubResourcePatch: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-						return clientMockObj.MethodCalled("SubResourcePatch", ctx, client, subResourceName, obj, patch, opts).Error(0)
-					},
-				}
-				mockClient := fakeClient.NewClientBuilder().WithInterceptorFuncs(clientFuncs).Build()
-				// Mock the SubResourcePatch method to return a NotFound error.
-				clientMockObj.
-					On("SubResourcePatch", ctx, mock.Anything, "status", mock.Anything, mock.Anything, mock.Anything).
-					Return(apierrors.NewNotFound(schema.GroupResource{Group: "power.openshift.io", Resource: "powernodestates"}, "test-node-power-state"))
-				return mockClient
+			setupMockClient: func() client.Client {
+				return fakeClient.NewClientBuilder().WithScheme(scheme).Build()
 			},
 		},
 		{
-			testCase:    "Error patching status should return error",
+			testCase:    "Field manager already removed should return nil",
 			nodeName:    "test-node",
 			profileName: "test-profile",
-			expectError: true,
-			setupMockClient: func(pns *powerv1.PowerNodeState) client.Client {
-				clientMockObj := mock.Mock{}
-				clientFuncs := interceptor.Funcs{
-					SubResourcePatch: func(ctx context.Context, client client.Client, subResourceName string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
-						return clientMockObj.MethodCalled("SubResourcePatch", ctx, client, subResourceName, obj, patch, opts).Error(0)
+			expectError: false,
+			setupMockClient: func() client.Client {
+				pns := &powerv1.PowerNodeState{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "test-node-power-state", Namespace: PowerNamespace,
 					},
 				}
-				mockClient := fakeClient.NewClientBuilder().WithInterceptorFuncs(clientFuncs).Build()
-				// Mock the SubResourcePatch method to return a patch error.
-				clientMockObj.On("SubResourcePatch", ctx, mock.Anything, "status", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("patch error"))
-				return mockClient
+				return fakeClient.NewClientBuilder().WithScheme(scheme).WithObjects(pns).Build()
 			},
-			expectedErrMsg: "patch error",
 		},
 	}
 
 	for _, tc := range tcases {
 		t.Run(tc.testCase, func(t *testing.T) {
-			capturedPatch := &powerv1.PowerNodeState{}
-			mockClient := tc.setupMockClient(capturedPatch)
-			err := removeProfileFromPowerNodeState(ctx, mockClient, tc.nodeName, tc.profileName, &logger)
+			mockClient := tc.setupMockClient()
+			err := removePowerNodeStatusProfileEntry(ctx, mockClient, tc.nodeName, tc.profileName, &logger)
 
 			if tc.expectError {
 				assert.Error(t, err, tc.testCase)
@@ -451,10 +320,6 @@ func Test_removeProfileFromPowerNodeState(t *testing.T) {
 				}
 			} else {
 				assert.Nil(t, err, tc.testCase)
-				// Verify the patched object if verification is expected
-				if tc.shouldVerifyPatchObject && tc.verifyPatchedObject != nil {
-					tc.verifyPatchedObject(t, capturedPatch)
-				}
 			}
 		})
 	}

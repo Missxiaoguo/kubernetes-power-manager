@@ -1353,6 +1353,11 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNodeState")).Return(nil).Run(func(args mock.Arguments) {
 					nodeState := args.Get(2).(*powerv1.PowerNodeState)
 					*nodeState = powerv1.PowerNodeState{
+						ObjectMeta: metav1.ObjectMeta{
+							ManagedFields: []metav1.ManagedFieldsEntry{
+								{Manager: "powerpod-controller.abcdefg", Operation: metav1.ManagedFieldsOperationApply},
+							},
+						},
 						Status: powerv1.PowerNodeStateStatus{
 							CPUPools: &powerv1.CPUPoolsStatus{
 								Exclusive: []powerv1.ExclusiveCPUPoolStatus{

@@ -125,8 +125,8 @@ func (r *PowerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			}
 		}
 
-		// Remove the pod's entry from PowerNodeState via SSA (passing empty containers).
-		if err := r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, string(pod.GetUID()), pod.Name, nil, &logger); err != nil {
+		// Remove the pod's entry from PowerNodeState via SSA.
+		if err := r.removePowerNodeStatusExclusiveEntry(ctx, nodeName, string(pod.GetUID()), &logger); err != nil {
 			return ctrl.Result{}, err
 		}
 
@@ -217,7 +217,7 @@ func (r *PowerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 
 	// Update PowerNodeState status with container info (errors are already on each PowerContainer).
-	if err := r.updatePowerNodeStateExclusiveStatus(ctx, nodeName, string(podUID), pod.Name, powerContainers, &logger); err != nil {
+	if err := r.addPowerNodeStatusExclusiveEntry(ctx, nodeName, string(podUID), pod.Name, powerContainers, &logger); err != nil {
 		return ctrl.Result{}, err
 	}
 
@@ -505,35 +505,11 @@ func PowerReleventPodPredicate(obj client.Object) bool {
 	return false
 }
 
-// updatePowerNodeStateExclusiveStatus updates the PowerNodeState status with exclusive CPU pool
-// information for this pod's containers, including any errors encountered.
-// When powerContainers is empty, it removes the pod's entry from PowerNodeState via SSA.
-func (r *PowerPodReconciler) updatePowerNodeStateExclusiveStatus(
-	ctx context.Context,
-	nodeName string,
-	podUID string,
-	podName string,
-	powerContainers []powerv1.PowerContainer,
-	logger *logr.Logger,
-) error {
-	powerNodeStateName := fmt.Sprintf("%s-power-state", nodeName)
-	fieldManager := fmt.Sprintf("powerpod-controller.%s", podUID)
-
-	var exclusiveStatus []powerv1.ExclusiveCPUPoolStatus
-
-	if len(powerContainers) > 0 {
-		exclusiveStatus = []powerv1.ExclusiveCPUPoolStatus{
-			{
-				PodUID:          podUID,
-				Pod:             podName,
-				PowerContainers: powerContainers,
-			},
-		}
-	} else {
-		// Empty list removes this pod's entry via SSA.
-		exclusiveStatus = []powerv1.ExclusiveCPUPoolStatus{}
-	}
-
+// applyPowerNodeStateExclusiveStatus applies the given exclusive CPU pool entries to the
+// PowerNodeState status using Server-Side Apply. The fieldManager parameter enables per-pod
+// ownership — each pod should use a unique field manager (e.g., "powerpod-controller.pod-uid")
+// so that SSA can track ownership at the element level for the map-type Exclusive list.
+func (r *PowerPodReconciler) applyPowerNodeStateExclusiveStatus(ctx context.Context, powerNodeStateName string, exclusive []powerv1.ExclusiveCPUPoolStatus, fieldManager string) error {
 	patchNodeState := &powerv1.PowerNodeState{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: "power.openshift.io/v1",
@@ -545,25 +521,70 @@ func (r *PowerPodReconciler) updatePowerNodeStateExclusiveStatus(
 		},
 		Status: powerv1.PowerNodeStateStatus{
 			CPUPools: &powerv1.CPUPoolsStatus{
-				Exclusive: exclusiveStatus,
+				Exclusive: exclusive,
 			},
 		},
 	}
 
+	return r.Status().Patch(ctx, patchNodeState, client.Apply, client.FieldOwner(fieldManager), client.ForceOwnership)
+}
+
+// addPowerNodeStatusExclusiveEntry updates the PowerNodeState status with exclusive CPU pool
+// information for this pod's containers, including any errors encountered.
+func (r *PowerPodReconciler) addPowerNodeStatusExclusiveEntry(
+	ctx context.Context,
+	nodeName string,
+	podUID string,
+	podName string,
+	powerContainers []powerv1.PowerContainer,
+	logger *logr.Logger,
+) error {
+	powerNodeStateName := fmt.Sprintf("%s-power-state", nodeName)
+	fieldManager := fmt.Sprintf("powerpod-controller.%s", podUID)
+
+	entry := []powerv1.ExclusiveCPUPoolStatus{
+		{
+			PodUID:          podUID,
+			Pod:             podName,
+			PowerContainers: powerContainers,
+		},
+	}
+
 	logger.V(5).Info("updating PowerNodeState status with SSA", "fieldManager", fieldManager)
-	if err := r.Status().Patch(ctx, patchNodeState, client.Apply, client.FieldOwner(fieldManager), client.ForceOwnership); err != nil {
+	if err := r.applyPowerNodeStateExclusiveStatus(ctx, powerNodeStateName, entry, fieldManager); err != nil {
 		if errors.IsNotFound(err) {
-			if len(powerContainers) > 0 {
-				// Creation path: CPUs were already moved to exclusive in POL but status wasn't recorded.
-				// Return error to requeue so we retry once PowerConfig re-creates the CR.
-				logger.Info("PowerNodeState not found, requeueing to record exclusive pool status", "powerNodeState", powerNodeStateName)
-				return err
-			}
-			// Deletion path: nothing to clean up from a non-existent CR.
+			// CPUs were already moved to exclusive in POL but status wasn't recorded.
+			// Return error to requeue so we retry once PowerConfig re-creates the CR.
+			logger.Info("PowerNodeState not found, requeueing to record exclusive pool status", "powerNodeState", powerNodeStateName)
+			return err
+		}
+		logger.Error(err, "failed to update PowerNodeState status")
+		return err
+	}
+
+	return nil
+}
+
+// removePowerNodeStatusExclusiveEntry removes a pod's exclusive entry from the PowerNodeState status.
+//
+// Applying an empty Exclusive list causes SSA to prune the entry this manager previously
+// owned, while preserving entries owned by other field managers.
+func (r *PowerPodReconciler) removePowerNodeStatusExclusiveEntry(
+	ctx context.Context,
+	nodeName string,
+	podUID string,
+	logger *logr.Logger,
+) error {
+	powerNodeStateName := fmt.Sprintf("%s-power-state", nodeName)
+	fieldManager := fmt.Sprintf("powerpod-controller.%s", podUID)
+
+	logger.V(5).Info("removing exclusive entry from PowerNodeState via SSA", "fieldManager", fieldManager)
+	if err := r.applyPowerNodeStateExclusiveStatus(ctx, powerNodeStateName, []powerv1.ExclusiveCPUPoolStatus{}, fieldManager); err != nil {
+		if errors.IsNotFound(err) {
 			logger.V(5).Info("PowerNodeState not found, skipping exclusive pool status cleanup", "powerNodeState", powerNodeStateName)
 			return nil
 		}
-		logger.Error(err, "failed to update PowerNodeState status")
+		logger.Error(err, "failed to remove exclusive entry from PowerNodeState status")
 		return err
 	}
 

@@ -17,43 +17,40 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// newTestPowerProfile creates a PowerProfile for use in envtest SSA tests.
+func newTestPowerProfile(name string) *powerv1.PowerProfile {
+	return &powerv1.PowerProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: PowerNamespace},
+		Spec:       powerv1.PowerProfileSpec{Name: name},
+	}
+}
 
 func TestSSA_ProfileFieldManagerOwnership(t *testing.T) {
 	cl, cleanup := setupEnvTest(t)
 	defer cleanup()
 
 	ctx := context.TODO()
-	pnsName := "test-node-power-state"
+	nodeName := "test-node"
+	pnsName := fmt.Sprintf("%s-power-state", nodeName)
 	createTestPowerNodeState(t, cl, pnsName)
+	logger := ctrl.Log.WithName("testing")
 
-	// Apply two profiles with different field managers.
-	profiles1 := []powerv1.PowerNodeProfileStatus{
-		{Name: "performance", Config: "Min: 3200, Max: 3600"},
-	}
-	profiles2 := []powerv1.PowerNodeProfileStatus{
-		{Name: "balance-power", Config: "Min: 800, Max: 2000"},
-	}
-
-	fm1 := powerProfileFieldManager("performance")
-	fm2 := powerProfileFieldManager("balance-power")
-
-	// Verify field manager format.
-	assert.Equal(t, "powerprofile-controller.performance", fm1)
-	assert.Equal(t, "powerprofile-controller.balance-power", fm2)
-
-	// Apply profile 1.
-	err := applyPowerNodeStateProfilesStatus(ctx, cl, pnsName, profiles1, fm1)
+	// Add two profiles via the production function.
+	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance"), nil, &logger)
 	require.NoError(t, err)
 
-	// Apply profile 2.
-	err = applyPowerNodeStateProfilesStatus(ctx, cl, pnsName, profiles2, fm2)
+	err = addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("balance-power"), nil, &logger)
 	require.NoError(t, err)
 
 	// Both profiles should coexist.
@@ -65,6 +62,14 @@ func TestSSA_ProfileFieldManagerOwnership(t *testing.T) {
 	profileNames := []string{pns.Status.PowerProfiles[0].Name, pns.Status.PowerProfiles[1].Name}
 	assert.Contains(t, profileNames, "performance")
 	assert.Contains(t, profileNames, "balance-power")
+
+	// Verify SSA field manager ownership for both profiles.
+	managers := map[string]bool{}
+	for _, mf := range pns.ManagedFields {
+		managers[mf.Manager] = true
+	}
+	assert.True(t, managers[powerProfileFieldManager("performance")], "expected field manager for performance")
+	assert.True(t, managers[powerProfileFieldManager("balance-power")], "expected field manager for balance-power")
 }
 
 func TestSSA_ProfileRemovalPreservesOtherProfiles(t *testing.T) {
@@ -72,35 +77,24 @@ func TestSSA_ProfileRemovalPreservesOtherProfiles(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.TODO()
-	pnsName := "test-node-power-state"
+	nodeName := "test-node"
+	pnsName := fmt.Sprintf("%s-power-state", nodeName)
 	createTestPowerNodeState(t, cl, pnsName)
+	logger := ctrl.Log.WithName("testing")
 
-	// Apply two profiles.
-	fm1 := powerProfileFieldManager("performance")
-	fm2 := powerProfileFieldManager("balance-power")
-
-	err := applyPowerNodeStateProfilesStatus(ctx, cl, pnsName,
-		[]powerv1.PowerNodeProfileStatus{{Name: "performance", Config: "config1"}}, fm1)
+	// Add two profiles.
+	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance"), nil, &logger)
 	require.NoError(t, err)
 
-	err = applyPowerNodeStateProfilesStatus(ctx, cl, pnsName,
-		[]powerv1.PowerNodeProfileStatus{{Name: "balance-power", Config: "config2"}}, fm2)
+	err = addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("balance-power"), nil, &logger)
 	require.NoError(t, err)
 
-	// Verify both profiles are present.
-	pns := &powerv1.PowerNodeState{}
-	err = cl.Get(ctx, client.ObjectKey{Name: pnsName, Namespace: PowerNamespace}, pns)
-	require.NoError(t, err)
-	assert.Len(t, pns.Status.PowerProfiles, 2, "both profiles should be present")
-	assert.Equal(t, "performance", pns.Status.PowerProfiles[0].Name)
-	assert.Equal(t, "balance-power", pns.Status.PowerProfiles[1].Name)
-
-	// Remove profile 1 by applying empty list with its field manager.
-	err = applyPowerNodeStateProfilesStatus(ctx, cl, pnsName,
-		[]powerv1.PowerNodeProfileStatus{}, fm1)
+	// Remove profile 1 via the production removal function.
+	err = removePowerNodeStatusProfileEntry(ctx, cl, nodeName, "performance", &logger)
 	require.NoError(t, err)
 
 	// Only profile 2 should remain.
+	pns := &powerv1.PowerNodeState{}
 	err = cl.Get(ctx, client.ObjectKey{Name: pnsName, Namespace: PowerNamespace}, pns)
 	require.NoError(t, err)
 
@@ -113,19 +107,17 @@ func TestSSA_ProfileUpdatePreservesEntry(t *testing.T) {
 	defer cleanup()
 
 	ctx := context.TODO()
-	pnsName := "test-node-power-state"
+	nodeName := "test-node"
+	pnsName := fmt.Sprintf("%s-power-state", nodeName)
 	createTestPowerNodeState(t, cl, pnsName)
-
-	fm := powerProfileFieldManager("performance")
+	logger := ctrl.Log.WithName("testing")
 
 	// Apply initial profile.
-	err := applyPowerNodeStateProfilesStatus(ctx, cl, pnsName,
-		[]powerv1.PowerNodeProfileStatus{{Name: "performance", Config: "config1"}}, fm)
+	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance"), nil, &logger)
 	require.NoError(t, err)
 
-	// Update the same profile with new config and errors.
-	err = applyPowerNodeStateProfilesStatus(ctx, cl, pnsName,
-		[]powerv1.PowerNodeProfileStatus{{Name: "performance", Config: "config2", Errors: []string{"epp invalid"}}}, fm)
+	// Update the same profile with errors.
+	err = addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance"), fmt.Errorf("epp invalid"), &logger)
 	require.NoError(t, err)
 
 	pns := &powerv1.PowerNodeState{}
@@ -133,6 +125,43 @@ func TestSSA_ProfileUpdatePreservesEntry(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Len(t, pns.Status.PowerProfiles, 1)
-	assert.Equal(t, "config2", pns.Status.PowerProfiles[0].Config)
 	assert.Equal(t, []string{"epp invalid"}, pns.Status.PowerProfiles[0].Errors)
+}
+
+// TestSSA_RemoveLastProfileDoesNotFailWithEmptyStatus verifies that removing the last
+// profile from PowerNodeState does not fail with an empty status error.
+// The PowerProfiles field uses omitzero so the empty non-nil slice serializes as
+// "powerProfiles": [] — this keeps the status non-null after SSA prunes the last entry.
+// The field manager is also cleanly removed (empty map-type list → zero entries → nothing to own).
+func TestSSA_RemoveLastProfileDoesNotFailWithEmptyStatus(t *testing.T) {
+	cl, cleanup := setupEnvTest(t)
+	defer cleanup()
+
+	ctx := context.TODO()
+	nodeName := "test-node"
+	pnsName := fmt.Sprintf("%s-power-state", nodeName)
+	createTestPowerNodeState(t, cl, pnsName)
+	logger := ctrl.Log.WithName("testing")
+
+	// Add a single profile via the production function.
+	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("test-profile"), nil, &logger)
+	require.NoError(t, err, "failed to add profile")
+
+	// Remove the last profile.
+	err = removePowerNodeStatusProfileEntry(ctx, cl, nodeName, "test-profile", &logger)
+	require.NoError(t, err, "removing last profile should not fail")
+
+	// Verify the profile was removed.
+	pns := &powerv1.PowerNodeState{}
+	err = cl.Get(ctx, client.ObjectKey{Name: pnsName, Namespace: PowerNamespace}, pns)
+	require.NoError(t, err)
+	assert.Empty(t, pns.Status.PowerProfiles, "profiles should be empty after removing last one")
+
+	// Verify the field manager was cleanly removed (omitzero serializes [] which
+	// produces zero entries in the map-type list -> empty fieldset -> manager removed).
+	removedManager := powerProfileFieldManager("test-profile")
+	for _, mf := range pns.ManagedFields {
+		assert.NotEqual(t, removedManager, mf.Manager,
+			"field manager %q should be removed after profile deletion", removedManager)
+	}
 }
