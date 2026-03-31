@@ -64,7 +64,7 @@ func createProfileReconcilerObject(objs []runtime.Object) (*PowerProfileReconcil
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
 		WithRuntimeObjects(objs...).
-		WithStatusSubresource(&powerv1.PowerWorkload{}).
+		WithStatusSubresource(&powerv1.PowerWorkload{}, &powerv1.PowerNodeState{}).
 		Build()
 
 	// Create a ReconcileNode object with the scheme and fake client.
@@ -187,14 +187,8 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 			_, exists := updatedNode.Status.Capacity[extendedResourceName]
 			assert.True(t, exists, "Extended resource should be created")
 
-			// Check power workload creation on node
-			workload := &powerv1.PowerWorkload{}
-			wErr := r.Client.Get(context.TODO(), client.ObjectKey{
-				Name:      fmt.Sprintf("%s-%s", tc.powerprofile.Name, nodeName),
-				Namespace: PowerNamespace,
-			}, workload)
-			assert.NoError(t, wErr, "power workload should be created")
-			assert.Equal(t, workload.Name, fmt.Sprintf("%s-%s", tc.powerprofile.Name, nodeName), "power workload should have the correct name")
+			// Note: PowerProfile controller no longer creates PowerWorkloads.
+			// PowerWorkloads are created by PowerPod controller when pods request exclusive CPUs.
 		})
 	}
 }
@@ -398,16 +392,8 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 			t.Fatalf("%s - error reconciling object", tc.testCase)
 		}
 
-		workload := &powerv1.PowerWorkload{}
-		err = r.Client.Get(context.TODO(), client.ObjectKey{
-			Name:      fmt.Sprintf("%s-%s", tc.profileName, tc.nodeName),
-			Namespace: PowerNamespace,
-		}, workload)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving the power workload object", tc.testCase)
-		}
-
+		// Note: PowerProfile controller no longer creates PowerWorkloads.
+		// Only check that extended resources are created.
 		node := &corev1.Node{}
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name: tc.nodeName,
@@ -553,15 +539,6 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 			t.Fatalf("%s - error reconciling object", tc.testCase)
 		}
 
-		workload := &powerv1.PowerWorkload{}
-		err = r.Client.Get(context.TODO(), client.ObjectKey{
-			Name:      fmt.Sprintf("%s-%s", tc.profileName, tc.nodeName),
-			Namespace: PowerNamespace,
-		}, workload)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving the power workload object", tc.testCase)
-		}
 	}
 }
 
@@ -724,13 +701,8 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyHandling(t *testing.T) {
 			_, err = r.Reconcile(context.TODO(), req)
 			assert.NoError(t, err, "unexpected error: %v", err)
 
-			// Verify that the workload was created successfully
-			workload := &powerv1.PowerWorkload{}
-			err = r.Client.Get(context.TODO(), client.ObjectKey{
-				Name:      fmt.Sprintf("%s-%s", tc.profileName, tc.nodeName),
-				Namespace: PowerNamespace,
-			}, workload)
-			assert.NoError(t, err, "failed to get created workload")
+			// Note: PowerProfile controller no longer creates PowerWorkloads.
+			// PowerWorkloads are created by PowerPod controller when pods request exclusive CPUs.
 
 			// Verify the profile was created in the power library
 			exclusivePool := host.GetExclusivePool(tc.profileName)
@@ -1039,13 +1011,6 @@ func TestPowerProfile_Reconcile_DeleteProfile(t *testing.T) {
 			nodeName:    "TestNode",
 			profileName: "performance",
 			clientObjs: []runtime.Object{
-				&powerv1.PowerWorkload{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "performance-TestNode",
-						Namespace: PowerNamespace,
-					},
-					Spec: powerv1.PowerWorkloadSpec{},
-				},
 				&corev1.Node{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "TestNode",
@@ -1061,30 +1026,6 @@ func TestPowerProfile_Reconcile_DeleteProfile(t *testing.T) {
 		},
 		{
 			testCase:    "Test Case 2 - Profile user-created, ERs not present",
-			nodeName:    "TestNode",
-			profileName: "user-created",
-			clientObjs: []runtime.Object{
-				&powerv1.PowerWorkload{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "user-created-TestNode",
-						Namespace: PowerNamespace,
-					},
-					Spec: powerv1.PowerWorkloadSpec{},
-				},
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "TestNode",
-					},
-					Status: corev1.NodeStatus{
-						Capacity: map[corev1.ResourceName]resource.Quantity{
-							CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
-						},
-					},
-				},
-			},
-		},
-		{
-			testCase:    "Test Case 3 - Profile user-created, ERs not present, workload not present",
 			nodeName:    "TestNode",
 			profileName: "user-created",
 			clientObjs: []runtime.Object{
@@ -1131,15 +1072,6 @@ func TestPowerProfile_Reconcile_DeleteProfile(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 			t.Fatalf("%s - error reconciling object", tc.testCase)
-		}
-
-		workload := &powerv1.PowerWorkload{}
-		err = r.Client.Get(context.TODO(), client.ObjectKey{
-			Name:      fmt.Sprintf("%s-%s", tc.profileName, tc.nodeName),
-			Namespace: PowerNamespace,
-		}, workload)
-		if err == nil {
-			t.Errorf("%s failed: expected the power workload object '%s-%s' to have been deleted", tc.testCase, tc.profileName, tc.nodeName)
 		}
 
 		node := &corev1.Node{}
@@ -1292,15 +1224,8 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 			t.Fatalf("%s - error reconciling object", tc.testCase)
 		}
 
-		workload := &powerv1.PowerWorkload{}
-		err = r.Client.Get(context.TODO(), client.ObjectKey{
-			Name:      fmt.Sprintf("%s-%s", tc.profileName, tc.nodeName),
-			Namespace: PowerNamespace,
-		}, workload)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving the power workload object", tc.testCase)
-		}
+		// Note: PowerProfile controller no longer creates PowerWorkloads.
+		// PowerWorkloads are created by PowerPod controller when pods request exclusive CPUs.
 	}
 }
 
@@ -1666,7 +1591,7 @@ func TestPowerProfile_Reconcile_ClientErrs(t *testing.T) {
 			clientErr: "client get error",
 		},
 		{
-			testCase:      "Test Case 2 - Client delete workload error",
+			testCase:      "Test Case 2 - Client get node error during extended resource removal",
 			profileName:   "performance",
 			powerNodeName: "TestNode",
 			convertClient: func(c client.Client) client.Client {
@@ -1675,68 +1600,12 @@ func TestPowerProfile_Reconcile_ClientErrs(t *testing.T) {
 				mkwriter.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 				mkcl := new(errClient)
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(errors.NewNotFound(schema.GroupResource{}, "profile"))
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerWorkload")).Return(nil)
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.CStates")).Return(nil)
+				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.Node")).Return(fmt.Errorf("client get node error"))
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNodeState")).Return(errors.NewNotFound(schema.GroupResource{}, "powernodestate"))
-				mkcl.On("Delete", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("client delete error"))
 				mkcl.On("Status").Return(mkwriter)
 				return mkcl
 			},
-			clientErr: "client delete error",
-		},
-		{
-			testCase:      "Test Case 3 - Client create error",
-			profileName:   "performance",
-			powerNodeName: "TestNode",
-			convertClient: func(c client.Client) client.Client {
-				mkcl := new(errClient)
-				mkwriter := new(mockResourceWriter)
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(nil).Run(func(args mock.Arguments) {
-					pod := args.Get(2).(*powerv1.PowerProfile)
-					*pod = *defaultProf
-				})
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.Node")).Return(nil).Run(func(args mock.Arguments) {
-					pod := args.Get(2).(*corev1.Node)
-					*pod = corev1.Node{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "TestNode",
-						},
-						Status: corev1.NodeStatus{
-							Capacity: map[corev1.ResourceName]resource.Quantity{
-								CPUResource: *resource.NewQuantity(42, resource.DecimalSI),
-							},
-						},
-					}
-				})
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerWorkload")).Return(errors.NewNotFound(schema.GroupResource{}, "profile"))
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNodeState")).Return(errors.NewNotFound(schema.GroupResource{}, "powernodestate"))
-				mkcl.On("Status").Return(mkwriter)
-				mkwriter.On("Update", mock.Anything, mock.Anything).Return(nil)
-				mkwriter.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-				mkcl.On("Create", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("client create error"))
-				return mkcl
-			},
-			clientErr: "client create error",
-		},
-		{
-			testCase:      "Test Case 4 - Client profile delete error",
-			profileName:   "performance",
-			powerNodeName: "TestNode",
-			convertClient: func(c client.Client) client.Client {
-				mkwriter := new(mockResourceWriter)
-				mkwriter.On("Update", mock.Anything, mock.Anything).Return(nil)
-				mkwriter.On("Patch", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
-				mkcl := new(errClient)
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(errors.NewNotFound(schema.GroupResource{}, "profile"))
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerWorkload")).Return(nil)
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.CStates")).Return(nil)
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNodeState")).Return(errors.NewNotFound(schema.GroupResource{}, "powernodestate"))
-				mkcl.On("Delete", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("client delete error"))
-				// mock status call in defer function call
-				mkcl.On("Status").Return(mkwriter)
-				return mkcl
-			},
-			clientErr: "client delete error",
+			clientErr: "client get node error",
 		},
 	}
 
@@ -2197,7 +2066,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 		expectedResourcePercent float64
 		expectMatch             bool
 		expectExtendedResource  bool
-		expectWorkload          bool
 	}{
 		// NodeSelector scenarios
 		{
@@ -2210,7 +2078,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 1.0,
 			expectMatch:             true,
 			expectExtendedResource:  true,
-			expectWorkload:          true,
 		},
 		{
 			name:        "Empty selector - applies to all nodes",
@@ -2224,7 +2091,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 1.0,
 			expectMatch:             true,
 			expectExtendedResource:  true,
-			expectWorkload:          true,
 		},
 		{
 			name:        "Matching MatchLabels - should apply",
@@ -2247,7 +2113,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 0.5,
 			expectMatch:             true,
 			expectExtendedResource:  true,
-			expectWorkload:          true,
 		},
 		{
 			name:        "Non-matching MatchLabels - should not apply",
@@ -2269,7 +2134,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 0.0,
 			expectMatch:             false,
 			expectExtendedResource:  false,
-			expectWorkload:          false,
 		},
 		{
 			name:        "Matching MatchExpressions - should apply",
@@ -2298,7 +2162,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 64.0 / 86.0, // 75% of 86 = 64.5 -> 64
 			expectMatch:             true,
 			expectExtendedResource:  true,
-			expectWorkload:          true,
 		},
 		{
 			name:        "Non-matching MatchExpressions - should not apply",
@@ -2323,7 +2186,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 0.0,
 			expectMatch:             false,
 			expectExtendedResource:  false,
-			expectWorkload:          false,
 		},
 		{
 			name:        "Missing required label - should not apply",
@@ -2344,7 +2206,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 0.0,
 			expectMatch:             false,
 			expectExtendedResource:  false,
-			expectWorkload:          false,
 		},
 
 		// CpuCapacity scenarios
@@ -2358,7 +2219,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 10.0 / 86.0, // 10 CPUs out of 86
 			expectMatch:             true,
 			expectExtendedResource:  true,
-			expectWorkload:          true,
 		},
 		{
 			name:                    "Percentage CPU capacity",
@@ -2370,7 +2230,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 21.0 / 86.0, // 25% of 86 = 21.5 -> 21
 			expectMatch:             true,
 			expectExtendedResource:  true,
-			expectWorkload:          true,
 		},
 		{
 			name:                    "Default capacity (empty string)",
@@ -2382,7 +2241,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 1.0, // Should default to 100%
 			expectMatch:             true,
 			expectExtendedResource:  true,
-			expectWorkload:          true,
 		},
 		{
 			name:        "High percentage capacity",
@@ -2403,7 +2261,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 77.0 / 86.0, // 90% of 86 = 77.4 -> 77
 			expectMatch:             true,
 			expectExtendedResource:  true,
-			expectWorkload:          true,
 		},
 
 		// Integration scenarios
@@ -2439,7 +2296,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 15.0 / 86.0,
 			expectMatch:             true,
 			expectExtendedResource:  true,
-			expectWorkload:          true,
 		},
 		{
 			name:        "Shared profile with selector",
@@ -2460,7 +2316,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 			expectedResourcePercent: 51.0 / 86.0, // 60% of 86 = 51.6 -> 51
 			expectMatch:             true,
 			expectExtendedResource:  false, // Shared profiles don't create extended resources
-			expectWorkload:          false, // Shared profiles don't create workloads
 		},
 	}
 
@@ -2570,21 +2425,8 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 				assert.False(t, hasExtendedResource, "Extended resource should not be created")
 			}
 
-			// Verify workload creation/absence
-			workloadName := fmt.Sprintf("%s-%s", tc.profileName, nodeName)
-			workload := &powerv1.PowerWorkload{}
-			err = r.Client.Get(context.TODO(), client.ObjectKey{
-				Name:      workloadName,
-				Namespace: PowerNamespace,
-			}, workload)
-
-			if tc.expectWorkload {
-				assert.NoError(t, err, "PowerWorkload should be created")
-				assert.Equal(t, workloadName, workload.Name, "PowerWorkload name mismatch")
-				assert.Equal(t, tc.profileName, workload.Spec.PowerProfile, "PowerWorkload should reference the correct profile")
-			} else {
-				assert.True(t, errors.IsNotFound(err), "PowerWorkload should not be created")
-			}
+			// Note: PowerProfile controller no longer creates PowerWorkloads.
+			// PowerWorkloads are created by PowerPod controller when pods request exclusive CPUs.
 
 			// Verify exclusive pool creation
 			exclusivePool := host.GetExclusivePool(tc.profileName)
@@ -2673,12 +2515,8 @@ func TestPowerProfile_Reconcile_NodeSelectorCleanup(t *testing.T) {
 	_, hasExtendedResource := updatedNode.Status.Capacity[extendedResourceName]
 	assert.True(t, hasExtendedResource, "Extended resource should be created initially")
 
-	workload := &powerv1.PowerWorkload{}
-	err = r.Client.Get(context.TODO(), client.ObjectKey{
-		Name:      fmt.Sprintf("%s-%s", profileName, nodeName),
-		Namespace: PowerNamespace,
-	}, workload)
-	assert.NoError(t, err, "PowerWorkload should be created initially")
+	// Note: PowerProfile controller no longer creates PowerWorkloads.
+	// PowerWorkloads are created by PowerPod controller when pods request exclusive CPUs.
 
 	// Change node labels so they no longer match
 	updatedNode.Labels = map[string]string{
@@ -2700,14 +2538,8 @@ func TestPowerProfile_Reconcile_NodeSelectorCleanup(t *testing.T) {
 	_, hasExtendedResource = finalNode.Status.Capacity[extendedResourceName]
 	assert.False(t, hasExtendedResource, "Extended resource should be removed after cleanup")
 
-	// Verify workload and exclusive pool still exist (they're not cleaned up for safety)
-	workload = &powerv1.PowerWorkload{}
-	err = r.Client.Get(context.TODO(), client.ObjectKey{
-		Name:      fmt.Sprintf("%s-%s", profileName, nodeName),
-		Namespace: PowerNamespace,
-	}, workload)
-	assert.NoError(t, err, "PowerWorkload should still exist after cleanup")
-
+	// Note: PowerProfile controller no longer creates PowerWorkloads.
+	// Verify exclusive pool still exists (it's not cleaned up for safety)
 	exclusivePool := host.GetExclusivePool(profileName)
 	assert.NotNil(t, exclusivePool, "Exclusive pool should still exist after cleanup")
 }

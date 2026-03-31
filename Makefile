@@ -112,7 +112,7 @@ $(ENVTEST): $(LOCALBIN)
 	fi
 	@if [ ! -f $(ENVTEST) ]; then \
 		echo "Downloading setup-envtest..." ;\
-		GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION) ;\
+		GOFLAGS="-mod=mod" GOBIN=$(LOCALBIN) go install sigs.k8s.io/controller-runtime/tools/setup-envtest@$(ENVTEST_VERSION) ;\
 		echo "setup-envtest downloaded successfully." ;\
 	fi
 
@@ -155,9 +155,15 @@ all: manifests generate install
 
 # Run tests
 ENVTEST_ASSETS_DIR = $(shell pwd)/testbin
-test: generate fmt vet manifests
+test: generate fmt vet manifests test-envtest
 	go test -v ./... -coverprofile cover.out
 	cd power-optimization-library && go test -v ./... -coverprofile cover.out
+
+# Run SSA envtest tests (requires real API server via envtest, excluded from regular test runs via build tag)
+.PHONY: test-envtest
+test-envtest: envtest manifests
+	KUBEBUILDER_ASSETS="$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+		go test -v -tags=envtest ./controllers/ -count=1 -run TestSSA_
 
 # Build manager binary
 build: generate manifests

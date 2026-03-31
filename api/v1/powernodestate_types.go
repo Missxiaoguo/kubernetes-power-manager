@@ -32,12 +32,12 @@ type PowerNodeStateStatus struct {
 	// +optional
 	// +listType=map
 	// +listMapKey=name
-	PowerProfiles []PowerNodeProfileStatus `json:"powerProfiles,omitempty"`
+	PowerProfiles []PowerNodeProfileStatus `json:"powerProfiles,omitzero"`
 
 	// CPUPools contains the status of CPU pools on this node
 	// Owned by: PowerNodeConfig controller (shared, reserved) and PowerPod controller (exclusive)
 	// +optional
-	CPUPools CPUPoolsStatus `json:"cpuPools,omitempty"`
+	CPUPools *CPUPoolsStatus `json:"cpuPools,omitempty"`
 
 	// Uncore contains the status of uncore frequency configuration on this node
 	// Owned by: Uncore controller
@@ -73,7 +73,9 @@ type CPUPoolsStatus struct {
 	// Exclusive contains the status of exclusive CPU pools
 	// Owned by: PowerPod controller (exclusive)
 	// +optional
-	Exclusive []ExclusiveCPUPoolStatus `json:"exclusive,omitempty"`
+	// +listType=map
+	// +listMapKey=podUID
+	Exclusive []ExclusiveCPUPoolStatus `json:"exclusive,omitzero"`
 }
 
 // SharedCPUPoolStatus represents the status of the shared CPU pool
@@ -109,23 +111,21 @@ type PowerProfileCPUs struct {
 	// CPUIDs are the CPU IDs in this pool
 	CPUIDs []uint `json:"cpuIDs"`
 
-	// Errors contains any errors encountered while configuring this pool
+	// Errors contains any errors encountered while configuring the CPUs in this pool
 	// +optional
 	Errors []string `json:"errors,omitempty"`
 }
 
-// ExclusiveCPUPoolStatus represents the status of an exclusive CPU pool
-// assigned to a container
+// ExclusiveCPUPoolStatus represents the status of exclusive CPU pools
+// assigned to containers in a pod
 type ExclusiveCPUPoolStatus struct {
-	ExclusiveCPUInfo []ExclusiveCPUInfo `json:"exclusiveCPUInfo"`
-}
+	// PodUID is the UID of the pod (SSA map key)
+	PodUID string `json:"podUID"`
 
-// ExclusiveCPUInfo contains information about an exclusive CPU pool
-type ExclusiveCPUInfo struct {
-	// PowerProfile is the name of the PowerProfile used in these containers
-	PowerProfile string `json:"powerProfile"`
+	// Pod is the name of the pod
+	Pod string `json:"pod"`
 
-	// PowerContainers contains information about the containers using exclusive CPUs and the PowerProfile
+	// PowerContainers contains information about the containers using exclusive CPUs
 	PowerContainers []PowerContainer `json:"powerContainers"`
 }
 
@@ -137,11 +137,8 @@ type PowerContainer struct {
 	// ID is the ID of the container
 	ID string `json:"id"`
 
-	// Pod is the name of the pod the container is running in
-	Pod string `json:"pod"`
-
-	// PodUID is the UID of the pod the container is running in
-	PodUID string `json:"podUID"`
+	// PowerProfile is the name of the PowerProfile applied to this container
+	PowerProfile string `json:"powerProfile"`
 
 	// CPUIDs are the CPU IDs assigned to the container
 	CPUIDs []uint `json:"cpuIDs"`

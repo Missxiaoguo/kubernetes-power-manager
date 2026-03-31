@@ -264,71 +264,33 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 		}
 		return ctrl.Result{}, nil
 	}
-
-	// Handle exclusive workload.
-	if !strings.HasSuffix(workload.Name, "-"+nodeName) {
-		logger.V(5).Info("ignoring exclusive workload not owned by this node", "nodeName", nodeName)
-		return ctrl.Result{}, nil
-	}
-
-	// Ensure the workload node name is correctly recorded.
-	if err = r.patchWorkloadStatusOwnerNode(c, workload, nodeName); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	poolFromLibrary := r.PowerLibrary.GetExclusivePool(workload.Spec.PowerProfile)
-	if poolFromLibrary == nil {
-		poolDoesNotExistError := errors.NewServiceUnavailable(fmt.Sprintf("pool '%s' does not exist in the power library", workload.Spec.PowerProfile))
-		logger.Error(poolDoesNotExistError, "error retrieving the pool from the power library")
-		return ctrl.Result{Requeue: false}, poolDoesNotExistError
-	}
-
-	logger.V(5).Info("updating the CPU list in the power library")
-	cores := poolFromLibrary.Cpus().IDs()
-	coresToRemoveFromLibrary := detectCoresRemoved(cores, workload.Status.WorkloadNodes.CpuIds, &logger)
-	coresToBeAddedToLibrary := detectCoresAdded(cores, workload.Status.WorkloadNodes.CpuIds, &logger)
-
-	if len(coresToRemoveFromLibrary) > 0 {
-		err = r.PowerLibrary.GetSharedPool().MoveCpuIDs(coresToRemoveFromLibrary)
-		if err != nil {
-			logger.Error(err, "error updating the power library CPU list")
-			return ctrl.Result{}, err
-		}
-	}
-
-	if len(coresToBeAddedToLibrary) > 0 {
-		err = r.PowerLibrary.GetExclusivePool(workload.Spec.PowerProfile).MoveCpuIDs(coresToBeAddedToLibrary)
-		if err != nil {
-			logger.Error(err, "error updating the power library CPU list")
-			return ctrl.Result{}, err
-		}
-	}
-
-	// If the referenced PowerProfile defines a CPU scaling policy for DPDK polling
-	// workloads, delegate to the CPU scaling manager. It will dynamically tune
-	// per-CPU frequencies based on usage samples retrieved from DPDK telemetry
-	// when needed.
-	profile := &powerv1.PowerProfile{}
-	err = r.Client.Get(c, client.ObjectKey{
-		Namespace: PowerNamespace,
-		Name:      workload.Spec.PowerProfile,
-	}, profile)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to get power profile: %w", err)
-	}
-	if profile.Spec.CpuScalingPolicy != nil && profile.Spec.CpuScalingPolicy.WorkloadType == "polling-dpdk" {
-		// Ensure telemetry connections for all DPDK pods in this workload.
-		r.reconcileDPDKTelemetryClient(workload.Status.WorkloadNodes.Containers)
-
-		// Build scaling options for each CPU in this exclusive pool.
-		cpus := r.PowerLibrary.GetExclusivePool(workload.Spec.PowerProfile).Cpus()
-		scalingOpts := r.generateCPUScalingOpts(profile.Spec.CpuScalingPolicy, cpus)
-
-		// Hand over to the scaling manager to manage per-CPU scaling.
-		r.CPUScalingManager.ManageCPUScaling(scalingOpts)
-	}
-
 	return ctrl.Result{}, nil
+
+	/*
+		TODO: revive DPDK telemetry in a future PR.
+
+		// Non-shared (exclusive) workloads: CPU movement is handled by PowerPod controller.
+		// Only handle DPDK scaling if the profile has a CPU scaling policy.
+		profile := &powerv1.PowerProfile{}
+		err = r.Client.Get(c, client.ObjectKey{
+			Namespace: PowerNamespace,
+			Name:      workload.Spec.PowerProfile,
+		}, profile)
+		if err != nil {
+			return ctrl.Result{}, fmt.Errorf("failed to get power profile: %w", err)
+		}
+		if profile.Spec.CpuScalingPolicy != nil && profile.Spec.CpuScalingPolicy.WorkloadType == "polling-dpdk" {
+			// Ensure telemetry connections for all DPDK pods in this workload.
+			r.reconcileDPDKTelemetryClient(workload.Status.WorkloadNodes.Containers)
+
+			// Build scaling options for each CPU in this exclusive pool.
+			cpus := r.PowerLibrary.GetExclusivePool(workload.Spec.PowerProfile).Cpus()
+			scalingOpts := r.generateCPUScalingOpts(profile.Spec.CpuScalingPolicy, cpus)
+
+			// Hand over to the scaling manager to manage per-CPU scaling.
+			r.CPUScalingManager.ManageCPUScaling(scalingOpts)
+		}
+	*/
 }
 
 // cleanupSharedWorkloadPools cleans up local shared and reserved pools for a shared workload on this node.
@@ -377,40 +339,6 @@ func (r *PowerWorkloadReconciler) patchWorkloadStatusOwnerNode(ctx context.Conte
 		workload.Status.WorkloadNodes.Name = nodeName
 		return nil
 	})
-}
-
-func detectCoresRemoved(originalCoreList []uint, updatedCoreList []uint, logger *logr.Logger) []uint {
-	var coresRemoved []uint
-	logger.V(5).Info("detecting if cores are removed from the cores list")
-	for _, core := range originalCoreList {
-		if !validateCoreIsInCoreList(core, updatedCoreList) {
-			coresRemoved = append(coresRemoved, core)
-		}
-	}
-
-	return coresRemoved
-}
-
-func detectCoresAdded(originalCoreList []uint, updatedCoreList []uint, logger *logr.Logger) []uint {
-	var coresAdded []uint
-	logger.V(5).Info("detecting if cores are added to the cores list")
-	for _, core := range updatedCoreList {
-		if !validateCoreIsInCoreList(core, originalCoreList) {
-			coresAdded = append(coresAdded, core)
-		}
-	}
-
-	return coresAdded
-}
-
-func validateCoreIsInCoreList(core uint, coreList []uint) bool {
-	for _, c := range coreList {
-		if c == core {
-			return true
-		}
-	}
-
-	return false
 }
 
 func createReservedPool(library power.Host, coreConfig powerv1.ReservedSpec, logger *logr.Logger) error {

@@ -31,7 +31,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -64,7 +63,7 @@ type PowerProfileReconciler struct {
 // +kubebuilder:rbac:groups=security.openshift.io,resources=securitycontextconstraints,resourceNames=privileged,verbs=use
 
 // Reconcile method that implements the reconcile loop
-func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {
 	logger := r.Log.WithValues("powerprofile", req.NamespacedName)
 	logger.Info("Reconciling the power profile")
 
@@ -90,8 +89,13 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		}
 
 		// Write any errors (validation or infrastructure) to PowerNodeState.
-		if updateErr := updatePowerNodeStateWithProfileInfo(ctx, r.Client, nodeName, profile, err, &logger); updateErr != nil {
+		// If the status update fails and the main reconcile succeeded, requeue after a short delay to retry.
+		// We use RequeueAfter instead of returning an error because the profile reconcile itself succeeded.
+		if updateErr := addPowerNodeStatusProfileEntry(ctx, r.Client, nodeName, profile, err, &logger); updateErr != nil {
 			logger.Error(updateErr, "failed to update PowerNodeState with profile errors")
+			if retErr == nil {
+				result = ctrl.Result{RequeueAfter: queuetime}
+			}
 		}
 	}()
 	err = r.Client.Get(ctx, req.NamespacedName, profile)
@@ -122,33 +126,16 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 				}
 
 				// Remove the profile from PowerNodeState.
-				err = removeProfileFromPowerNodeState(ctx, r.Client, nodeName, req.Name, &logger)
+				err = removePowerNodeStatusProfileEntry(ctx, r.Client, nodeName, req.Name, &logger)
 				if err != nil {
 					logger.Error(err, "error removing profile from PowerNodeState")
-					// Don't return error - pool was already removed.
+					// Pool was already removed, but requeue to retry the status cleanup.
+					return ctrl.Result{RequeueAfter: queuetime}, nil
 				}
 
 				return ctrl.Result{}, nil
 			}
 
-			powerWorkloadName := fmt.Sprintf("%s-%s", req.NamespacedName.Name, nodeName)
-			powerWorkload := &powerv1.PowerWorkload{}
-			err = r.Client.Get(ctx, client.ObjectKey{
-				Name:      powerWorkloadName,
-				Namespace: req.NamespacedName.Namespace,
-			}, powerWorkload)
-			if err != nil {
-				if !errors.IsNotFound(err) {
-					logger.Error(err, fmt.Sprintf("error deleting the power workload '%s' from the cluster", powerWorkloadName))
-					return ctrl.Result{}, err
-				}
-			} else {
-				err = r.Client.Delete(ctx, powerWorkload)
-				if err != nil {
-					logger.Error(err, fmt.Sprintf("error deleting the power workload '%s' from the cluster", powerWorkloadName))
-					return ctrl.Result{}, err
-				}
-			}
 			// Remove the extended resources for this power profile from the node.
 			err = r.removeExtendedResources(ctx, nodeName, req.NamespacedName.Name, &logger)
 			if err != nil {
@@ -157,10 +144,11 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			}
 
 			// Remove the profile from PowerNodeState.
-			err = removeProfileFromPowerNodeState(ctx, r.Client, nodeName, req.NamespacedName.Name, &logger)
+			err = removePowerNodeStatusProfileEntry(ctx, r.Client, nodeName, req.NamespacedName.Name, &logger)
 			if err != nil {
 				logger.Error(err, "error removing profile from PowerNodeState")
-				// Don't return error - extended resources were already cleaned up.
+				// Extended resources were already cleaned up, but requeue to retry the status cleanup.
+				return ctrl.Result{RequeueAfter: queuetime}, nil
 			}
 
 			return ctrl.Result{}, nil
@@ -182,8 +170,9 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		// Clean up resources if they exist on this node but shouldn't anymore.
 		err = r.cleanupProfileFromNode(ctx, profile, nodeName, &logger)
 		if err != nil {
-			logger.Error(err, "error cleaning up profile resources from node")
-			return ctrl.Result{}, err
+			logger.Error(err, "error cleaning up profile resources from node, will retry")
+			// Requeue to retry status cleanup; extended resources were already removed.
+			return ctrl.Result{RequeueAfter: queuetime}, nil
 		}
 
 		// Don't update PowerNodeState since this profile doesn't apply to this node.
@@ -327,42 +316,6 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, fmt.Errorf("error creating or updating the extended resources for the base profile: %v", err)
 	}
 
-	// Create the power workload for the profile
-	workloadName := fmt.Sprintf("%s-%s", profile.Spec.Name, nodeName)
-	logger.V(5).Info(fmt.Sprintf("configuring the workload name: %s", workloadName))
-	workload := &powerv1.PowerWorkload{}
-	err = r.Client.Get(ctx, client.ObjectKey{
-		Name:      workloadName,
-		Namespace: req.NamespacedName.Namespace,
-	}, workload)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			powerWorkloadSpec := &powerv1.PowerWorkloadSpec{
-				Name:         workloadName,
-				PowerProfile: profile.Spec.Name,
-			}
-
-			powerWorkload := &powerv1.PowerWorkload{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      workloadName,
-					Namespace: req.NamespacedName.Namespace,
-				},
-			}
-			powerWorkload.Spec = *powerWorkloadSpec
-
-			err = r.Client.Create(ctx, powerWorkload)
-			if err != nil {
-				logger.Error(err, fmt.Sprintf("error creating the power workload '%s'", workloadName))
-				return ctrl.Result{}, err
-			}
-
-			logger.V(5).Info("power workload successfully created", "name", workloadName, "profile", profile.Spec.Name)
-			return ctrl.Result{}, nil
-		}
-
-		return ctrl.Result{}, err
-	}
-
 	// If the workload already exists then the power profile was just updated and the power library will take care of reconfiguring cores
 	return ctrl.Result{}, nil
 }
@@ -449,10 +402,12 @@ func (r *PowerProfileReconciler) cleanupProfileFromNode(ctx context.Context, pro
 	}
 
 	// Remove the profile from PowerNodeState since it no longer applies to this node.
-	err = removeProfileFromPowerNodeState(ctx, r.Client, nodeName, profile.Spec.Name, logger)
+	err = removePowerNodeStatusProfileEntry(ctx, r.Client, nodeName, profile.Spec.Name, logger)
 	if err != nil {
 		logger.Error(err, "error removing profile from PowerNodeState")
-		// Don't return error - extended resources were already cleaned up
+		// Return the error so the caller can requeue to retry status cleanup.
+		// Extended resources were already cleaned up successfully.
+		return err
 	}
 
 	logger.V(5).Info("Successfully cleaned up PowerProfile extended resources from node", "profile", profile.Spec.Name, "nodeName", nodeName)

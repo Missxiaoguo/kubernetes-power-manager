@@ -61,69 +61,60 @@ spec:
                       Owned by: PowerPod controller (exclusive)
                     items:
                       description: |-
-                        ExclusiveCPUPoolStatus represents the status of an exclusive CPU pool
-                        assigned to a container
+                        ExclusiveCPUPoolStatus represents the status of exclusive CPU pools
+                        assigned to containers in a pod
                       properties:
-                        exclusiveCPUInfo:
+                        pod:
+                          description: Pod is the name of the pod
+                          type: string
+                        podUID:
+                          description: PodUID is the UID of the pod (SSA map key)
+                          type: string
+                        powerContainers:
+                          description: PowerContainers contains information about
+                            the containers using exclusive CPUs
                           items:
-                            description: ExclusiveCPUInfo contains information about
-                              an exclusive CPU pool
+                            description: PowerContainer contains information about
+                              a container using exclusive CPUs
                             properties:
-                              powerContainers:
-                                description: PowerContainers contains information
-                                  about the containers using exclusive CPUs and the
-                                  PowerProfile
+                              cpuIDs:
+                                description: CPUIDs are the CPU IDs assigned to the
+                                  container
                                 items:
-                                  description: PowerContainer contains information
-                                    about a container using exclusive CPUs
-                                  properties:
-                                    cpuIDs:
-                                      description: CPUIDs are the CPU IDs assigned
-                                        to the container
-                                      items:
-                                        type: integer
-                                      type: array
-                                    errors:
-                                      description: Errors contains any errors encountered
-                                        while configuring the container
-                                      items:
-                                        type: string
-                                      type: array
-                                    id:
-                                      description: ID is the ID of the container
-                                      type: string
-                                    name:
-                                      description: Name is the name of the container
-                                      type: string
-                                    pod:
-                                      description: Pod is the name of the pod the
-                                        container is running in
-                                      type: string
-                                    podUID:
-                                      description: PodUID is the UID of the pod the
-                                        container is running in
-                                      type: string
-                                  required:
-                                  - cpuIDs
-                                  - id
-                                  - name
-                                  - pod
-                                  - podUID
-                                  type: object
+                                  type: integer
                                 type: array
+                              errors:
+                                description: Errors contains any errors encountered
+                                  while configuring the container
+                                items:
+                                  type: string
+                                type: array
+                              id:
+                                description: ID is the ID of the container
+                                type: string
+                              name:
+                                description: Name is the name of the container
+                                type: string
                               powerProfile:
                                 description: PowerProfile is the name of the PowerProfile
-                                  used in these containers
+                                  applied to this container
                                 type: string
                             required:
-                            - powerContainers
+                            - cpuIDs
+                            - id
+                            - name
                             - powerProfile
                             type: object
                           type: array
                       required:
-                      - exclusiveCPUInfo
+                      - pod
+                      - podUID
+                      - powerContainers
                       type: object
                     type: array
+                    x-kubernetes-list-map-keys:
+                    - podUID
+                    x-kubernetes-list-type: map
                   reserved:
                     description: |-
                       Reserved contains the status of the reserved CPU pools
@@ -150,7 +141,7 @@ spec:
                                 type: array
                               errors:
                                 description: Errors contains any errors encountered
-                                  while configuring this pool
+                                  while configuring the CPUs in this pool
                                 items:
                                   type: string
                                 type: array
@@ -223,6 +214,9 @@ spec:
                   - name
                   type: object
                 type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               uncore:
                 description: |-
                   Uncore contains the status of uncore frequency configuration on this node
