@@ -1,5 +1,7 @@
 # Kubernetes Power Manager
 
+> **⚠️ Notice:** A disruptive enhancement for multi-node cluster support is currently in progress on the `main` branch. For a stable codebase, please use the [v0.0.1](https://github.com/openshift-kni/kubernetes-power-manager/tree/v0.0.1) release tag.
+
 This is an experimental project based on https://github.com/intel/kubernetes-power-manager (which has been
 discontinued). It also includes enhancements from https://github.com/AMDEPYC/kubernetes-power-manager
 (e.g. Dynamic CPU Frequency Management based on DPDK telemetry).
