@@ -1,0 +1,5 @@
+inheritance: true
+reviews:
+  path_filters:
+    - "!vendor/**"
+    - "!power-optimization-library/vendor/**"
