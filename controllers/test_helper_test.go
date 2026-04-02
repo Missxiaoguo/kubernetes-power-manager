@@ -216,6 +216,11 @@ func (m *coreMock) GetID() uint {
 	return args.Get(0).(uint)
 }
 
+func (m *coreMock) GetAbsMinMax() (uint, uint) {
+	args := m.Called()
+	return args.Get(0).(uint), args.Get(1).(uint)
+}
+
 func (m *coreMock) SetPool(pool power.Pool) error {
 	return m.Called(pool).Error(0)
 }
@@ -465,8 +470,12 @@ type ScalingMgrMock struct {
 	mock.Mock
 }
 
-func (m *ScalingMgrMock) ManageCPUScaling(configs []scaling.CPUScalingOpts) {
+func (m *ScalingMgrMock) AddCPUScaling(configs []scaling.CPUScalingOpts) {
 	m.Called(configs)
+}
+
+func (m *ScalingMgrMock) RemoveCPUScaling(cpuIDs []uint) {
+	m.Called(cpuIDs)
 }
 
 // Satisfy manager.Runnable

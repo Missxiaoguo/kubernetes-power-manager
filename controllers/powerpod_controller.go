@@ -29,17 +29,22 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/intel/power-optimization-library/pkg/power"
 	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
+	"github.com/openshift-kni/kubernetes-power-manager/internal/scaling"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	podresourcesapi "k8s.io/kubelet/pkg/apis/podresources/v1"
 
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/openshift-kni/kubernetes-power-manager/pkg/podresourcesclient"
 	"github.com/openshift-kni/kubernetes-power-manager/pkg/podstate"
@@ -55,11 +60,13 @@ const (
 // PowerPodReconciler reconciles a Pod object
 type PowerPodReconciler struct {
 	client.Client
-	Log                logr.Logger
-	Scheme             *runtime.Scheme
-	State              *podstate.State
-	PodResourcesClient podresourcesclient.PodResourcesClient
-	PowerLibrary       power.Host
+	Log                 logr.Logger
+	Scheme              *runtime.Scheme
+	State               *podstate.State
+	PodResourcesClient  podresourcesclient.PodResourcesClient
+	PowerLibrary        power.Host
+	DPDKTelemetryClient scaling.DPDKTelemetryClient
+	CPUScalingManager   scaling.CPUScalingManager
 }
 
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
@@ -111,6 +118,7 @@ func (r *PowerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 			}
 		} else if currentNodeState.Status.CPUPools != nil {
 			// Move the pod's CPUs back to the shared pool.
+			var deletedCPUIDs []uint
 			for _, exclusive := range currentNodeState.Status.CPUPools.Exclusive {
 				if exclusive.PodUID == string(pod.GetUID()) {
 					for _, container := range exclusive.PowerContainers {
@@ -119,9 +127,18 @@ func (r *PowerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 							logger.Error(err, "failed to move CPUs back to shared pool", "container", container.Name, "profile", container.PowerProfile)
 							return ctrl.Result{}, err
 						}
+						deletedCPUIDs = append(deletedCPUIDs, container.CPUIDs...)
 					}
 					break
 				}
+			}
+
+			// Tear down DPDK telemetry and scaling for this pod's CPUs.
+			// No-op for non-DPDK pods: CloseConnection and RemoveCPUScaling
+			// safely ignore entries that don't exist.
+			if r.DPDKTelemetryClient != nil && r.CPUScalingManager != nil {
+				r.DPDKTelemetryClient.CloseConnection(string(pod.GetUID()))
+				r.CPUScalingManager.RemoveCPUScaling(deletedCPUIDs)
 			}
 		}
 
@@ -175,6 +192,9 @@ func (r *PowerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	powerContainers, recoveryErrs := r.getPowerProfileRequestsFromContainers(ctx, admissibleContainers, powernode.Status.CustomDevices, pod, &logger)
 	logger.V(5).Info("retrieved power profiles and containers from pod requests")
 
+	// dpdkContainerAssigned tracks whether a DPDK container in this pod has already
+	// been assigned telemetry and scaling. Only one DPDK container per pod is supported.
+	dpdkContainerAssigned := false
 	// Reconcile CPU pools and track errors per container.
 	// Skip containers that already have errors (e.g., profile unavailability).
 	for i := range powerContainers {
@@ -212,6 +232,38 @@ func (r *PowerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 				logger.Error(err, "failed to move CPUs to exclusive pool", "profile", container.PowerProfile, "container", container.Name)
 				container.Errors = append(container.Errors, err.Error())
 				recoveryErrs = append(recoveryErrs, err)
+				continue
+			}
+		}
+
+		// Set up DPDK telemetry and scaling if the profile has a CpuScalingPolicy.
+		if r.DPDKTelemetryClient == nil || r.CPUScalingManager == nil {
+			continue
+		}
+		profile := &powerv1.PowerProfile{}
+		if err := r.Get(ctx, client.ObjectKey{Namespace: PowerNamespace, Name: container.PowerProfile}, profile); err != nil {
+			if errors.IsNotFound(err) {
+				// Unlikely: profile was validated moments ago, but handle deletion between checks.
+				container.Errors = append(container.Errors,
+					fmt.Sprintf("PowerProfile '%s' not found", container.PowerProfile))
+				continue
+			}
+			return ctrl.Result{}, fmt.Errorf("failed to get PowerProfile: %w", err)
+		}
+		if profile.Spec.CpuScalingPolicy != nil && profile.Spec.CpuScalingPolicy.WorkloadType == "polling-dpdk" {
+			if dpdkContainerAssigned {
+				container.Errors = append(container.Errors,
+					"DPDK dynamic frequency scaling is only supported for a single container per pod; this container is skipped")
+			} else {
+				dpdkContainerAssigned = true
+				r.DPDKTelemetryClient.CreateConnection(&scaling.DPDKTelemetryConnectionData{
+					PodUID:      string(podUID),
+					WatchedCPUs: container.CPUIDs,
+				})
+				// Build per-CPU scaling options.
+				scalingOpts := r.generateCPUScalingOpts(profile.Spec.CpuScalingPolicy, container.CPUIDs)
+				// Hand over to the scaling manager to manage per-CPU scaling.
+				r.CPUScalingManager.AddCPUScaling(scalingOpts)
 			}
 		}
 	}
@@ -603,10 +655,99 @@ func (r *PowerPodReconciler) areCPUsInSharedPool(cpuIDs []uint) bool {
 	return true
 }
 
+// generateCPUScalingOpts translates a CpuScalingPolicy and a set of CPUs
+// into a list of per-CPU scaling options used by the CPUScalingManager.
+func (r *PowerPodReconciler) generateCPUScalingOpts(scalingPolicy *powerv1.CpuScalingPolicy, cpuIDs []uint) []scaling.CPUScalingOpts {
+	allCpus := r.PowerLibrary.GetAllCpus()
+	optsList := make([]scaling.CPUScalingOpts, 0, len(cpuIDs))
+
+	for _, id := range cpuIDs {
+		cpu := allCpus.ByID(id)
+		if cpu == nil {
+			continue
+		}
+
+		// Get the min and max frequency of this CPU and calculate the fallback frequency.
+		minFreq, maxFreq := cpu.GetAbsMinMax()
+		fallbackFreqPct := uint(*scalingPolicy.FallbackFreqPercent)
+		fallbackFreq := minFreq + (maxFreq-minFreq)*(fallbackFreqPct)/100
+
+		opts := scaling.CPUScalingOpts{
+			CPU:                        cpu,
+			SamplePeriod:               scalingPolicy.SamplePeriod.Duration,
+			CooldownPeriod:             scalingPolicy.CooldownPeriod.Duration,
+			TargetUsage:                *scalingPolicy.TargetUsage,
+			AllowedUsageDifference:     *scalingPolicy.AllowedUsageDifference,
+			AllowedFrequencyDifference: *scalingPolicy.AllowedFrequencyDifference * 1000,
+			HWMaxFrequency:             int(maxFreq),
+			HWMinFrequency:             int(minFreq),
+			CurrentTargetFrequency:     scaling.FrequencyNotYetSet,
+			ScaleFactor:                float64(*scalingPolicy.ScalePercentage) / 100.0,
+			FallbackFreq:               int(fallbackFreq),
+		}
+		optsList = append(optsList, opts)
+	}
+
+	return optsList
+}
+
 func (r *PowerPodReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Pod{},
 			builder.WithPredicates(
 				predicate.NewPredicateFuncs(PowerReleventPodPredicate))).
+		Watches(&powerv1.PowerProfile{},
+			handler.EnqueueRequestsFromMapFunc(r.powerProfileToPodRequests),
+			builder.WithPredicates(predicate.Funcs{
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					oldProfile := e.ObjectOld.(*powerv1.PowerProfile)
+					newProfile := e.ObjectNew.(*powerv1.PowerProfile)
+
+					if newProfile.Spec.Shared {
+						return false
+					}
+					// Filter for CPU scaling policy changes only.
+					return oldProfile.Spec.CpuScalingPolicy != newProfile.Spec.CpuScalingPolicy
+				},
+				CreateFunc:  func(e event.CreateEvent) bool { return false },
+				GenericFunc: func(ge event.GenericEvent) bool { return false },
+				DeleteFunc:  func(de event.DeleteEvent) bool { return false },
+			})).
 		Complete(r)
+}
+
+// powerProfileToPodRequests returns reconcile requests for all pods on this node
+// that use the given PowerProfile. This re-reconciles their DPDK scaling
+// when a profile's CpuScalingPolicy changes.
+func (r *PowerPodReconciler) powerProfileToPodRequests(ctx context.Context, obj client.Object) []reconcile.Request {
+	requests := []reconcile.Request{}
+
+	nodeName := os.Getenv("NODE_NAME")
+	if nodeName == "" {
+		return requests
+	}
+
+	podList := &corev1.PodList{}
+	if err := r.Client.List(ctx, podList, client.MatchingFields{"spec.nodeName": nodeName}); err != nil {
+		r.Log.Error(err, "failed to list pods for profile change")
+		return requests
+	}
+
+	profileName := obj.GetName()
+	for _, pod := range podList.Items {
+		containers := append(pod.Spec.InitContainers, pod.Spec.Containers...)
+		for _, c := range containers {
+			for rn := range c.Resources.Requests {
+				if string(rn) == ResourcePrefix+profileName {
+					requests = append(requests, reconcile.Request{
+						NamespacedName: types.NamespacedName{
+							Name:      pod.Name,
+							Namespace: pod.Namespace,
+						},
+					})
+				}
+			}
+		}
+	}
+	return requests
 }
