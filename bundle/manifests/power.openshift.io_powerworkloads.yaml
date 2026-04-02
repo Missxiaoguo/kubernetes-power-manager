@@ -61,15 +61,24 @@ spec:
                   Reserved CPUs are the CPUs that have been reserved by Kubelet for use by the Kubernetes admin process
                   This list must match the list in the user's Kubelet configuration
                 items:
+                  description: ReservedSpec defines a group of reserved CPUs with
+                    a PowerProfile.
                   properties:
                     cores:
+                      description: Cores is the list of CPU IDs in this reserved group.
                       items:
                         type: integer
+                      minItems: 1
                       type: array
+                      x-kubernetes-list-type: set
                     powerProfile:
+                      description: PowerProfile is the name of the PowerProfile to
+                        apply to this reserved group.
+                      minLength: 1
                       type: string
                   required:
                   - cores
+                  - powerProfile
                   type: object
                 type: array
             required:

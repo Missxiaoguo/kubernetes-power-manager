@@ -24,6 +24,16 @@ resources:
   version: v1
 - domain: openshift.io
   group: power
+  kind: PowerNodeState
+  path: github.com/openshift-kni/kubernetes-power-manager/api/v1
+  version: v1
+- domain: openshift.io
+  group: power
+  kind: PowerNodeConfig
+  path: github.com/openshift-kni/kubernetes-power-manager/api/v1
+  version: v1
+- domain: openshift.io
+  group: power
   kind: PowerWorkload
   path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1

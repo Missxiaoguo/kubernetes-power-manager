@@ -117,20 +117,29 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: PowerNodeState is the Schema for the powernodestates API
-      displayName: Power Node State
-      kind: PowerNodeState
-      name: powernodestates.power.openshift.io
-      version: v1
     - description: PowerConfig is the Schema for the powerconfigs API
       displayName: Power Config
       kind: PowerConfig
       name: powerconfigs.power.openshift.io
       version: v1
+    - description: |-
+        PowerNodeConfig is the Schema for the powernodeconfigs API.
+        It configures shared and reserved CPU pools on nodes matching spec.nodeSelector.
+      displayName: Power Node Config
+      kind: PowerNodeConfig
+      name: powernodeconfigs.power.openshift.io
+      version: v1
     - description: PowerNode is the Schema for the powernodes API
       displayName: Power Node
       kind: PowerNode
       name: powernodes.power.openshift.io
+      version: v1
+    - description: |-
+        PowerNodeState is the Schema for the powernodestates API
+        It provides per-node status for power management configuration
+      displayName: Power Node State
+      kind: PowerNodeState
+      name: powernodestates.power.openshift.io
       version: v1
     - description: PowerProfile is the Schema for the powerprofiles API
       displayName: Power Profile
