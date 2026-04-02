@@ -19,7 +19,8 @@ var (
 
 type CPUScalingManager interface {
 	manager.Runnable
-	ManageCPUScaling(optList []CPUScalingOpts)
+	AddCPUScaling(optList []CPUScalingOpts)
+	RemoveCPUScaling(cpuIDs []uint)
 }
 
 type cpuScalingManagerImpl struct {
@@ -64,22 +65,15 @@ func (s *cpuScalingManagerImpl) stop() {
 	s.logger.V(5).Info("successfully stopped all")
 }
 
-// ManageCPUScaling manages the lifecycle of per-CPU scaling workers (one worker per CPU).
-// Each worker runs continuously and tunes the CPU's frequency based on the provided options
-// and real-time usage from the DPDK telemetry client. The manager reconciles the desired
-// set of workers by creating new ones, updating existing ones, and stopping removed ones.
-func (s *cpuScalingManagerImpl) ManageCPUScaling(optsList []CPUScalingOpts) {
-	incomingManagedCPUs := map[uint]struct{}{}
-	currentManagedCPUs := s.getManagedCPUIDs()
-
-	// create or update workers as per new config
+// AddCPUScaling creates or updates per-CPU scaling workers for the given CPUs.
+// Existing workers for other CPUs are not affected. Each worker runs continuously
+// and tunes the CPU's frequency based on the provided options and real-time usage
+// from the DPDK telemetry client.
+func (s *cpuScalingManagerImpl) AddCPUScaling(optsList []CPUScalingOpts) {
 	for _, opts := range optsList {
-		incomingManagedCPUs[opts.CPU.GetID()] = struct{}{}
-
 		worker, found := s.getCPUScalingWorker(opts.CPU.GetID())
 		if !found {
-			s.logger.V(5).Info("creating worker", "cpuID", opts.CPU)
-
+			s.logger.V(5).Info("creating worker", "cpuID", opts.CPU.GetID())
 			s.workers.Store(
 				opts.CPU.GetID(),
 				newCPUScalingWorkerFunc(
@@ -93,20 +87,18 @@ func (s *cpuScalingManagerImpl) ManageCPUScaling(optsList []CPUScalingOpts) {
 			worker.UpdateOpts(&opts)
 		}
 	}
+}
 
-	// stop workers on cpus that are no longer managed
-	for _, cpuID := range currentManagedCPUs {
-		if _, contains := incomingManagedCPUs[cpuID]; !contains {
-			s.logger.V(5).Info("stopping  worker", "cpuID", cpuID)
-
-			worker, found := s.workers.LoadAndDelete(cpuID)
-			if !found {
-				s.logger.V(5).Info("worker already stopped", "cpuID", cpuID)
-			} else {
-				worker := worker.(CPUScalingWorker)
-				worker.Stop()
-				s.logger.V(5).Info("worker stopped successfully", "cpuID", cpuID)
-			}
+// RemoveCPUScaling stops scaling workers for the given CPU IDs.
+func (s *cpuScalingManagerImpl) RemoveCPUScaling(cpuIDs []uint) {
+	for _, cpuID := range cpuIDs {
+		worker, found := s.workers.LoadAndDelete(cpuID)
+		if !found {
+			s.logger.V(5).Info("worker does not exist", "cpuID", cpuID)
+		} else {
+			worker := worker.(CPUScalingWorker)
+			worker.Stop()
+			s.logger.V(5).Info("worker stopped successfully", "cpuID", cpuID)
 		}
 	}
 }

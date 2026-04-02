@@ -24,7 +24,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/go-logr/logr"
+	"github.com/intel/power-optimization-library/pkg/power"
 	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
+	"github.com/openshift-kni/kubernetes-power-manager/internal/scaling"
 	"github.com/openshift-kni/kubernetes-power-manager/pkg/podresourcesclient"
 	"github.com/openshift-kni/kubernetes-power-manager/pkg/podstate"
 	"github.com/stretchr/testify/assert"
@@ -34,6 +36,7 @@ import (
 	//"github.com/stretchr/testify/mock"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // Your mock client probably has a status writer struct like this
@@ -1685,6 +1688,7 @@ func TestPowerPod_Reconcile_SetupPass(t *testing.T) {
 	mgr.On("SetFields", mock.Anything).Return(nil)
 	mgr.On("Add", mock.Anything).Return(nil)
 	mgr.On("GetCache").Return(new(cacheMk))
+	mgr.On("GetFieldIndexer").Return(&fieldIndexerMock{})
 	err = (&PowerPodReconciler{
 		Client: r.Client,
 		Scheme: r.Scheme,
@@ -1702,6 +1706,7 @@ func TestPowerPod_Reconcile_SetupFail(t *testing.T) {
 	mgr.On("GetControllerOptions").Return(config.Controller{})
 	mgr.On("GetScheme").Return(r.Scheme)
 	mgr.On("GetLogger").Return(r.Log)
+	mgr.On("GetFieldIndexer").Return(&fieldIndexerMock{})
 	mgr.On("Add", mock.Anything).Return(fmt.Errorf("setup fail"))
 	err = (&PowerPodReconciler{
 		Client: r.Client,
@@ -2648,4 +2653,412 @@ func TestPowerWorkload_Reconcile_DetectCoresAdded(t *testing.T) {
 	expectedResult := []uint{5}
 	result := detectCoresAdded(orig, updated, &logr.Logger{})
 	assert.ElementsMatch(t, result, expectedResult)
+}
+
+func TestPowerPod_generateCPUScalingOpts(t *testing.T) {
+	minFreq := uint(1000000)
+	maxFreq := uint(3700000)
+
+	// Build a CpuList with mock CPUs 0, 1, 2.
+	cpuList := make(power.CpuList, 3)
+	for i, id := range []uint{0, 1, 2} {
+		cpu := new(coreMock)
+		cpu.On("GetID").Return(id)
+		cpu.On("GetAbsMinMax").Return(minFreq, maxFreq)
+		cpuList[i] = cpu
+	}
+
+	policy := &powerv1.CpuScalingPolicy{
+		WorkloadType:               WorkloadTypePollingDPDK,
+		SamplePeriod:               &metav1.Duration{Duration: 10 * time.Millisecond},
+		CooldownPeriod:             &metav1.Duration{Duration: 30 * time.Millisecond},
+		TargetUsage:                intPtr(80),
+		AllowedUsageDifference:     intPtr(5),
+		AllowedFrequencyDifference: intPtr(25),
+		FallbackFreqPercent:        intPtr(50),
+		ScalePercentage:            intPtr(100),
+	}
+
+	tcases := []struct {
+		name           string
+		cpuIDs         []uint
+		expectError    bool
+		expectErrorIDs []string
+		expectOptIDs   []uint
+	}{
+		{
+			name:         "successfully generates scaling options for all CPUs",
+			cpuIDs:       []uint{0, 2},
+			expectOptIDs: []uint{0, 2},
+		},
+		{
+			name:           "some CPUs not found in power library",
+			cpuIDs:         []uint{0, 5, 9},
+			expectError:    true,
+			expectErrorIDs: []string{"5", "9"},
+			expectOptIDs:   []uint{0},
+		},
+	}
+
+	for _, tc := range tcases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockHost := new(hostMock)
+			mockHost.On("GetAllCpus").Return(&cpuList)
+
+			r := &PowerPodReconciler{PowerLibrary: mockHost}
+
+			opts, err := r.generateCPUScalingOpts(policy, tc.cpuIDs)
+
+			if tc.expectError {
+				require.Error(t, err)
+				for _, id := range tc.expectErrorIDs {
+					assert.Contains(t, err.Error(), id)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+
+			require.Len(t, opts, len(tc.expectOptIDs))
+			actualIDs := make([]uint, len(opts))
+			for i, o := range opts {
+				actualIDs[i] = o.CPU.GetID()
+			}
+			assert.ElementsMatch(t, tc.expectOptIDs, actualIDs)
+
+			// Verify scaling parameters on returned opts.
+			for _, o := range opts {
+				assert.Equal(t, 10*time.Millisecond, o.SamplePeriod)
+				assert.Equal(t, 30*time.Millisecond, o.CooldownPeriod)
+				assert.Equal(t, 80, o.TargetUsage)
+				assert.Equal(t, 5, o.AllowedUsageDifference)
+				assert.Equal(t, 25*1000, o.AllowedFrequencyDifference)
+				assert.Equal(t, 1.0, o.ScaleFactor)
+				assert.Equal(t, scaling.FrequencyNotYetSet, o.CurrentTargetFrequency)
+
+				expectedFallback := minFreq + (maxFreq-minFreq)*50/100
+				assert.Equal(t, int(expectedFallback), o.FallbackFreq)
+			}
+		})
+	}
+}
+
+func TestPowerPod_Reconcile_WithCpuScalingPolicy(t *testing.T) {
+	testNode := "TestNode"
+	t.Setenv("NODE_NAME", testNode)
+
+	testcases := []struct {
+		name                                                    string
+		profileName                                             string
+		podUID                                                  string
+		cpuIDs                                                  []uint
+		sample, cooldown                                        time.Duration
+		targetUsage, usageDiff, freqDiff, fallbackPct, scalePct int
+	}{
+		{
+			name:        "profile1-two-cpus",
+			profileName: "scaling-profile-1",
+			podUID:      "pod-uid-foo",
+			cpuIDs:      []uint{0, 1},
+			sample:      10 * time.Millisecond,
+			cooldown:    30 * time.Millisecond,
+			targetUsage: 100, usageDiff: 10, freqDiff: 25, fallbackPct: 50, scalePct: 100,
+		},
+		{
+			name:        "profile2-one-cpu",
+			profileName: "scaling-profile-2",
+			podUID:      "pod-uid-bar",
+			cpuIDs:      []uint{5},
+			sample:      100 * time.Millisecond,
+			cooldown:    100 * time.Millisecond,
+			targetUsage: 50, usageDiff: 5, freqDiff: 45, fallbackPct: 0, scalePct: 130,
+		},
+		{
+			name:        "profile3-one-cpu",
+			profileName: "scaling-profile-3",
+			podUID:      "pod-uid-qux",
+			cpuIDs:      []uint{7},
+			sample:      300 * time.Millisecond,
+			cooldown:    301 * time.Millisecond,
+			targetUsage: 0, usageDiff: 0, freqDiff: 0, fallbackPct: 100, scalePct: 47,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Build CpuScalingPolicy and PowerProfile.
+			policy := &powerv1.CpuScalingPolicy{
+				WorkloadType:               WorkloadTypePollingDPDK,
+				SamplePeriod:               &metav1.Duration{Duration: tc.sample},
+				CooldownPeriod:             &metav1.Duration{Duration: tc.cooldown},
+				TargetUsage:                intPtr(tc.targetUsage),
+				AllowedUsageDifference:     intPtr(tc.usageDiff),
+				AllowedFrequencyDifference: intPtr(tc.freqDiff),
+				FallbackFreqPercent:        intPtr(tc.fallbackPct),
+				ScalePercentage:            intPtr(tc.scalePct),
+			}
+			profile := &powerv1.PowerProfile{
+				ObjectMeta: metav1.ObjectMeta{Name: tc.profileName, Namespace: PowerNamespace},
+				Spec:       powerv1.PowerProfileSpec{Name: tc.profileName, CpuScalingPolicy: policy},
+			}
+
+			// Build resource requirements referencing the profile.
+			profileResourceName := corev1.ResourceName(ResourcePrefix + tc.profileName)
+			cpuCount := int64(len(tc.cpuIDs))
+			resources := corev1.ResourceRequirements{
+				Limits: map[corev1.ResourceName]resource.Quantity{
+					corev1.ResourceCPU:  *resource.NewQuantity(cpuCount, resource.DecimalSI),
+					"memory":            *resource.NewQuantity(200, resource.DecimalSI),
+					profileResourceName: *resource.NewQuantity(cpuCount, resource.DecimalSI),
+				},
+				Requests: map[corev1.ResourceName]resource.Quantity{
+					corev1.ResourceCPU:  *resource.NewQuantity(cpuCount, resource.DecimalSI),
+					"memory":            *resource.NewQuantity(200, resource.DecimalSI),
+					profileResourceName: *resource.NewQuantity(cpuCount, resource.DecimalSI),
+				},
+			}
+
+			// Build the pod.
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "dpdk-pod",
+					Namespace: PowerNamespace,
+					UID:       types.UID(tc.podUID),
+				},
+				Spec: corev1.PodSpec{
+					NodeName: testNode,
+					Containers: []corev1.Container{
+						{Name: "dpdk-container", Resources: resources},
+					},
+					EphemeralContainers: []corev1.EphemeralContainer{},
+				},
+				Status: corev1.PodStatus{
+					Phase:    corev1.PodRunning,
+					QOSClass: corev1.PodQOSGuaranteed,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{Name: "dpdk-container", ContainerID: "docker://abc123"},
+					},
+				},
+			}
+
+			// Build kubelet PodResources response.
+			cpuIDs64 := make([]int64, len(tc.cpuIDs))
+			for i, id := range tc.cpuIDs {
+				cpuIDs64[i] = int64(id)
+			}
+			podResources := []*podresourcesapi.PodResources{
+				{
+					Name:      "dpdk-pod",
+					Namespace: PowerNamespace,
+					Containers: []*podresourcesapi.ContainerResources{
+						{Name: "dpdk-container", CpuIds: cpuIDs64},
+					},
+				},
+			}
+			podResourcesClient := createFakePodResourcesListerClient(podResources)
+
+			// Set up real power library with CPUs in the exclusive pool.
+			host, teardown, err := fullDummySystem()
+			assert.NoError(t, err)
+			t.Cleanup(teardown)
+			assert.NoError(t, host.GetSharedPool().SetCpuIDs(tc.cpuIDs))
+			pool, err := host.AddExclusivePool(tc.profileName)
+			assert.NoError(t, err)
+			assert.NoError(t, pool.SetCpuIDs(tc.cpuIDs))
+
+			// Create reconciler and override with real power library and DPDK mocks.
+			r, err := createPodReconcilerObject(
+				[]runtime.Object{
+					profile, pod, defaultNode, defaultPowerNodeState,
+					&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: testNode}},
+				},
+				podResourcesClient,
+			)
+			assert.NoError(t, err)
+			r.PowerLibrary = host
+
+			dpdkmk := new(DPDKTelemetryClientMock)
+			dpdkmk.On("EnsureConnection", &scaling.DPDKTelemetryConnectionData{
+				PodUID:      tc.podUID,
+				WatchedCPUs: tc.cpuIDs,
+			}).Return().Once()
+			r.DPDKTelemetryClient = dpdkmk
+
+			scalingMgrMock := new(ScalingMgrMock)
+			scalingMgrMock.On("AddCPUScaling", mock.Anything).Return().Once()
+			r.CPUScalingManager = scalingMgrMock
+
+			// Reconcile the pod.
+			_, err = r.Reconcile(context.TODO(), reconcile.Request{
+				NamespacedName: client.ObjectKey{Name: "dpdk-pod", Namespace: PowerNamespace},
+			})
+			assert.NoError(t, err)
+
+			// Verify DPDK connection was created.
+			dpdkmk.AssertExpectations(t)
+
+			// Verify AddCPUScaling was called with correct scaling options.
+			scalingMgrMock.AssertExpectations(t)
+			if assert.Equal(t, 1, len(scalingMgrMock.Calls)) {
+				actualScalingOpts := scalingMgrMock.Calls[0].Arguments.Get(0).([]scaling.CPUScalingOpts)
+				actualIDs := make([]uint, 0, len(actualScalingOpts))
+				for _, o := range actualScalingOpts {
+					actualIDs = append(actualIDs, o.CPU.GetID())
+				}
+				assert.ElementsMatch(t, tc.cpuIDs, actualIDs)
+				assert.Equal(t, tc.sample, actualScalingOpts[0].SamplePeriod)
+				assert.Equal(t, tc.cooldown, actualScalingOpts[0].CooldownPeriod)
+				assert.Equal(t, tc.targetUsage, actualScalingOpts[0].TargetUsage)
+				assert.Equal(t, tc.usageDiff, actualScalingOpts[0].AllowedUsageDifference)
+				assert.Equal(t, tc.freqDiff*1000, actualScalingOpts[0].AllowedFrequencyDifference)
+				assert.Equal(t, float64(tc.scalePct)/100, actualScalingOpts[0].ScaleFactor)
+
+				cpu := host.GetAllCpus().ByID(tc.cpuIDs[0])
+				minFreq, maxFreq := cpu.GetAbsMinMax()
+				fallbackFreq := minFreq + (maxFreq-minFreq)*(uint(tc.fallbackPct))/100
+				assert.Equal(t, int(fallbackFreq), actualScalingOpts[0].FallbackFreq)
+			}
+		})
+	}
+}
+
+func TestPowerPod_Reconcile_MultipleDPDKContainersRejected(t *testing.T) {
+	testNode := "TestNode"
+	t.Setenv("NODE_NAME", testNode)
+
+	profileName := "dpdk-profile"
+
+	policy := &powerv1.CpuScalingPolicy{
+		WorkloadType:               WorkloadTypePollingDPDK,
+		SamplePeriod:               &metav1.Duration{Duration: 10 * time.Millisecond},
+		CooldownPeriod:             &metav1.Duration{Duration: 30 * time.Millisecond},
+		TargetUsage:                intPtr(80),
+		AllowedUsageDifference:     intPtr(5),
+		AllowedFrequencyDifference: intPtr(25),
+		FallbackFreqPercent:        intPtr(50),
+		ScalePercentage:            intPtr(100),
+	}
+	profile := &powerv1.PowerProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: profileName, Namespace: PowerNamespace},
+		Spec:       powerv1.PowerProfileSpec{Name: profileName, CpuScalingPolicy: policy},
+	}
+
+	// Both containers request the same DPDK profile.
+	profileResourceName := corev1.ResourceName(ResourcePrefix + profileName)
+	makeResources := func(cpuCount int64) corev1.ResourceRequirements {
+		return corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:  *resource.NewQuantity(cpuCount, resource.DecimalSI),
+				"memory":            *resource.NewQuantity(200, resource.DecimalSI),
+				profileResourceName: *resource.NewQuantity(cpuCount, resource.DecimalSI),
+			},
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:  *resource.NewQuantity(cpuCount, resource.DecimalSI),
+				"memory":            *resource.NewQuantity(200, resource.DecimalSI),
+				profileResourceName: *resource.NewQuantity(cpuCount, resource.DecimalSI),
+			},
+		}
+	}
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "multi-dpdk-pod",
+			Namespace: PowerNamespace,
+			UID:       "multi-dpdk-uid",
+		},
+		Spec: corev1.PodSpec{
+			NodeName: testNode,
+			Containers: []corev1.Container{
+				{Name: "dpdk-container-1", Resources: makeResources(2)},
+				{Name: "dpdk-container-2", Resources: makeResources(2)},
+			},
+			EphemeralContainers: []corev1.EphemeralContainer{},
+		},
+		Status: corev1.PodStatus{
+			Phase:    corev1.PodRunning,
+			QOSClass: corev1.PodQOSGuaranteed,
+			ContainerStatuses: []corev1.ContainerStatus{
+				{Name: "dpdk-container-1", ContainerID: "docker://c1"},
+				{Name: "dpdk-container-2", ContainerID: "docker://c2"},
+			},
+		},
+	}
+
+	podResourcesClient := createFakePodResourcesListerClient([]*podresourcesapi.PodResources{{
+		Name:      "multi-dpdk-pod",
+		Namespace: PowerNamespace,
+		Containers: []*podresourcesapi.ContainerResources{
+			{Name: "dpdk-container-1", CpuIds: []int64{0, 1}},
+			{Name: "dpdk-container-2", CpuIds: []int64{2, 3}},
+		},
+	}})
+
+	// Set up real power library with CPUs in the exclusive pool.
+	host, teardown, err := fullDummySystem()
+	assert.NoError(t, err)
+	t.Cleanup(teardown)
+	assert.NoError(t, host.GetSharedPool().SetCpuIDs([]uint{0, 1, 2, 3}))
+	pool, err := host.AddExclusivePool(profileName)
+	assert.NoError(t, err)
+	assert.NoError(t, pool.SetCpuIDs([]uint{0, 1, 2, 3}))
+
+	r, err := createPodReconcilerObject(
+		[]runtime.Object{
+			profile, pod, defaultNode, defaultPowerNodeState,
+			&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: testNode}},
+		},
+		podResourcesClient,
+	)
+	assert.NoError(t, err)
+	r.PowerLibrary = host
+
+	// Only one EnsureConnection and one AddCPUScaling call expected (for the first container).
+	dpdkmk := new(DPDKTelemetryClientMock)
+	dpdkmk.On("EnsureConnection", &scaling.DPDKTelemetryConnectionData{
+		PodUID:      "multi-dpdk-uid",
+		WatchedCPUs: []uint{0, 1},
+	}).Return().Once()
+	r.DPDKTelemetryClient = dpdkmk
+
+	scalingMgrMock := new(ScalingMgrMock)
+	scalingMgrMock.On("AddCPUScaling", mock.MatchedBy(func(opts []scaling.CPUScalingOpts) bool {
+		// Only the first container's CPUs (0, 1) should be scaled.
+		if len(opts) != 2 {
+			return false
+		}
+		ids := []uint{opts[0].CPU.GetID(), opts[1].CPU.GetID()}
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		return reflect.DeepEqual(ids, []uint{0, 1})
+	})).Return().Once()
+	r.CPUScalingManager = scalingMgrMock
+
+	_, err = r.Reconcile(context.TODO(), reconcile.Request{
+		NamespacedName: client.ObjectKey{Name: "multi-dpdk-pod", Namespace: PowerNamespace},
+	})
+	assert.NoError(t, err)
+
+	dpdkmk.AssertExpectations(t)
+	scalingMgrMock.AssertExpectations(t)
+
+	// Verify the second container has an error in PowerNodeState.
+	pns := &powerv1.PowerNodeState{}
+	err = r.Client.Get(context.TODO(), client.ObjectKey{
+		Name:      testNode + "-power-state",
+		Namespace: PowerNamespace,
+	}, pns)
+	assert.NoError(t, err)
+
+	require.NotNil(t, pns.Status.CPUPools)
+	require.Len(t, pns.Status.CPUPools.Exclusive, 1)
+	containers := pns.Status.CPUPools.Exclusive[0].PowerContainers
+	require.Len(t, containers, 2)
+
+	// Find the second container and verify it has the expected error.
+	for _, pc := range containers {
+		if pc.Name == "dpdk-container-2" {
+			require.Len(t, pc.Errors, 1)
+			assert.Contains(t, pc.Errors[0], "DPDK dynamic frequency scaling is only supported for a single container per pod")
+		} else {
+			assert.Empty(t, pc.Errors, "first DPDK container should have no errors")
+		}
+	}
 }
