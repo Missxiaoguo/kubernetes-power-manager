@@ -47,8 +47,11 @@ spec:
             type: object
           status:
             description: |-
-              PowerNodeStateStatus defines the observed state of PowerNodeState
-              Each field is owned by a specific controller using Server-Side Apply (SSA)
+              PowerNodeStateStatus defines the observed state of PowerNodeState.
+              Each field is owned by a specific controller using Server-Side Apply (SSA).
+              IMPORTANT: All status updates to PowerNodeState MUST use SSA (client.Apply).
+              Non-SSA updates (Status().Update or MergePatch) will break field ownership
+              tracking and cause incorrect pruning behavior.
             properties:
               cpuPools:
                 description: |-
@@ -135,10 +138,9 @@ spec:
                               CPUs in a pool using a specific PowerProfile
                             properties:
                               cpuIDs:
-                                description: CPUIDs are the CPU IDs in this pool
-                                items:
-                                  type: integer
-                                type: array
+                                description: CPUIDs are the CPU IDs in this pool,
+                                  pretty-printed as ranges (e.g. "0-3,24,25")
+                                type: string
                               errors:
                                 description: Errors contains any errors encountered
                                   while configuring the CPUs in this pool
@@ -165,10 +167,9 @@ spec:
                       Owned by: PowerNodeConfig controller (shared, reserved)
                     properties:
                       cpuIDs:
-                        description: CPUIDs are the CPU IDs in this pool
-                        items:
-                          type: integer
-                        type: array
+                        description: CPUIDs are the CPU IDs in this pool, pretty-printed
+                          as ranges (e.g. "2-23,46,47")
+                        type: string
                       errors:
                         description: Errors contains any errors encountered while
                           configuring this pool

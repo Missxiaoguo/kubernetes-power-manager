@@ -52,7 +52,6 @@ type PowerWorkloadSpec struct {
 	PowerProfile string `json:"powerProfile"`
 }
 
-
 // PowerWorkloadStatus defines the observed state of PowerWorkload
 type PowerWorkloadStatus struct {
 	// Holds the info on the node name and cpu ids for each node.

@@ -81,7 +81,7 @@ metadata:
   name: node-agent-cluster-resources
 rules:
   - apiGroups: [ "", "batch", "power.openshift.io" ]
-    resources: [ "nodes", "nodes/status", "pods", "pods/status", "powerprofiles", "powerprofiles/status", "powerworkloads", "powerworkloads/status", "powernodes", "powernodes/status", "powernodestates", "powernodestates/status", "uncores", "uncores/status" ]
+    resources: [ "nodes", "nodes/status", "pods", "pods/status", "powernodeconfigs", "powerprofiles", "powerprofiles/status", "powerworkloads", "powerworkloads/status", "powernodes", "powernodes/status", "powernodestates", "powernodestates/status", "uncores", "uncores/status" ]
     verbs: [ "*" ]
   - apiGroups:
     - security.openshift.io
