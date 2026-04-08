@@ -240,6 +240,7 @@ func TestGetActivePowerNodeConfigName(t *testing.T) {
 		name         string
 		objs         []runtime.Object
 		expectedName string
+		expectErr    bool
 	}{
 		{
 			name:         "active config present",
@@ -254,9 +255,9 @@ func TestGetActivePowerNodeConfigName(t *testing.T) {
 			expectedName: "",
 		},
 		{
-			name:         "PowerNodeState not found",
-			objs:         nil,
-			expectedName: "",
+			name:      "PowerNodeState not found",
+			objs:      nil,
+			expectErr: true,
 		},
 	}
 
@@ -264,8 +265,12 @@ func TestGetActivePowerNodeConfigName(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := createPowerNodeConfigReconciler(tc.objs, nil)
 			name, err := r.getActivePowerNodeConfigName(context.TODO(), "test-node")
-			assert.NoError(t, err)
-			assert.Equal(t, tc.expectedName, name)
+			if tc.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedName, name)
+			}
 		})
 	}
 }

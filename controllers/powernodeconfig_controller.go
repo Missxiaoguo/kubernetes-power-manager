@@ -151,7 +151,7 @@ func (r *PowerNodeConfigReconciler) getActivePowerNodeConfigName(ctx context.Con
 		Name:      fmt.Sprintf("%s-power-state", nodeName),
 	}, pns); err != nil {
 		if errors.IsNotFound(err) {
-			return "", nil // TODO: Return error to requeue so we retry once PowerConfig creates the CR.
+			return "", fmt.Errorf("PowerNodeState %s not found, requeueing", fmt.Sprintf("%s-power-state", nodeName))
 		}
 		return "", err
 	}
@@ -309,7 +309,7 @@ func (r *PowerNodeConfigReconciler) configureReservedPools(
 	}
 	pools := r.PowerLibrary.GetAllExclusivePools()
 	for _, p := range *pools {
-		if strings.Contains(p.Name(), nodeName+"-reserved-") {
+		if strings.HasPrefix(p.Name(), nodeName+"-reserved-") {
 			if err := p.Remove(); err != nil {
 				return nil, []error{fmt.Errorf("failed to remove reserved pool %s: %w", p.Name(), err)}
 			}
@@ -360,7 +360,7 @@ func (r *PowerNodeConfigReconciler) cleanupPowerNodeConfigPools(ctx context.Cont
 	movedCores := *r.PowerLibrary.GetSharedPool().Cpus()
 	pools := r.PowerLibrary.GetAllExclusivePools()
 	for _, p := range *pools {
-		if strings.Contains(p.Name(), nodeName+"-reserved-") {
+		if strings.HasPrefix(p.Name(), nodeName+"-reserved-") {
 			movedCores = append(movedCores, *p.Cpus()...)
 			if err := p.Remove(); err != nil {
 				return fmt.Errorf("failed to remove reserved pool %s: %w", p.Name(), err)
@@ -446,8 +446,7 @@ func (r *PowerNodeConfigReconciler) updatePowerNodeStatusPools(
 	if err := r.Status().Patch(ctx, patchNodeState, client.Apply,
 		client.FieldOwner(FieldOwnerPowerNodeConfigController), client.ForceOwnership); err != nil {
 		if errors.IsNotFound(err) {
-			logger.V(5).Info("PowerNodeState not found, skipping status update")
-			return nil
+			return fmt.Errorf("PowerNodeState %s not found, requeueing", powerNodeStateName)
 		}
 		return fmt.Errorf("failed to update PowerNodeState pool status: %w", err)
 	}
