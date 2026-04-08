@@ -52,10 +52,6 @@ type PowerWorkloadSpec struct {
 	PowerProfile string `json:"powerProfile"`
 }
 
-type ReservedSpec struct {
-	Cores        []uint `json:"cores"`
-	PowerProfile string `json:"powerProfile,omitempty"`
-}
 
 // PowerWorkloadStatus defines the observed state of PowerWorkload
 type PowerWorkloadStatus struct {

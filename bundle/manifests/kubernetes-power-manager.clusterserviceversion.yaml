@@ -26,6 +26,35 @@ metadata:
         },
         {
           "apiVersion": "power.openshift.io/v1",
+          "kind": "PowerNodeConfig",
+          "metadata": {
+            "name": "amd64-config",
+            "namespace": "power-manager"
+          },
+          "spec": {
+            "nodeSelector": {
+              "labelSelector": {
+                "matchLabels": {
+                  "kubernetes.io/arch": "amd64"
+                }
+              }
+            },
+            "reservedCPUs": [
+              {
+                "cores": [
+                  0,
+                  1,
+                  24,
+                  25
+                ],
+                "powerProfile": "amd64-performance"
+              }
+            ],
+            "sharedPowerProfile": "amd64-shared"
+          }
+        },
+        {
+          "apiVersion": "power.openshift.io/v1",
           "kind": "PowerProfile",
           "metadata": {
             "labels": {
@@ -108,7 +137,7 @@ metadata:
         }
       ]
     capabilities: Basic Install
-    createdAt: "2026-03-21T18:32:19Z"
+    createdAt: "2026-04-07T23:59:17Z"
     operators.operatorframework.io/builder: operator-sdk-v1.42.0
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v4
   name: kubernetes-power-manager.v0.0.1
@@ -122,12 +151,21 @@ spec:
         kind: PowerConfig
         name: powerconfigs.power.openshift.io
         version: v1
+      - description: |-
+          PowerNodeConfig is the Schema for the powernodeconfigs API.
+          It configures shared and reserved CPU pools on nodes matching spec.nodeSelector.
+        displayName: Power Node Config
+        kind: PowerNodeConfig
+        name: powernodeconfigs.power.openshift.io
+        version: v1
       - description: PowerNode is the Schema for the powernodes API
         displayName: Power Node
         kind: PowerNode
         name: powernodes.power.openshift.io
         version: v1
-      - description: PowerNodeState is the Schema for the powernodestates API
+      - description: |-
+          PowerNodeState is the Schema for the powernodestates API
+          It provides per-node status for power management configuration
         displayName: Power Node State
         kind: PowerNodeState
         name: powernodestates.power.openshift.io
