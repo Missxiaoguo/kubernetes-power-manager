@@ -29,7 +29,7 @@ func createPowerNodeConfigReconciler(objs []runtime.Object, powerLib power.Host)
 	))
 	s := scheme.Scheme
 	_ = powerv1.AddToScheme(s)
-	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).WithScheme(s).Build()
+	cl := fake.NewClientBuilder().WithRuntimeObjects(objs...).WithScheme(s).WithStatusSubresource(&powerv1.PowerNodeState{}).Build()
 	return &PowerNodeConfigReconciler{
 		Client:       cl,
 		Log:          ctrl.Log.WithName("testing"),
@@ -328,6 +328,38 @@ func TestValidatePowerNodeConfigProfiles(t *testing.T) {
 			},
 			expectErr:   true,
 			errContains: "missing",
+		},
+		{
+			// This should be blocked by the CRD validation, but adding it here in case the fakeclient doesn't enforce it.
+			name: "duplicate core within same entry",
+			config: newPowerNodeConfig("c", "shared-prof", nil, []powerv1.ReservedSpec{
+				{Cores: []uint{0, 1, 0}, PowerProfile: "perf"},
+			}, time.Now()),
+			clientObjs: []runtime.Object{
+				newTestNode("test-node", map[string]string{}),
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "shared-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "shared-prof", Shared: true}},
+			},
+			setupMock: func() *hostMock {
+				return new(hostMock)
+			},
+			expectErr:   true,
+			errContains: "reserved CPU 0 is listed in multiple reservedCPUs entries",
+		},
+		{
+			name: "overlapping reserved CPUs across entries",
+			config: newPowerNodeConfig("c", "shared-prof", nil, []powerv1.ReservedSpec{
+				{Cores: []uint{0, 1}, PowerProfile: "perf"},
+				{Cores: []uint{1, 2}, PowerProfile: "balanced"},
+			}, time.Now()),
+			clientObjs: []runtime.Object{
+				newTestNode("test-node", map[string]string{}),
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "shared-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "shared-prof", Shared: true}},
+			},
+			setupMock: func() *hostMock {
+				return new(hostMock)
+			},
+			expectErr:   true,
+			errContains: "reserved CPU 1 is listed in multiple reservedCPUs entries",
 		},
 		{
 			name:   "reserved profile unavailable",

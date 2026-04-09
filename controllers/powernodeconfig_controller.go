@@ -260,6 +260,17 @@ func (r *PowerNodeConfigReconciler) validatePowerNodeConfigProfiles(
 		return fmt.Errorf("PowerProfile '%s' is not a shared profile (spec.shared must be true)", config.Spec.SharedPowerProfile)
 	}
 
+	// Validate reserved CPU entries are disjoint (no core appears in multiple entries).
+	seenCores := map[uint]struct{}{}
+	for _, rc := range config.Spec.ReservedCPUs {
+		for _, core := range rc.Cores {
+			if _, exists := seenCores[core]; exists {
+				return fmt.Errorf("reserved CPU %d is listed in multiple reservedCPUs entries", core)
+			}
+			seenCores[core] = struct{}{}
+		}
+	}
+
 	// Validate all referenced profiles are available on this node.
 	profileNames := []string{config.Spec.SharedPowerProfile}
 	for _, rc := range config.Spec.ReservedCPUs {
@@ -484,41 +495,70 @@ func (r *PowerNodeConfigReconciler) removePowerNodeStatusPools(ctx context.Conte
 	return nil
 }
 
-// enqueueAllPowerNodeConfigs returns reconcile requests for all PowerNodeConfigs in the namespace.
-func (r *PowerNodeConfigReconciler) enqueueAllPowerNodeConfigs(ctx context.Context, _ client.Object) []reconcile.Request {
-	return r.listPowerNodeConfigRequests(ctx, nil)
-}
-
-// enqueueConfigsReferencingProfile returns reconcile requests for PowerNodeConfigs that
-// reference the changed PowerProfile in spec.powerProfile or spec.reservedCPUs[].powerProfile.
-func (r *PowerNodeConfigReconciler) enqueueConfigsReferencingProfile(ctx context.Context, obj client.Object) []reconcile.Request {
-	profileName := obj.GetName()
-	return r.listPowerNodeConfigRequests(ctx, func(config *powerv1.PowerNodeConfig) bool {
-		return configReferencesProfile(config, profileName)
-	})
-}
-
-// listPowerNodeConfigRequests lists all PowerNodeConfigs and returns reconcile requests,
-// optionally filtered by a predicate. If filter is nil, all configs are included.
-func (r *PowerNodeConfigReconciler) listPowerNodeConfigRequests(ctx context.Context, filter func(*powerv1.PowerNodeConfig) bool) []reconcile.Request {
+// enqueuePowerNodeConfigReconcile returns a single reconcile request to trigger
+// a full re-evaluation of all PowerNodeConfigs for this node.
+func (r *PowerNodeConfigReconciler) enqueuePowerNodeConfigReconcile(ctx context.Context, _ client.Object) []reconcile.Request {
 	configList := &powerv1.PowerNodeConfigList{}
 	if err := r.List(ctx, configList, client.InNamespace(PowerNamespace)); err != nil {
 		r.Log.Error(err, "failed to list PowerNodeConfigs")
 		return nil
 	}
-	requests := make([]reconcile.Request, 0, len(configList.Items))
-	for i := range configList.Items {
-		if filter != nil && !filter(&configList.Items[i]) {
-			continue
-		}
-		requests = append(requests, reconcile.Request{
-			NamespacedName: types.NamespacedName{
-				Name:      configList.Items[i].Name,
-				Namespace: configList.Items[i].Namespace,
-			},
-		})
+	if len(configList.Items) == 0 {
+		return nil
 	}
-	return requests
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name:      configList.Items[0].Name,
+			Namespace: configList.Items[0].Namespace,
+		},
+	}}
+}
+
+// enqueueMatchingPowerNodeConfigReconcile returns a single reconcile request for the first
+// PowerNodeConfig that matches this node's labels. Since the reconciler always
+// re-evaluates all matching configs regardless of which key triggered it,
+// one request is sufficient to trigger a full reconciliation.
+func (r *PowerNodeConfigReconciler) enqueueMatchingPowerNodeConfigReconcile(ctx context.Context, _ client.Object) []reconcile.Request {
+	nodeName := os.Getenv("NODE_NAME")
+	configs, err := r.getMatchingPowerNodeConfigs(ctx, nodeName)
+	if err != nil {
+		r.Log.Error(err, "failed to get matching PowerNodeConfigs")
+		return nil
+	}
+	if len(configs) == 0 {
+		return nil
+	}
+	return []reconcile.Request{{
+		NamespacedName: types.NamespacedName{
+			Name:      configs[0].Name,
+			Namespace: configs[0].Namespace,
+		},
+	}}
+}
+
+// enqueueConfigsReferencingProfile returns a single reconcile request if any
+// PowerNodeConfig matching this node references the changed PowerProfile. Since this
+// controller runs on a per-node agent and the reconciler always re-evaluates all
+// matching configs, one request is sufficient to trigger a full reconciliation.
+func (r *PowerNodeConfigReconciler) enqueueConfigsReferencingProfile(ctx context.Context, obj client.Object) []reconcile.Request {
+	profileName := obj.GetName()
+	nodeName := os.Getenv("NODE_NAME")
+	configs, err := r.getMatchingPowerNodeConfigs(ctx, nodeName)
+	if err != nil {
+		r.Log.Error(err, "failed to get matching PowerNodeConfigs")
+		return nil
+	}
+	for i := range configs {
+		if configReferencesProfile(&configs[i], profileName) {
+			return []reconcile.Request{{
+				NamespacedName: types.NamespacedName{
+					Name:      configs[i].Name,
+					Namespace: configs[i].Namespace,
+				},
+			}}
+		}
+	}
+	return nil
 }
 
 // describeConflictingConfig returns a conflict error string for a non-selected PowerNodeConfig,
@@ -537,6 +577,14 @@ func (r *PowerNodeConfigReconciler) describeConflictingConfig(ctx context.Contex
 	return fmt.Sprintf("conflicting PowerNodeConfig: %s", config.Name)
 }
 
+// getExclusiveEntries safely extracts the exclusive pool entries from a PowerNodeState.
+func getExclusiveEntries(pns *powerv1.PowerNodeState) []powerv1.ExclusiveCPUPoolStatus {
+	if pns.Status.CPUPools == nil {
+		return nil
+	}
+	return pns.Status.CPUPools.Exclusive
+}
+
 // configReferencesProfile returns true if the config references the given profile name
 // in spec.powerProfile or any spec.reservedCPUs[].powerProfile.
 func configReferencesProfile(config *powerv1.PowerNodeConfig, profileName string) bool {
@@ -551,38 +599,56 @@ func configReferencesProfile(config *powerv1.PowerNodeConfig, profileName string
 	return false
 }
 
-// thisNodeLabelChangePredicate filters Node watch events to only this node's label changes.
-func thisNodeLabelChangePredicate() predicate.Predicate {
-	nodeName := os.Getenv("NODE_NAME")
-	return predicate.Funcs{
-		CreateFunc:  func(e event.CreateEvent) bool { return false },
-		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-		GenericFunc: func(e event.GenericEvent) bool { return false },
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			if e.ObjectNew.GetName() != nodeName {
-				return false
-			}
-			oldNode := e.ObjectOld.(*corev1.Node)
-			newNode := e.ObjectNew.(*corev1.Node)
-			return !reflect.DeepEqual(oldNode.Labels, newNode.Labels)
-		},
-	}
-}
-
 // SetupWithManager registers the controller and configures watches for
-// PowerNodeConfigs, PowerProfiles, Node label changes, and power-relevant Pod changes.
+// PowerNodeConfigs, PowerProfiles, Node label changes, and power-relevant Pod create/delete.
 func (r *PowerNodeConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	nodeName := os.Getenv("NODE_NAME")
 	return ctrl.NewControllerManagedBy(mgr).
+		// PowerNodeConfig CRUD: re-evaluate which config should be active.
 		For(&powerv1.PowerNodeConfig{}).
-		Watches(&powerv1.PowerNodeConfig{},
-			handler.EnqueueRequestsFromMapFunc(r.enqueueAllPowerNodeConfigs)).
+		// PowerProfile changes: re-apply if the changed profile is referenced by a config.
+		// Only enqueues configs that reference the specific profile.
 		Watches(&powerv1.PowerProfile{},
 			handler.EnqueueRequestsFromMapFunc(r.enqueueConfigsReferencingProfile)).
+		// Node label changes: labels determine which configs match this node.
+		// Enqueues any config (not filtered by match) because a label change can cause
+		// a previously matching config to stop matching, requiring cleanup.
 		Watches(&corev1.Node{},
-			handler.EnqueueRequestsFromMapFunc(r.enqueueAllPowerNodeConfigs),
-			builder.WithPredicates(thisNodeLabelChangePredicate())).
-		Watches(&corev1.Pod{},
-			handler.EnqueueRequestsFromMapFunc(r.enqueueAllPowerNodeConfigs),
-			builder.WithPredicates(predicate.NewPredicateFuncs(PowerReleventPodPredicate))).
+			handler.EnqueueRequestsFromMapFunc(r.enqueuePowerNodeConfigReconcile),
+			builder.WithPredicates(predicate.Funcs{
+				CreateFunc:  func(e event.CreateEvent) bool { return false },
+				DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+				GenericFunc: func(e event.GenericEvent) bool { return false },
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					if e.ObjectNew.GetName() != nodeName {
+						return false
+					}
+					oldNode := e.ObjectOld.(*corev1.Node)
+					newNode := e.ObjectNew.(*corev1.Node)
+					return !reflect.DeepEqual(oldNode.Labels, newNode.Labels)
+				},
+			})).
+		// PowerNodeState exclusive pool changes: when the PowerPod controller moves CPUs
+		// between exclusive and shared pools (via SSA), the shared CPU list in status needs
+		// to be refreshed. Only fires when status.cpuPools.exclusive changes on this node's
+		// PowerNodeState — changes to shared/reserved (written by this controller) are ignored
+		// to prevent a reconcile loop.
+		Watches(&powerv1.PowerNodeState{},
+			handler.EnqueueRequestsFromMapFunc(r.enqueueMatchingPowerNodeConfigReconcile),
+			builder.WithPredicates(predicate.Funcs{
+				CreateFunc:  func(e event.CreateEvent) bool { return false },
+				DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+				GenericFunc: func(e event.GenericEvent) bool { return false },
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					if e.ObjectNew.GetName() != nodeName+"-power-state" {
+						return false
+					}
+					oldPNS := e.ObjectOld.(*powerv1.PowerNodeState)
+					newPNS := e.ObjectNew.(*powerv1.PowerNodeState)
+					oldExclusive := getExclusiveEntries(oldPNS)
+					newExclusive := getExclusiveEntries(newPNS)
+					return !reflect.DeepEqual(oldExclusive, newExclusive)
+				},
+			})).
 		Complete(r)
 }
