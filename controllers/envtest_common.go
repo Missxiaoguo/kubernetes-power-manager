@@ -74,3 +74,44 @@ func createTestPowerNodeState(t *testing.T, cl client.Client, name string) {
 	err := cl.Create(context.TODO(), pns)
 	require.NoError(t, err)
 }
+
+// newTestPowerProfile creates a PowerProfile for testing.
+func newTestPowerProfile(name string, shared bool) *powerv1.PowerProfile {
+	return &powerv1.PowerProfile{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: PowerNamespace},
+		Spec:       powerv1.PowerProfileSpec{Name: name, Shared: shared},
+	}
+}
+
+// createTestNode creates a Node with the given labels.
+func createTestNode(t *testing.T, cl client.Client, name string, labels map[string]string) {
+	t.Helper()
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: labels,
+		},
+	}
+	require.NoError(t, cl.Create(context.TODO(), node))
+}
+
+// createTestPowerNodeConfig creates a PowerNodeConfig with the given spec.
+func createTestPowerNodeConfig(t *testing.T, cl client.Client, name string, sharedProfile string, matchLabels map[string]string, reserved []powerv1.ReservedSpec) {
+	t.Helper()
+	config := &powerv1.PowerNodeConfig{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: PowerNamespace,
+		},
+		Spec: powerv1.PowerNodeConfigSpec{
+			SharedPowerProfile: sharedProfile,
+			ReservedCPUs:       reserved,
+		},
+	}
+	if matchLabels != nil {
+		config.Spec.NodeSelector = powerv1.NodeSelector{
+			LabelSelector: metav1.LabelSelector{MatchLabels: matchLabels},
+		}
+	}
+	require.NoError(t, cl.Create(context.TODO(), config))
+}

@@ -82,7 +82,10 @@ func (r *PowerNodeConfigReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	activeConfigName, err := r.getActivePowerNodeConfigName(ctx, nodeName)
 	if err != nil {
-		return ctrl.Result{}, err
+		// PowerNodeState may not exist yet at startup (created by PowerConfig controller).
+		// Requeue instead of returning an error to avoid noisy error logs.
+		logger.Info("failed to get active config, requeueing", "reason", err.Error())
+		return ctrl.Result{RequeueAfter: queuetime}, nil
 	}
 
 	selected := selectPowerNodeConfig(matches, activeConfigName, &logger)
@@ -146,12 +149,13 @@ func (r *PowerNodeConfigReconciler) getMatchingPowerNodeConfigs(ctx context.Cont
 // getActivePowerNodeConfigName reads the currently active config name from PowerNodeState status.
 func (r *PowerNodeConfigReconciler) getActivePowerNodeConfigName(ctx context.Context, nodeName string) (string, error) {
 	pns := &powerv1.PowerNodeState{}
+	pnsName := fmt.Sprintf("%s-power-state", nodeName)
 	if err := r.Get(ctx, client.ObjectKey{
 		Namespace: PowerNamespace,
-		Name:      fmt.Sprintf("%s-power-state", nodeName),
+		Name:      pnsName,
 	}, pns); err != nil {
 		if errors.IsNotFound(err) {
-			return "", fmt.Errorf("PowerNodeState %s not found, requeueing", fmt.Sprintf("%s-power-state", nodeName))
+			return "", fmt.Errorf("PowerNodeState %s not found, requeueing", pnsName)
 		}
 		return "", err
 	}
@@ -209,7 +213,9 @@ func (r *PowerNodeConfigReconciler) applyPowerNodeConfig(
 	// settings — the controller records an error and requeues, but does not tear down the pools.
 	if err := r.validatePowerNodeConfigProfiles(ctx, config, nodeName, logger); err != nil {
 		// Record the validation error in PowerNodeState so users can see why the config isn't applied.
-		_ = r.updatePowerNodeStatusPools(ctx, nodeName, config.Name, config.Spec.SharedPowerProfile, "", nil, []string{err.Error()}, logger)
+		if statusErr := r.updatePowerNodeStatusPools(ctx, nodeName, config.Name, config.Spec.SharedPowerProfile, "", nil, []string{err.Error()}, logger); statusErr != nil {
+			logger.Error(statusErr, "failed to update PowerNodeState with validation error")
+		}
 		logger.Error(err, "profile validation failed, requeueing")
 		return ctrl.Result{RequeueAfter: queuetime}, nil
 	}
@@ -303,21 +309,23 @@ func (r *PowerNodeConfigReconciler) configureSharedPool(config *powerv1.PowerNod
 	if err := r.PowerLibrary.GetSharedPool().SetPowerProfile(profile); err != nil {
 		return fmt.Errorf("failed to set shared pool profile: %w", err)
 	}
+	// Move all reserved CPUs into the shared pool so they inherit the profile.
+	// configureReservedPools will then move specific CPUs back to reserved.
+	if err := r.PowerLibrary.GetReservedPool().SetCpuIDs([]uint{}); err != nil {
+		return fmt.Errorf("failed to clear reserved pool: %w", err)
+	}
 	logger.V(5).Info("configured shared pool profile", "profile", config.Spec.SharedPowerProfile)
 	return nil
 }
 
-// configureReservedPools clears existing pseudo-reserved pools, then creates new ones
+// configureReservedPools removes existing pseudo-reserved pools, then creates new ones
 // based on the config's reservedCPUs spec. Returns per-group status and any errors.
 func (r *PowerNodeConfigReconciler) configureReservedPools(
 	config *powerv1.PowerNodeConfig,
 	nodeName string,
 	logger *logr.Logger,
 ) ([]powerv1.PowerProfileCPUs, []error) {
-	// Clear reserved pool and remove existing pseudo-reserved pools.
-	if err := r.PowerLibrary.GetReservedPool().SetCpuIDs([]uint{}); err != nil {
-		return nil, []error{fmt.Errorf("failed to clear reserved pool: %w", err)}
-	}
+	// Remove existing pseudo-reserved pools.
 	pools := r.PowerLibrary.GetAllExclusivePools()
 	for _, p := range *pools {
 		if strings.HasPrefix(p.Name(), nodeName+"-reserved-") {
@@ -479,7 +487,13 @@ func (r *PowerNodeConfigReconciler) removePowerNodeStatusPools(ctx context.Conte
 			Name:      powerNodeStateName,
 			Namespace: PowerNamespace,
 		},
-		Status: powerv1.PowerNodeStateStatus{},
+		Status: powerv1.PowerNodeStateStatus{
+			CPUPools: &powerv1.CPUPoolsStatus{
+				// Empty reserved list (omitzero → "[]") triggers SSA field manager cascade cleanup.
+				// Shared is nil → released by prune. Both are removed, field manager is cleaned up.
+				Reserved: []powerv1.ReservedCPUPoolStatus{},
+			},
+		},
 	}
 
 	if err := r.Status().Patch(ctx, patchNodeState, client.Apply,
@@ -536,31 +550,6 @@ func (r *PowerNodeConfigReconciler) enqueueMatchingPowerNodeConfigReconcile(ctx 
 	}}
 }
 
-// enqueueConfigsReferencingProfile returns a single reconcile request if any
-// PowerNodeConfig matching this node references the changed PowerProfile. Since this
-// controller runs on a per-node agent and the reconciler always re-evaluates all
-// matching configs, one request is sufficient to trigger a full reconciliation.
-func (r *PowerNodeConfigReconciler) enqueueConfigsReferencingProfile(ctx context.Context, obj client.Object) []reconcile.Request {
-	profileName := obj.GetName()
-	nodeName := os.Getenv("NODE_NAME")
-	configs, err := r.getMatchingPowerNodeConfigs(ctx, nodeName)
-	if err != nil {
-		r.Log.Error(err, "failed to get matching PowerNodeConfigs")
-		return nil
-	}
-	for i := range configs {
-		if configReferencesProfile(&configs[i], profileName) {
-			return []reconcile.Request{{
-				NamespacedName: types.NamespacedName{
-					Name:      configs[i].Name,
-					Namespace: configs[i].Namespace,
-				},
-			}}
-		}
-	}
-	return nil
-}
-
 // describeConflictingConfig returns a conflict error string for a non-selected PowerNodeConfig,
 // including validation details (e.g., non-shared profile) to help users diagnose misconfiguration.
 func (r *PowerNodeConfigReconciler) describeConflictingConfig(ctx context.Context, config *powerv1.PowerNodeConfig) string {
@@ -585,31 +574,16 @@ func getExclusiveEntries(pns *powerv1.PowerNodeState) []powerv1.ExclusiveCPUPool
 	return pns.Status.CPUPools.Exclusive
 }
 
-// configReferencesProfile returns true if the config references the given profile name
-// in spec.powerProfile or any spec.reservedCPUs[].powerProfile.
-func configReferencesProfile(config *powerv1.PowerNodeConfig, profileName string) bool {
-	if config.Spec.SharedPowerProfile == profileName {
-		return true
-	}
-	for _, rc := range config.Spec.ReservedCPUs {
-		if rc.PowerProfile == profileName {
-			return true
-		}
-	}
-	return false
-}
-
 // SetupWithManager registers the controller and configures watches for
-// PowerNodeConfigs, PowerProfiles, Node label changes, and power-relevant Pod create/delete.
+// PowerNodeConfigs, Node label changes, and PowerNodeState exclusive pool changes.
 func (r *PowerNodeConfigReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	nodeName := os.Getenv("NODE_NAME")
 	return ctrl.NewControllerManagedBy(mgr).
 		// PowerNodeConfig CRUD: re-evaluate which config should be active.
 		For(&powerv1.PowerNodeConfig{}).
-		// PowerProfile changes: re-apply if the changed profile is referenced by a config.
-		// Only enqueues configs that reference the specific profile.
-		Watches(&powerv1.PowerProfile{},
-			handler.EnqueueRequestsFromMapFunc(r.enqueueConfigsReferencingProfile)).
+		// No PowerProfile watch: the PowerProfile controller handles pool reconfiguration
+		// on profile updates/deletes. Watching profiles here would cause a redundant
+		// tear-down/rebuild of reserved pools and a race on profile deletion.
 		// Node label changes: labels determine which configs match this node.
 		// Enqueues any config (not filtered by match) because a label change can cause
 		// a previously matching config to stop matching, requiring cleanup.

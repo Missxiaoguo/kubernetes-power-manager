@@ -23,18 +23,9 @@ import (
 	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
-
-// newTestPowerProfile creates a PowerProfile for use in envtest SSA tests.
-func newTestPowerProfile(name string) *powerv1.PowerProfile {
-	return &powerv1.PowerProfile{
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: PowerNamespace},
-		Spec:       powerv1.PowerProfileSpec{Name: name},
-	}
-}
 
 func TestSSA_ProfileFieldManagerOwnership(t *testing.T) {
 	cl, cleanup := setupEnvTest(t)
@@ -47,10 +38,10 @@ func TestSSA_ProfileFieldManagerOwnership(t *testing.T) {
 	logger := ctrl.Log.WithName("testing")
 
 	// Add two profiles via the production function.
-	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance"), nil, &logger)
+	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance", false), nil, &logger)
 	require.NoError(t, err)
 
-	err = addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("balance-power"), nil, &logger)
+	err = addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("balance-power", false), nil, &logger)
 	require.NoError(t, err)
 
 	// Both profiles should coexist.
@@ -83,10 +74,10 @@ func TestSSA_ProfileRemovalPreservesOtherProfiles(t *testing.T) {
 	logger := ctrl.Log.WithName("testing")
 
 	// Add two profiles.
-	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance"), nil, &logger)
+	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance", false), nil, &logger)
 	require.NoError(t, err)
 
-	err = addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("balance-power"), nil, &logger)
+	err = addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("balance-power", false), nil, &logger)
 	require.NoError(t, err)
 
 	// Remove profile 1 via the production removal function.
@@ -113,11 +104,11 @@ func TestSSA_ProfileUpdatePreservesEntry(t *testing.T) {
 	logger := ctrl.Log.WithName("testing")
 
 	// Apply initial profile.
-	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance"), nil, &logger)
+	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance", false), nil, &logger)
 	require.NoError(t, err)
 
 	// Update the same profile with errors.
-	err = addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance"), fmt.Errorf("epp invalid"), &logger)
+	err = addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("performance", false), fmt.Errorf("epp invalid"), &logger)
 	require.NoError(t, err)
 
 	pns := &powerv1.PowerNodeState{}
@@ -144,7 +135,7 @@ func TestSSA_RemoveLastProfileDoesNotFailWithEmptyStatus(t *testing.T) {
 	logger := ctrl.Log.WithName("testing")
 
 	// Add a single profile via the production function.
-	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("test-profile"), nil, &logger)
+	err := addPowerNodeStatusProfileEntry(ctx, cl, nodeName, newTestPowerProfile("test-profile", false), nil, &logger)
 	require.NoError(t, err, "failed to add profile")
 
 	// Remove the last profile.

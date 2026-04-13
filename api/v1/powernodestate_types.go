@@ -71,7 +71,7 @@ type CPUPoolsStatus struct {
 	// Reserved contains the status of the reserved CPU pools
 	// Owned by: PowerNodeConfig controller (shared, reserved)
 	// +optional
-	Reserved []ReservedCPUPoolStatus `json:"reserved,omitempty"`
+	Reserved []ReservedCPUPoolStatus `json:"reserved,omitzero"`
 
 	// Exclusive contains the status of exclusive CPU pools
 	// Owned by: PowerPod controller (exclusive)

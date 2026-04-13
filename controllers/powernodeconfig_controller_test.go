@@ -415,11 +415,14 @@ func TestConfigureSharedPool(t *testing.T) {
 				h := new(hostMock)
 				ep := new(poolMock)
 				sp := new(poolMock)
+				rp := new(poolMock)
 				pm := new(profMock)
 				h.On("GetExclusivePool", "test-profile").Return(ep)
 				h.On("GetSharedPool").Return(sp)
+				h.On("GetReservedPool").Return(rp)
 				ep.On("GetPowerProfile").Return(pm)
 				sp.On("SetPowerProfile", pm).Return(nil)
+				rp.On("SetCpuIDs", []uint{}).Return(nil)
 				return h
 			},
 		},
@@ -810,49 +813,6 @@ func TestApplyPowerNodeConfig(t *testing.T) {
 			if tc.expectRequeue {
 				assert.Equal(t, queuetime, result.RequeueAfter)
 			}
-		})
-	}
-}
-
-// --- configReferencesProfile ---
-
-func TestConfigReferencesProfile(t *testing.T) {
-	tcases := []struct {
-		name        string
-		config      *powerv1.PowerNodeConfig
-		profileName string
-		expected    bool
-	}{
-		{
-			name:        "matches shared profile",
-			config:      newPowerNodeConfig("c", "perf", nil, nil, time.Now()),
-			profileName: "perf",
-			expected:    true,
-		},
-		{
-			name:        "matches reserved profile",
-			config:      newPowerNodeConfig("c", "shared", nil, []powerv1.ReservedSpec{{Cores: []uint{0}, PowerProfile: "perf"}}, time.Now()),
-			profileName: "perf",
-			expected:    true,
-		},
-		{
-			name:        "no match",
-			config:      newPowerNodeConfig("c", "shared", nil, []powerv1.ReservedSpec{{Cores: []uint{0}, PowerProfile: "balanced"}}, time.Now()),
-			profileName: "perf",
-			expected:    false,
-		},
-		{
-			name:        "reserved without profile does not match",
-			config:      newPowerNodeConfig("c", "shared", nil, []powerv1.ReservedSpec{{Cores: []uint{0}}}, time.Now()),
-			profileName: "perf",
-			expected:    false,
-		},
-	}
-
-	for _, tc := range tcases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := configReferencesProfile(tc.config, tc.profileName)
-			assert.Equal(t, tc.expected, result)
 		})
 	}
 }
