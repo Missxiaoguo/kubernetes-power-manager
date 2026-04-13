@@ -216,6 +216,11 @@ func (m *coreMock) GetID() uint {
 	return args.Get(0).(uint)
 }
 
+func (m *coreMock) GetAbsMinMax() (uint, uint) {
+	args := m.Called()
+	return args.Get(0).(uint), args.Get(1).(uint)
+}
+
 func (m *coreMock) SetPool(pool power.Pool) error {
 	return m.Called(pool).Error(0)
 }
@@ -465,8 +470,12 @@ type ScalingMgrMock struct {
 	mock.Mock
 }
 
-func (m *ScalingMgrMock) ManageCPUScaling(configs []scaling.CPUScalingOpts) {
+func (m *ScalingMgrMock) AddCPUScaling(configs []scaling.CPUScalingOpts) {
 	m.Called(configs)
+}
+
+func (m *ScalingMgrMock) RemoveCPUScaling(cpuIDs []uint) {
+	m.Called(cpuIDs)
 }
 
 // Satisfy manager.Runnable
@@ -478,7 +487,7 @@ type DPDKTelemetryClientMock struct {
 	mock.Mock
 }
 
-func (cl *DPDKTelemetryClientMock) CreateConnection(data *scaling.DPDKTelemetryConnectionData) {
+func (cl *DPDKTelemetryClientMock) EnsureConnection(data *scaling.DPDKTelemetryConnectionData) {
 	cl.Called(data)
 }
 
@@ -766,6 +775,18 @@ func (m *mgrMock) SetFields(i interface{}) error {
 
 func (m *mgrMock) GetCache() cache.Cache {
 	return m.Called().Get(0).(cache.Cache)
+}
+
+func (m *mgrMock) GetFieldIndexer() client.FieldIndexer {
+	return m.Called().Get(0).(client.FieldIndexer)
+}
+
+type fieldIndexerMock struct {
+	client.FieldIndexer
+}
+
+func (f *fieldIndexerMock) IndexField(_ context.Context, _ client.Object, _ string, _ client.IndexerFunc) error {
+	return nil
 }
 
 type cacheMk struct {

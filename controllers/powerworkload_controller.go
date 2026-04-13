@@ -26,7 +26,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/intel/power-optimization-library/pkg/power"
 	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
-	"github.com/openshift-kni/kubernetes-power-manager/internal/scaling"
 	"github.com/openshift-kni/kubernetes-power-manager/pkg/util"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -46,16 +45,9 @@ import (
 // PowerWorkloadReconciler reconciles a PowerWorkload object
 type PowerWorkloadReconciler struct {
 	client.Client
-	Log                 logr.Logger
-	Scheme              *runtime.Scheme
-	PowerLibrary        power.Host
-	DPDKTelemetryClient scaling.DPDKTelemetryClient
-	CPUScalingManager   scaling.CPUScalingManager
-}
-
-type dpdkTelemetryConfiguration struct {
-	current *scaling.DPDKTelemetryConnectionData
-	new     *scaling.DPDKTelemetryConnectionData
+	Log          logr.Logger
+	Scheme       *runtime.Scheme
+	PowerLibrary power.Host
 }
 
 const (
@@ -265,32 +257,6 @@ func (r *PowerWorkloadReconciler) Reconcile(c context.Context, req ctrl.Request)
 		return ctrl.Result{}, nil
 	}
 	return ctrl.Result{}, nil
-
-	/*
-		TODO: revive DPDK telemetry in a future PR.
-
-		// Non-shared (exclusive) workloads: CPU movement is handled by PowerPod controller.
-		// Only handle DPDK scaling if the profile has a CPU scaling policy.
-		profile := &powerv1.PowerProfile{}
-		err = r.Client.Get(c, client.ObjectKey{
-			Namespace: PowerNamespace,
-			Name:      workload.Spec.PowerProfile,
-		}, profile)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get power profile: %w", err)
-		}
-		if profile.Spec.CpuScalingPolicy != nil && profile.Spec.CpuScalingPolicy.WorkloadType == "polling-dpdk" {
-			// Ensure telemetry connections for all DPDK pods in this workload.
-			r.reconcileDPDKTelemetryClient(workload.Status.WorkloadNodes.Containers)
-
-			// Build scaling options for each CPU in this exclusive pool.
-			cpus := r.PowerLibrary.GetExclusivePool(workload.Spec.PowerProfile).Cpus()
-			scalingOpts := r.generateCPUScalingOpts(profile.Spec.CpuScalingPolicy, cpus)
-
-			// Hand over to the scaling manager to manage per-CPU scaling.
-			r.CPUScalingManager.ManageCPUScaling(scalingOpts)
-		}
-	*/
 }
 
 // cleanupSharedWorkloadPools cleans up local shared and reserved pools for a shared workload on this node.
@@ -375,89 +341,6 @@ func createReservedPool(library power.Host, coreConfig powerv1.ReservedSpec, log
 	}
 
 	return nil
-}
-
-// reconcileDPDKTelemetryClient manages the lifecycle of DPDK telemetry
-// connections. It maintains one connection per pod and each connection
-// reports the usage samples(busy cycles and total cycles) for the CPUs
-// managed by that pod.
-func (r *PowerWorkloadReconciler) reconcileDPDKTelemetryClient(containers []powerv1.Container) {
-	// gather current connection configurations
-	dpdkConfigMap := map[string]*dpdkTelemetryConfiguration{}
-	for _, connData := range r.DPDKTelemetryClient.ListConnections() {
-		dpdkConfigMap[connData.PodUID] = &dpdkTelemetryConfiguration{
-			current: &connData,
-			new:     nil,
-		}
-	}
-
-	// gather incoming connection configurations and group them based on pod UID
-	for _, container := range containers {
-		podUID := string(container.PodUID)
-		cpuIDs := container.ExclusiveCPUs
-
-		if dpdkConfig, found := dpdkConfigMap[podUID]; found {
-			if dpdkConfig.new == nil {
-				dpdkConfig.new = &scaling.DPDKTelemetryConnectionData{
-					PodUID:      podUID,
-					WatchedCPUs: cpuIDs,
-				}
-			} else {
-				dpdkConfig.new.WatchedCPUs = append(dpdkConfig.new.WatchedCPUs, cpuIDs...)
-			}
-		} else {
-			dpdkConfigMap[podUID] = &dpdkTelemetryConfiguration{
-				current: nil,
-				new: &scaling.DPDKTelemetryConnectionData{
-					PodUID:      podUID,
-					WatchedCPUs: cpuIDs,
-				},
-			}
-		}
-	}
-
-	// NOTE: Exclusive CPUs for containers are fixed
-	// at Pod scheduling and don't change.
-	// Thus, we can skip updating the CPU list post-connection.
-	for podUID, dpdkConfig := range dpdkConfigMap {
-		if dpdkConfig.new == nil {
-			r.DPDKTelemetryClient.CloseConnection(podUID)
-			continue
-		}
-		if dpdkConfig.current == nil {
-			r.DPDKTelemetryClient.CreateConnection(dpdkConfig.new)
-		}
-	}
-}
-
-// generateCPUScalingOpts translates a CpuScalingPolicy and a set of CPUs
-// into a per-CPU list of scaling options used by the CPUScalingManager.
-func (r *PowerWorkloadReconciler) generateCPUScalingOpts(scalingPolicy *powerv1.CpuScalingPolicy, cpus *power.CpuList) []scaling.CPUScalingOpts {
-	optsList := make([]scaling.CPUScalingOpts, 0)
-
-	for _, cpu := range *cpus {
-		// Get the min and max frequency of this CPU and calculate the fallback frequency.
-		minFreq, maxFreq := cpu.GetAbsMinMax()
-		fallbackFreqPct := uint(*scalingPolicy.FallbackFreqPercent)
-		fallbackFreq := minFreq + (maxFreq-minFreq)*(fallbackFreqPct)/100
-
-		opts := scaling.CPUScalingOpts{
-			CPU:                        cpu,
-			SamplePeriod:               scalingPolicy.SamplePeriod.Duration,
-			CooldownPeriod:             scalingPolicy.CooldownPeriod.Duration,
-			TargetUsage:                *scalingPolicy.TargetUsage,
-			AllowedUsageDifference:     *scalingPolicy.AllowedUsageDifference,
-			AllowedFrequencyDifference: *scalingPolicy.AllowedFrequencyDifference * 1000,
-			HWMaxFrequency:             int(maxFreq),
-			HWMinFrequency:             int(minFreq),
-			CurrentTargetFrequency:     scaling.FrequencyNotYetSet,
-			ScaleFactor:                float64(*scalingPolicy.ScalePercentage) / 100.0,
-			FallbackFreq:               int(fallbackFreq),
-		}
-		optsList = append(optsList, opts)
-	}
-
-	return optsList
 }
 
 func (r *PowerWorkloadReconciler) SetupWithManager(mgr ctrl.Manager) error {

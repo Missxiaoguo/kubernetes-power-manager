@@ -41,7 +41,7 @@ func TestCPUScalingManager_Start(t *testing.T) {
 	w.AssertCalled(t, "Stop")
 }
 
-func TestCPUScalingManager_ManageCPUScaling(t *testing.T) {
+func TestCPUScalingManager_AddCPUScaling(t *testing.T) {
 	origNewCPUScalingWorkerFunc := newCPUScalingWorkerFunc
 	t.Cleanup(func() {
 		newCPUScalingWorkerFunc = origNewCPUScalingWorkerFunc
@@ -52,8 +52,7 @@ func TestCPUScalingManager_ManageCPUScaling(t *testing.T) {
 		dpdkClient DPDKTelemetryClient,
 		opts *CPUScalingOpts,
 	) CPUScalingWorker {
-		w := CreateMockWorker(cpuID, opts)
-		return w
+		return CreateMockWorker(cpuID, opts)
 	}
 
 	// Initialize power host and cpus for tests
@@ -68,70 +67,39 @@ func TestCPUScalingManager_ManageCPUScaling(t *testing.T) {
 	allCpus := host.GetAllCpus()
 
 	tcases := []struct {
-		testCase        string
-		initialConfig   []CPUScalingOpts
-		remainingCPUIDs []uint
-		newConfig       []CPUScalingOpts
+		testCase      string
+		initialConfig []CPUScalingOpts
+		addConfig     []CPUScalingOpts
 	}{
 		{
-			testCase:        "Test Case 1 - New Workers in an empty worker pool",
-			initialConfig:   []CPUScalingOpts{},
-			remainingCPUIDs: []uint{},
-			newConfig: []CPUScalingOpts{
+			testCase:      "New workers in an empty worker pool",
+			initialConfig: []CPUScalingOpts{},
+			addConfig: []CPUScalingOpts{
 				{CPU: allCpus.ByID(0), SamplePeriod: 10 * time.Millisecond},
 				{CPU: allCpus.ByID(1), SamplePeriod: 100 * time.Millisecond},
 			},
 		},
 		{
-			testCase: "Test Case 2 - New Workers extending already populated worker pool",
+			testCase: "New workers extending already populated worker pool",
 			initialConfig: []CPUScalingOpts{
 				{CPU: allCpus.ByID(0), SamplePeriod: 50 * time.Millisecond},
 				{CPU: allCpus.ByID(1), SamplePeriod: 500 * time.Millisecond},
 			},
-			remainingCPUIDs: []uint{0, 1},
-			newConfig: []CPUScalingOpts{
-				{CPU: allCpus.ByID(0), SamplePeriod: 10 * time.Millisecond},
-				{CPU: allCpus.ByID(1), SamplePeriod: 100 * time.Millisecond},
+			addConfig: []CPUScalingOpts{
 				{CPU: allCpus.ByID(2), SamplePeriod: 100 * time.Millisecond},
 				{CPU: allCpus.ByID(3), SamplePeriod: 100 * time.Millisecond},
 			},
 		},
 		{
-			testCase: "Test Case 3 - Updating existing workers",
+			testCase: "Updating existing workers",
 			initialConfig: []CPUScalingOpts{
 				{CPU: allCpus.ByID(0), SamplePeriod: 50 * time.Millisecond},
 				{CPU: allCpus.ByID(1), SamplePeriod: 500 * time.Millisecond},
 			},
-			remainingCPUIDs: []uint{0, 1},
-			newConfig: []CPUScalingOpts{
+			addConfig: []CPUScalingOpts{
 				{CPU: allCpus.ByID(0), SamplePeriod: 10 * time.Millisecond},
 				{CPU: allCpus.ByID(1), SamplePeriod: 100 * time.Millisecond},
 			},
-		},
-		{
-			testCase: "Test Case 4 - Removing some workers from existing pool",
-			initialConfig: []CPUScalingOpts{
-				{CPU: allCpus.ByID(0), SamplePeriod: 10 * time.Millisecond},
-				{CPU: allCpus.ByID(1), SamplePeriod: 100 * time.Millisecond},
-				{CPU: allCpus.ByID(2), SamplePeriod: 100 * time.Millisecond},
-				{CPU: allCpus.ByID(3), SamplePeriod: 100 * time.Millisecond},
-			},
-			remainingCPUIDs: []uint{0, 1},
-			newConfig: []CPUScalingOpts{
-				{CPU: allCpus.ByID(0), SamplePeriod: 10 * time.Millisecond},
-				{CPU: allCpus.ByID(1), SamplePeriod: 100 * time.Millisecond},
-			},
-		},
-		{
-			testCase: "Test Case 5 - Removing all workers from existing pool",
-			initialConfig: []CPUScalingOpts{
-				{CPU: allCpus.ByID(0), SamplePeriod: 10 * time.Millisecond},
-				{CPU: allCpus.ByID(1), SamplePeriod: 100 * time.Millisecond},
-				{CPU: allCpus.ByID(2), SamplePeriod: 100 * time.Millisecond},
-				{CPU: allCpus.ByID(3), SamplePeriod: 100 * time.Millisecond},
-			},
-			remainingCPUIDs: []uint{},
-			newConfig:       []CPUScalingOpts{},
 		},
 	}
 
@@ -140,44 +108,122 @@ func TestCPUScalingManager_ManageCPUScaling(t *testing.T) {
 			mgr := createNewCPUScalingManager()
 
 			// create workers from initial configuration
-			initialWorkers := make(map[uint]*workerMock, 0)
+			initialWorkers := make(map[uint]*workerMock)
 			for _, opt := range tc.initialConfig {
 				w := CreateMockWorker(opt.CPU.GetID(), &opt)
-				// set up Stap call for workers that should get removed
-				if !slices.Contains(tc.remainingCPUIDs, opt.CPU.GetID()) {
-					w.On("Stop").Return()
-				}
 				initialWorkers[opt.CPU.GetID()] = w
 				mgr.workers.Store(opt.CPU.GetID(), w)
 			}
-			// set up UpdateOpts call for workers that should get updated
-			for _, opt := range tc.newConfig {
-				if slices.Contains(tc.remainingCPUIDs, opt.CPU.GetID()) {
-					initialWorkers[opt.CPU.GetID()].On("UpdateOpts", &opt).Return()
+			// set up UpdateOpts for workers that will be updated
+			for _, opt := range tc.addConfig {
+				if w, exists := initialWorkers[opt.CPU.GetID()]; exists {
+					w.On("UpdateOpts", &opt).Return()
 				}
 			}
 
-			mgr.ManageCPUScaling(tc.newConfig)
+			mgr.AddCPUScaling(tc.addConfig)
 
-			// assert all workers from options were created
-			// and have correct values
-			for _, opt := range tc.newConfig {
+			// assert all added workers exist and have correct values
+			for _, opt := range tc.addConfig {
 				w, found := mgr.getCPUScalingWorker(opt.CPU.GetID())
 				assert.True(t, found)
 				typedW := w.(*workerMock)
 				assert.Equal(t, &opt, typedW.opts)
 			}
-			// assert all initial workers were either stopped or updated
+			// assert existing workers that were updated got UpdateOpts called
+			for _, opt := range tc.addConfig {
+				if w, exists := initialWorkers[opt.CPU.GetID()]; exists {
+					w.AssertCalled(t, "UpdateOpts", &opt)
+				}
+			}
+			// assert existing workers that were NOT in addConfig are still present and untouched
 			for _, opt := range tc.initialConfig {
-				w := initialWorkers[opt.CPU.GetID()]
-				if !slices.Contains(tc.remainingCPUIDs, opt.CPU.GetID()) {
+				cpuID := opt.CPU.GetID()
+				_, found := mgr.getCPUScalingWorker(cpuID)
+				assert.True(t, found, "initial worker for CPU %d should still exist", cpuID)
+				initialWorkers[cpuID].AssertNotCalled(t, "Stop")
+			}
+		})
+	}
+}
+
+func TestCPUScalingManager_RemoveCPUScaling(t *testing.T) {
+	host, teardown, err := setupScalingTestFiles(4, map[string]string{
+		"governor": "userspace",
+		"max":      "3700000",
+		"min":      "800000",
+	})
+	assert.Nil(t, err)
+	defer teardown()
+
+	allCpus := host.GetAllCpus()
+
+	tcases := []struct {
+		testCase      string
+		initialConfig []CPUScalingOpts
+		removeCPUIDs  []uint
+		remainingIDs  []uint
+	}{
+		{
+			testCase: "Removing some workers from existing pool",
+			initialConfig: []CPUScalingOpts{
+				{CPU: allCpus.ByID(0), SamplePeriod: 10 * time.Millisecond},
+				{CPU: allCpus.ByID(1), SamplePeriod: 100 * time.Millisecond},
+				{CPU: allCpus.ByID(2), SamplePeriod: 100 * time.Millisecond},
+				{CPU: allCpus.ByID(3), SamplePeriod: 100 * time.Millisecond},
+			},
+			removeCPUIDs: []uint{2, 3},
+			remainingIDs: []uint{0, 1},
+		},
+		{
+			testCase: "Removing all workers from existing pool",
+			initialConfig: []CPUScalingOpts{
+				{CPU: allCpus.ByID(0), SamplePeriod: 10 * time.Millisecond},
+				{CPU: allCpus.ByID(1), SamplePeriod: 100 * time.Millisecond},
+				{CPU: allCpus.ByID(2), SamplePeriod: 100 * time.Millisecond},
+				{CPU: allCpus.ByID(3), SamplePeriod: 100 * time.Millisecond},
+			},
+			removeCPUIDs: []uint{0, 1, 2, 3},
+			remainingIDs: []uint{},
+		},
+		{
+			testCase:      "Removing non-existent CPUs does not panic",
+			initialConfig: []CPUScalingOpts{},
+			removeCPUIDs:  []uint{99},
+			remainingIDs:  []uint{},
+		},
+	}
+
+	for _, tc := range tcases {
+		t.Run(tc.testCase, func(t *testing.T) {
+			mgr := createNewCPUScalingManager()
+
+			// create workers from initial configuration
+			initialWorkers := make(map[uint]*workerMock)
+			for _, opt := range tc.initialConfig {
+				w := CreateMockWorker(opt.CPU.GetID(), &opt)
+				if slices.Contains(tc.removeCPUIDs, opt.CPU.GetID()) {
+					w.On("Stop").Return()
+				}
+				initialWorkers[opt.CPU.GetID()] = w
+				mgr.workers.Store(opt.CPU.GetID(), w)
+			}
+
+			mgr.RemoveCPUScaling(tc.removeCPUIDs)
+
+			// assert removed workers were stopped and deleted
+			for _, cpuID := range tc.removeCPUIDs {
+				_, found := mgr.getCPUScalingWorker(cpuID)
+				assert.False(t, found, "worker for CPU %d should be removed", cpuID)
+				if w, exists := initialWorkers[cpuID]; exists {
 					w.AssertCalled(t, "Stop")
 				}
 			}
-			for _, opt := range tc.newConfig {
-				if slices.Contains(tc.remainingCPUIDs, opt.CPU.GetID()) {
-					initialWorkers[opt.CPU.GetID()].AssertCalled(t, "UpdateOpts", &opt)
-				}
+			// assert remaining workers are still present and untouched
+			for _, cpuID := range tc.remainingIDs {
+				_, found := mgr.getCPUScalingWorker(cpuID)
+				assert.True(t, found, "worker for CPU %d should still exist", cpuID)
+				initialWorkers[cpuID].AssertNotCalled(t, "Stop")
 			}
 		})
 	}

@@ -69,7 +69,7 @@ func createNewDPDKTelemetryClient() dpdkTelemetryClientImpl {
 	}
 }
 
-func TestDPDKTelemetryClient_CreateConnection(t *testing.T) {
+func TestDPDKTelemetryClient_EnsureConnection(t *testing.T) {
 	expectedUID := "foo"
 	usedUID := ""
 	expectedCPUList := []uint{0, 1, 2}
@@ -89,7 +89,7 @@ func TestDPDKTelemetryClient_CreateConnection(t *testing.T) {
 
 	cl := createNewDPDKTelemetryClient()
 
-	cl.CreateConnection(newConnData)
+	cl.EnsureConnection(newConnData)
 	assert.Equal(t, expectedUID, usedUID)
 	assert.Equal(t, expectedCPUList, usedCPUList)
 }

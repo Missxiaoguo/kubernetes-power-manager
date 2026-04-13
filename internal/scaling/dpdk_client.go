@@ -69,7 +69,7 @@ type DPDKTelemetryConnectionData struct {
 }
 
 type DPDKTelemetryClient interface {
-	CreateConnection(data *DPDKTelemetryConnectionData)
+	EnsureConnection(data *DPDKTelemetryConnectionData)
 	ListConnections() []DPDKTelemetryConnectionData
 	CloseConnection(podUID string)
 	GetUsagePercent(cpuID uint) (int, error)
@@ -90,8 +90,8 @@ func NewDPDKTelemetryClient(logger logr.Logger) DPDKTelemetryClient {
 	return c
 }
 
-func (cl *dpdkTelemetryClientImpl) CreateConnection(data *DPDKTelemetryConnectionData) {
-	cl.log.V(4).Info("creating connection", "podUID", data.PodUID, "watchedCPUs", data.WatchedCPUs)
+func (cl *dpdkTelemetryClientImpl) EnsureConnection(data *DPDKTelemetryConnectionData) {
+	cl.log.V(4).Info("ensuring connection", "podUID", data.PodUID, "watchedCPUs", data.WatchedCPUs)
 	ctx, cancel := context.WithCancel(context.Background())
 	podUID := data.PodUID
 	newConn := &dpdkTelemetryConnection{

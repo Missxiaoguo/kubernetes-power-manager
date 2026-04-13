@@ -135,12 +135,10 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.PowerWorkloadReconciler{
-		Client:              mgr.GetClient(),
-		Log:                 ctrl.Log.WithName("controllers").WithName("PowerWorkload"),
-		Scheme:              mgr.GetScheme(),
-		PowerLibrary:        powerLibrary,
-		CPUScalingManager:   cpuScalingMgr,
-		DPDKTelemetryClient: dpdkClient,
+		Client:       mgr.GetClient(),
+		Log:          ctrl.Log.WithName("controllers").WithName("PowerWorkload"),
+		Scheme:       mgr.GetScheme(),
+		PowerLibrary: powerLibrary,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PowerWorkload")
 		os.Exit(1)
@@ -157,12 +155,14 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controllers.PowerPodReconciler{
-		Client:             mgr.GetClient(),
-		Log:                ctrl.Log.WithName("controllers").WithName("PowerPod"),
-		Scheme:             mgr.GetScheme(),
-		State:              powerNodeState,
-		PodResourcesClient: *podResourcesClient,
-		PowerLibrary:       powerLibrary,
+		Client:              mgr.GetClient(),
+		Log:                 ctrl.Log.WithName("controllers").WithName("PowerPod"),
+		Scheme:              mgr.GetScheme(),
+		State:               powerNodeState,
+		PodResourcesClient:  *podResourcesClient,
+		PowerLibrary:        powerLibrary,
+		DPDKTelemetryClient: dpdkClient,
+		CPUScalingManager:   cpuScalingMgr,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PowerPod")
 		os.Exit(1)

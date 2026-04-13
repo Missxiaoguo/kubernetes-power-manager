@@ -23,6 +23,7 @@ import (
 
 // PowerProfileSpec defines the desired state of PowerProfile
 // +kubebuilder:validation:XValidation:rule="!has(self.cpuScalingPolicy) || (has(self.pstates.governor) && self.pstates.governor == 'userspace')",message="pstates.governor must be 'userspace' when cpuScalingPolicy is set"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.cpuScalingPolicy) || has(self.cpuScalingPolicy)",message="cpuScalingPolicy cannot be removed once set"
 type PowerProfileSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 

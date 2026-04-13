@@ -85,17 +85,27 @@ Then apply filters and limits:
 2. Launch the example DPDK server/client pair:
 
     ```console
-    ./testbin/dpdk-testapp.sh [--non-siblings]
+    ./testbin/dpdk-testapp.sh [--non-siblings] [--replicas N]
     ```
 
-    - The script deploys [examples/example-dpdk-testapp.yaml](../examples/example-dpdk-testapp.yaml) and starts two `dpdk-testpmd` instances in one pod: a client (traffic generator) and a server (receiver/forwarder). The scaler manages the CPUs assigned to the server container.
-    - If Hyper‑Threading is enabled, pass `--non-siblings` to pin the server to one logical CPU per physical core. If HT is disabled, omit the flag.
+    - The script deploys [examples/example-dpdk-testapp.yaml](../examples/example-dpdk-testapp.yaml) and starts two `dpdk-testpmd` instances in each pod: a client (traffic generator) and a server (receiver/forwarder). The scaler manages the CPUs assigned to the server container.
+    - If Hyper-Threading is enabled, pass `--non-siblings` to pin the server to one logical CPU per physical core. If HT is disabled, omit the flag.
+    - To launch multiple DPDK pods, pass `--replicas N` (default: 1). Each pod gets its own DPDK telemetry connection and CPU scaling.
 
-3. Monitor frequency and usage on the node with [kpmon.py](../testbin/kpmon.py):
+3. Monitor frequency and usage on the node with [kpmon.py](../testbin/kpmon.py). Copy the script to the target node and run it there, as it reads CPU sysfs and MSR data locally:
 
     ```sh
-    NODE="<node-name>"
-    CPUS=$(oc get powernode "$NODE" -n power-manager -o jsonpath='{range .status.powerContainers[?(@.name=="server")]}{.exclusiveCpus}{end}' | tr -d '[]')
-    PODID=$(oc get powernode "$NODE" -n power-manager -o jsonpath='{range .status.powerContainers[?(@.name=="server")]}{.podUID}{end}')
-    ./testbin/kpmon.py --cpu "$CPUS" --dpdk-pod-uid "$PODID" --no-siblings [--scroll]
+    # On the target node:
+    export KUBECONFIG=<path-to-kubeconfig>
+    NODE=$(hostname)
+    POD="<pod-name>"
+    CPUS=$(oc get powernodestate "$NODE-power-state" -n power-manager -o jsonpath="{range .status.cpuPools.exclusive[?(@.pod==\"$POD\")]}{range .powerContainers[?(@.name==\"server\")]}{.cpuIDs}{end}{end}" | tr -d '[]')
+    PODID=$(oc get powernodestate "$NODE-power-state" -n power-manager -o jsonpath="{range .status.cpuPools.exclusive[?(@.pod==\"$POD\")]}{.podUID}{end}")
+    ./kpmon.py --cpu "$CPUS" --dpdk-pod-uid "$PODID" [--no-siblings] [--scroll]
+    ```
+
+4. To tear down the DPDK test app:
+
+    ```console
+    ./testbin/dpdk-testapp.sh -d
     ```
