@@ -134,13 +134,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "PowerProfile")
 		os.Exit(1)
 	}
-	if err = (&controllers.PowerWorkloadReconciler{
+	if err = (&controllers.PowerNodeConfigReconciler{
 		Client:       mgr.GetClient(),
-		Log:          ctrl.Log.WithName("controllers").WithName("PowerWorkload"),
+		Log:          ctrl.Log.WithName("controllers").WithName("PowerNodeConfig"),
 		Scheme:       mgr.GetScheme(),
 		PowerLibrary: powerLibrary,
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PowerWorkload")
+		setupLog.Error(err, "unable to create controller", "controller", "PowerNodeConfig")
 		os.Exit(1)
 	}
 	if err = (&controllers.PowerNodeReconciler{

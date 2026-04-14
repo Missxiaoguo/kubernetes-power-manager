@@ -24,8 +24,11 @@ import (
 type PowerNodeStateSpec struct {
 }
 
-// PowerNodeStateStatus defines the observed state of PowerNodeState
-// Each field is owned by a specific controller using Server-Side Apply (SSA)
+// PowerNodeStateStatus defines the observed state of PowerNodeState.
+// Each field is owned by a specific controller using Server-Side Apply (SSA).
+// IMPORTANT: All status updates to PowerNodeState MUST use SSA (client.Apply).
+// Non-SSA updates (Status().Update or MergePatch) will break field ownership
+// tracking and cause incorrect pruning behavior.
 type PowerNodeStateStatus struct {
 	// PowerProfiles contains the status of power profiles on this node
 	// Owned by: PowerProfile controller
@@ -68,7 +71,7 @@ type CPUPoolsStatus struct {
 	// Reserved contains the status of the reserved CPU pools
 	// Owned by: PowerNodeConfig controller (shared, reserved)
 	// +optional
-	Reserved []ReservedCPUPoolStatus `json:"reserved,omitempty"`
+	Reserved []ReservedCPUPoolStatus `json:"reserved,omitzero"`
 
 	// Exclusive contains the status of exclusive CPU pools
 	// Owned by: PowerPod controller (exclusive)
@@ -86,8 +89,8 @@ type SharedCPUPoolStatus struct {
 	// PowerNodeConfig is the name of the PowerNodeConfig applied to this pool
 	PowerNodeConfig string `json:"powerNodeConfig"`
 
-	// CPUIDs are the CPU IDs in this pool
-	CPUIDs []uint `json:"cpuIDs"`
+	// CPUIDs are the CPU IDs in this pool, pretty-printed as ranges (e.g. "2-23,46,47")
+	CPUIDs string `json:"cpuIDs"`
 
 	// Errors contains any errors encountered while configuring this pool
 	// +optional
@@ -108,8 +111,8 @@ type PowerProfileCPUs struct {
 	// PowerProfile is the name of the PowerProfile applied to this pool
 	PowerProfile string `json:"powerProfile"`
 
-	// CPUIDs are the CPU IDs in this pool
-	CPUIDs []uint `json:"cpuIDs"`
+	// CPUIDs are the CPU IDs in this pool, pretty-printed as ranges (e.g. "0-3,24,25")
+	CPUIDs string `json:"cpuIDs"`
 
 	// Errors contains any errors encountered while configuring the CPUs in this pool
 	// +optional

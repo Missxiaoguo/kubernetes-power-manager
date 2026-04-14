@@ -13,6 +13,7 @@ rules:
   - nodes/status
   - pods
   - pods/status
+  - powernodeconfigs
   - powerprofiles
   - powerprofiles/status
   - powerworkloads
