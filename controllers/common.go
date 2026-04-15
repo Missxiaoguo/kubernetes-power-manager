@@ -15,6 +15,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"time"
@@ -169,6 +170,19 @@ func formatIntOrString(value *intstr.IntOrString) string {
 	return value.StrVal
 }
 
+// formatCpuScalingPolicy serializes a CpuScalingPolicy to its JSON representation.
+// Returns empty string if policy is nil. Nil fields within the policy are omitted.
+func formatCpuScalingPolicy(policy *powerv1.CpuScalingPolicy) (string, error) {
+	if policy == nil || *policy == (powerv1.CpuScalingPolicy{}) {
+		return "", nil
+	}
+	b, err := json.Marshal(policy)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal cpuScalingPolicy: %w", err)
+	}
+	return string(b), nil
+}
+
 // applyPowerNodeStateProfilesStatus applies the given PowerProfiles to the PowerNodeState status
 // using Server-Side Apply. The fieldManager parameter enables per-profile ownership — each profile
 // should use a unique field manager (e.g., "powerprofile-controller.profile-name") so that SSA can
@@ -214,11 +228,19 @@ func addPowerNodeStatusProfileEntry(ctx context.Context, c client.Client, nodeNa
 		formatIntOrString(profile.Spec.PStates.Min), formatIntOrString(profile.Spec.PStates.Max),
 		profile.Spec.PStates.Governor, profile.Spec.PStates.Epp, cstatesString)
 
+	scalingStr, err := formatCpuScalingPolicy(profile.Spec.CpuScalingPolicy)
+	if err != nil {
+		return err
+	}
+	if scalingStr != "" {
+		config += ", CpuScalingPolicy: " + scalingStr
+	}
+
 	errList := util.UnpackErrsToStrings(profileErrors)
 	profileStatus := powerv1.PowerNodeProfileStatus{Name: profile.Spec.Name, Config: config, Errors: *errList}
 	fieldManager := powerProfileFieldManager(profile.Spec.Name)
 
-	err := applyPowerNodeStateProfilesStatus(ctx, c, powerNodeStateName, []powerv1.PowerNodeProfileStatus{profileStatus}, fieldManager)
+	err = applyPowerNodeStateProfilesStatus(ctx, c, powerNodeStateName, []powerv1.PowerNodeProfileStatus{profileStatus}, fieldManager)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Profile was already created, but status wasn't recorded.
