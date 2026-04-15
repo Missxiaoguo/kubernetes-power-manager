@@ -52,9 +52,6 @@ type PowerNodeStatus struct {
 
 	// Information about the containers in the cluster utilizing some PowerWorkload
 	PowerContainers []Container `json:"powerContainers,omitempty"`
-
-	// The CustomDevices include alternative devices that represent other resources
-	CustomDevices []string `json:"customDevices,omitempty"`
 }
 
 type PowerNodeCPUState struct {

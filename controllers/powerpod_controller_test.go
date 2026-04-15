@@ -430,101 +430,6 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 			},
 			workloadToCores: map[string][]uint{"performance-TestNode": {1, 2, 3}, "balance-performance-TestNode": {4, 5, 6}},
 		},
-		{
-			testCase: "Test Case 4 - Device plugin",
-			nodeName: "TestNode",
-			podName:  "test-pod-1",
-			podResources: []*podresourcesapi.PodResources{
-				{
-					Name:      "test-pod-1",
-					Namespace: PowerNamespace,
-					Containers: []*podresourcesapi.ContainerResources{
-						{
-							Name:   "test-container-1",
-							CpuIds: []int64{1, 5, 8},
-						},
-					},
-				},
-			},
-			clientObjs: []runtime.Object{
-				&powerv1.PowerNode{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "TestNode",
-						Namespace: PowerNamespace,
-					},
-					Status: powerv1.PowerNodeStatus{
-						CustomDevices: []string{"device-plugin"},
-					},
-				},
-				defaultPowerNodeState,
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "TestNode",
-					},
-				},
-				defaultProfile,
-				&powerv1.PowerWorkload{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "performance-TestNode",
-						Namespace: PowerNamespace,
-					},
-					Spec: powerv1.PowerWorkloadSpec{
-						Name: "performance-TestNode",
-					},
-					Status: powerv1.PowerWorkloadStatus{
-						WorkloadNodes: powerv1.WorkloadNode{
-							Name: "TestNode",
-							Containers: []powerv1.Container{
-								{
-									Name:          "test-container-1",
-									ExclusiveCPUs: []uint{1, 5, 8},
-								},
-							},
-							CpuIds: []uint{1, 5, 8},
-						},
-					},
-				},
-				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-pod-1",
-						Namespace: PowerNamespace,
-						UID:       "abcdefg",
-					},
-					Spec: corev1.PodSpec{
-						NodeName: "TestNode",
-						Containers: []corev1.Container{
-							{
-								Name: "test-container-1",
-								Resources: corev1.ResourceRequirements{
-									Limits: map[corev1.ResourceName]resource.Quantity{
-										corev1.ResourceName("device-plugin"):                  *resource.NewQuantity(3, resource.DecimalSI),
-										corev1.ResourceName("memory"):                         *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
-									},
-									Requests: map[corev1.ResourceName]resource.Quantity{
-										corev1.ResourceName("device-plugin"):                  *resource.NewQuantity(3, resource.DecimalSI),
-										corev1.ResourceName("memory"):                         *resource.NewQuantity(200, resource.DecimalSI),
-										corev1.ResourceName("power.openshift.io/performance"): *resource.NewQuantity(3, resource.DecimalSI),
-									},
-								},
-							},
-						},
-						EphemeralContainers: []corev1.EphemeralContainer{},
-					},
-					Status: corev1.PodStatus{
-						Phase:    corev1.PodRunning,
-						QOSClass: corev1.PodQOSBestEffort,
-						ContainerStatuses: []corev1.ContainerStatus{
-							{
-								Name:        "test-container-1",
-								ContainerID: "docker://abcdefg",
-							},
-						},
-					},
-				},
-			},
-			workloadToCores: map[string][]uint{"performance-TestNode": {1, 5, 8}},
-		},
 	}
 
 	for _, tc := range tcases {
@@ -896,137 +801,7 @@ func TestPowerPod_Reconcile_ControllerReturningNil(t *testing.T) {
 		workloadNames []string
 	}{
 		{
-			testCase:  "Test Case 1 - Incorrect Node error",
-			nodeName:  "TestNode",
-			podName:   "test-pod-1",
-			namespace: PowerNamespace,
-			podResources: []*podresourcesapi.PodResources{
-				{
-					Name:      "test-pod-1",
-					Namespace: PowerNamespace,
-					Containers: []*podresourcesapi.ContainerResources{
-						{
-							Name:   "test-container-1",
-							CpuIds: []int64{1, 2, 3},
-						},
-					},
-				},
-			},
-			clientObjs: []runtime.Object{
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "TestNode",
-					},
-				},
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "balance-performance",
-						Namespace: PowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "balance-performance",
-					},
-				},
-				defaultWorkload,
-				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-pod-1",
-						Namespace: PowerNamespace,
-						UID:       "abcdefg",
-					},
-					Spec: corev1.PodSpec{
-						NodeName: "IncorrectNode",
-						Containers: []corev1.Container{
-							{
-								Name:      "test-container-1",
-								Resources: defaultResources,
-							},
-						},
-						EphemeralContainers: []corev1.EphemeralContainer{},
-					},
-					Status: corev1.PodStatus{
-						Phase:    corev1.PodRunning,
-						QOSClass: corev1.PodQOSGuaranteed,
-						ContainerStatuses: []corev1.ContainerStatus{
-							{
-								Name:        "example-container-1",
-								ContainerID: "docker://abcdefg",
-							},
-						},
-					},
-				},
-			},
-			workloadNames: []string{
-				"performance-TestNode",
-			},
-		},
-		{
-			testCase:  "Test Case 2 - Kube-System Namespace error",
-			nodeName:  "TestNode",
-			podName:   "test-pod-1",
-			namespace: "kube-system",
-			podResources: []*podresourcesapi.PodResources{
-				{
-					Name:      "test-pod-1",
-					Namespace: "kube-system",
-					Containers: []*podresourcesapi.ContainerResources{
-						{
-							Name:   "test-container-1",
-							CpuIds: []int64{1, 2, 3},
-						},
-					},
-				},
-			},
-			clientObjs: []runtime.Object{
-				&corev1.Node{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "TestNode",
-					},
-				},
-				&powerv1.PowerProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "balance-performance",
-						Namespace: PowerNamespace,
-					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "balance-performance",
-					},
-				},
-				defaultWorkload,
-				&corev1.Pod{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-pod-1",
-						Namespace: "kube-system",
-						UID:       "abcdefg",
-					},
-					Spec: corev1.PodSpec{
-						NodeName: "TestNode",
-						Containers: []corev1.Container{
-							{
-								Name:      "test-container-1",
-								Resources: defaultResources,
-							},
-						},
-						EphemeralContainers: []corev1.EphemeralContainer{},
-					},
-					Status: corev1.PodStatus{
-						Phase:    corev1.PodRunning,
-						QOSClass: corev1.PodQOSGuaranteed,
-						ContainerStatuses: []corev1.ContainerStatus{
-							{
-								Name:        "example-container-1",
-								ContainerID: "docker://abcdefg",
-							},
-						},
-					},
-				},
-			},
-			workloadNames: []string{
-				"performance-TestNode",
-			},
-		},
-		{
-			testCase:  "Test Case 3 - Not Exclusive Pod error",
+			testCase:  "Test Case 1 - Not Exclusive Pod error",
 			nodeName:  "TestNode",
 			podName:   "test-pod-1",
 			namespace: PowerNamespace,
@@ -1432,45 +1207,9 @@ func TestPowerPod_Reconcile_PodClientErrs(t *testing.T) {
 					*wload = *defaultWload
 				})
 				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.openshift.io \"performance\" not found"))
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNode")).Return(nil).Run(func(args mock.Arguments) {
-					pnode := args.Get(2).(*powerv1.PowerNode)
-					*pnode = *defaultNode
-				})
 				return mkcl
 			},
 			clientErr: "",
-			podResources: []*podresourcesapi.PodResources{
-				{
-					Name:      "test-pod-1",
-					Namespace: PowerNamespace,
-					Containers: []*podresourcesapi.ContainerResources{
-						{
-							Name:   "test-container-1",
-							CpuIds: []int64{1, 5, 8},
-						},
-					},
-				},
-			},
-		},
-		{
-			testCase: "Test Case 4 - Invalid node get requests",
-			nodeName: "TestNode",
-			podName:  "test-pod-1",
-			convertClient: func(c client.Client) client.Client {
-				mkcl := new(errClient)
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.Pod")).Return(nil).Run(func(args mock.Arguments) {
-					node := args.Get(2).(*corev1.Pod)
-					*node = *defaultPod
-				})
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerWorkload")).Return(nil).Run(func(args mock.Arguments) {
-					wload := args.Get(2).(*powerv1.PowerWorkload)
-					*wload = *defaultWload
-				})
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerProfile")).Return(fmt.Errorf("powerprofiles.power.openshift.io \"performance\" not found"))
-				mkcl.On("Get", mock.Anything, mock.Anything, mock.AnythingOfType("*v1.PowerNode")).Return(fmt.Errorf("client  powernode get error"))
-				return mkcl
-			},
-			clientErr: "client  powernode get error",
 			podResources: []*podresourcesapi.PodResources{
 				{
 					Name:      "test-pod-1",
@@ -1734,9 +1473,6 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      testNode,
 			Namespace: PowerNamespace,
-		},
-		Status: powerv1.PowerNodeStatus{
-			CustomDevices: []string{},
 		},
 	}
 

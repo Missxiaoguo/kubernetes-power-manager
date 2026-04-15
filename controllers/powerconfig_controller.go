@@ -207,13 +207,6 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 	labelledNodeList := &corev1.NodeList{}
 	listOption := config.Spec.PowerNodeSelector
 
-	// Searching for Custom Devices in PowerConfig
-	customDevices := config.Spec.CustomDevices
-	if len(customDevices) > 0 {
-		logger.V(5).Info("the behaviour of the power node agent will be affected by the following devices.",
-			"Custom Devices", customDevices)
-	}
-
 	logger.V(5).Info("confirming desired nodes match the power node selector")
 	err = r.Client.List(c, labelledNodeList, client.MatchingLabels(listOption))
 	if err != nil {
@@ -251,14 +244,6 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 			}
 		}
 
-		patch := client.MergeFrom(powerNode.DeepCopy())
-		powerNode.Status.CustomDevices = customDevices
-		err = r.Client.Status().Patch(c, powerNode, patch)
-		if err != nil {
-			logger.Error(err, "failed to update power node with custom devices.")
-			return ctrl.Result{}, err
-		}
-
 		// Create PowerNodeState for this node if it doesn't exist
 		powerNodeState := &powerv1.PowerNodeState{}
 		powerNodeStateName := fmt.Sprintf("%s-power-state", node.Name)
@@ -290,7 +275,6 @@ func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (
 
 	patch := client.MergeFrom(config.DeepCopy())
 	config.Status.Nodes = r.State.PowerNodeList
-	config.Spec.CustomDevices = customDevices
 	err = r.Client.Status().Patch(c, config, patch)
 	if err != nil {
 		logger.Error(err, "failed to update the power config")

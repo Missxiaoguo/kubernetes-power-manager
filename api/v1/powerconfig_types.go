@@ -30,9 +30,6 @@ type PowerConfigSpec struct {
 
 	// The label on the Nodes you the Operator will look for to deploy the Node Agent
 	PowerNodeSelector map[string]string `json:"powerNodeSelector,omitempty"`
-
-	// The CustomDevices include alternative devices that represent other resources
-	CustomDevices []string `json:"customDevices,omitempty"`
 }
 
 // PowerConfigStatus defines the observed state of PowerConfig
