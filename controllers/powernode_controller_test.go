@@ -66,9 +66,6 @@ var defaultNode = &powerv1.PowerNode{
 		Namespace: PowerNamespace,
 	},
 	Spec: powerv1.PowerNodeSpec{},
-	Status: powerv1.PowerNodeStatus{
-		CustomDevices: []string{"device-plugin"},
-	},
 }
 var defaultProf = &powerv1.PowerProfile{
 	ObjectMeta: metav1.ObjectMeta{
@@ -378,8 +375,8 @@ func TestPowerNode_Reconcile_ClientErrs(t *testing.T) {
 
 // go test -fuzz FuzzPowerNodeController -run=FuzzPowerNodeController -parallel=1
 func FuzzPowerNodeController(f *testing.F) {
-	f.Add("TestNode", "some-plugin", "performance", "balance-performance", "balance-power", "perfromance-TestNode", "shared-TestNode", "0-44", "reserved-TestNode")
-	f.Fuzz(func(t *testing.T, nodeName string, devicePlugin string, prof1 string, prof2 string, prof3 string, workload string, sharedPool string, unaffectedCores string, reservedPools string) {
+	f.Add("TestNode", "performance", "balance-performance", "balance-power", "perfromance-TestNode", "shared-TestNode", "0-44", "reserved-TestNode")
+	f.Fuzz(func(t *testing.T, nodeName string, prof1 string, prof2 string, prof3 string, workload string, sharedPool string, unaffectedCores string, reservedPools string) {
 		nodeName = strings.ReplaceAll(nodeName, " ", "")
 		nodeName = strings.ReplaceAll(nodeName, "\t", "")
 		nodeName = strings.ReplaceAll(nodeName, "\000", "")
@@ -449,7 +446,6 @@ func FuzzPowerNodeController(f *testing.F) {
 					Namespace: PowerNamespace,
 				},
 				Status: powerv1.PowerNodeStatus{
-					CustomDevices:   []string{devicePlugin},
 					PowerProfiles:   []string{prof1, prof2, prof3},
 					PowerWorkloads:  []string{workload},
 					SharedPool:      sharedPool,

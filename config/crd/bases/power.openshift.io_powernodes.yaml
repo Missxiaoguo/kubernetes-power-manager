@@ -42,12 +42,6 @@ spec:
           status:
             description: PowerNodeStatus defines the observed state of PowerNode
             properties:
-              customDevices:
-                description: The CustomDevices include alternative devices that represent
-                  other resources
-                items:
-                  type: string
-                type: array
               powerContainers:
                 description: Information about the containers in the cluster utilizing
                   some PowerWorkload

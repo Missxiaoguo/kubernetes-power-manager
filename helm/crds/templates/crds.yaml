@@ -97,12 +97,6 @@ spec:
           spec:
             description: PowerConfigSpec defines the desired state of PowerConfig
             properties:
-              customDevices:
-                description: The CustomDevices include alternative devices that represent
-                  other resources
-                items:
-                  type: string
-                type: array
               powerNodeSelector:
                 additionalProperties:
                   type: string
@@ -166,12 +160,6 @@ spec:
           spec:
             description: PowerNodeSpec defines the desired state of PowerNode
             properties:
-              customDevices:
-                description: The CustomDevices include alternative devices that represent
-                  other resources
-                items:
-                  type: string
-                type: array
               nodeName:
                 description: The name of the node
                 type: string
