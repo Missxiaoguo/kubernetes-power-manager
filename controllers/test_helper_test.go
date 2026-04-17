@@ -121,6 +121,7 @@ func createMockPoolWithCPUs(cpuIDs []uint) *poolMock {
 	}
 	pm.On("Cpus").Return(&cpuList)
 	pm.On("MoveCpuIDs", mock.Anything).Return(nil)
+	pm.On("GetPowerProfile").Return(nil)
 	return pm
 }
 

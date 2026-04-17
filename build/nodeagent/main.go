@@ -37,7 +37,6 @@ import (
 	"github.com/intel/power-optimization-library/pkg/power"
 	"github.com/openshift-kni/kubernetes-power-manager/controllers"
 	"github.com/openshift-kni/kubernetes-power-manager/pkg/podstate"
-	corev1 "k8s.io/api/core/v1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -141,17 +140,6 @@ func main() {
 		PowerLibrary: powerLibrary,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "PowerNodeConfig")
-		os.Exit(1)
-	}
-	if err = (&controllers.PowerNodeReconciler{
-		Client:       mgr.GetClient(),
-		Log:          ctrl.Log.WithName("controllers").WithName("PowerNode"),
-		Scheme:       mgr.GetScheme(),
-		State:        powerNodeState,
-		OrphanedPods: make(map[string]corev1.Pod),
-		PowerLibrary: powerLibrary,
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PowerNode")
 		os.Exit(1)
 	}
 	if err = (&controllers.PowerPodReconciler{

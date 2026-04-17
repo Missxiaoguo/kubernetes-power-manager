@@ -3,7 +3,6 @@ package state
 import (
 	"testing"
 
-	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -69,50 +68,5 @@ func TestDeletePowerNodeData(t *testing.T) {
 
 	if !equalSlice(testData.PowerNodeList, expected) {
 		t.Fatalf("Expected %v but got %v", expected, testData.PowerNodeList)
-	}
-}
-
-func TestDifference(t *testing.T) {
-	testData := &PowerNodeData{
-		PowerNodeList: []string{"node1", "node2", "node3"},
-	}
-
-	nodeInfo := []powerv1.WorkloadNode{
-		{Name: "node1"},
-		{Name: "node3"},
-	}
-
-	expected := []string{"node2"}
-
-	result := testData.Difference(nodeInfo)
-	for i, node := range result {
-		assert.Equal(t, node, expected[i], "PowerNodeList field is not empty.")
-		break
-	}
-}
-
-func TestNodeNotInNodeInfo(t *testing.T) {
-	nodeInfo := []powerv1.WorkloadNode{
-		{Name: "node1"},
-		{Name: "node2"},
-		{Name: "node3"},
-	}
-
-	testCases := []struct {
-		nodeName string
-		expected bool
-	}{
-		{"node1", false},
-		{"node2", false},
-		{"node3", false},
-		{"node4", true},
-		{"node5", true},
-	}
-
-	for _, testCase := range testCases {
-		result := NodeNotInNodeInfo(testCase.nodeName, nodeInfo)
-		if result != testCase.expected {
-			t.Errorf("For nodeName: %v, expected %v, but got %v", testCase.nodeName, testCase.expected, result)
-		}
 	}
 }

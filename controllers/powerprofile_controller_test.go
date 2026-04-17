@@ -64,7 +64,7 @@ func createProfileReconcilerObject(objs []runtime.Object) (*PowerProfileReconcil
 	cl := fake.NewClientBuilder().
 		WithScheme(s).
 		WithRuntimeObjects(objs...).
-		WithStatusSubresource(&powerv1.PowerWorkload{}, &powerv1.PowerNodeState{}).
+		WithStatusSubresource(&powerv1.PowerNodeState{}).
 		Build()
 
 	// Create a ReconcileNode object with the scheme and fake client.
@@ -187,8 +187,6 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 			_, exists := updatedNode.Status.Capacity[extendedResourceName]
 			assert.True(t, exists, "Extended resource should be created")
 
-			// Note: PowerProfile controller no longer creates PowerWorkloads.
-			// PowerWorkloads are created by PowerPod controller when pods request exclusive CPUs.
 		})
 	}
 }
@@ -196,13 +194,6 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 // basic shared pool scenario
 func TestPowerProfile_Reconcile_SharedPoolCreation(t *testing.T) {
 	clientObjs := []runtime.Object{
-		&powerv1.PowerWorkload{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "shared-TestNode",
-				Namespace: PowerNamespace,
-			},
-			Spec: powerv1.PowerWorkloadSpec{},
-		},
 		&powerv1.PowerProfile{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "shared",
@@ -392,8 +383,6 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 			t.Fatalf("%s - error reconciling object", tc.testCase)
 		}
 
-		// Note: PowerProfile controller no longer creates PowerWorkloads.
-		// Only check that extended resources are created.
 		node := &corev1.Node{}
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
 			Name: tc.nodeName,
@@ -701,9 +690,6 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyHandling(t *testing.T) {
 			_, err = r.Reconcile(context.TODO(), req)
 			assert.NoError(t, err, "unexpected error: %v", err)
 
-			// Note: PowerProfile controller no longer creates PowerWorkloads.
-			// PowerWorkloads are created by PowerPod controller when pods request exclusive CPUs.
-
 			// Verify the profile was created in the power library
 			exclusivePool := host.GetExclusivePool(tc.profileName)
 			assert.NotNil(t, exclusivePool, "exclusive pool should be created")
@@ -848,14 +834,6 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyValidationErrors(t *testing.T) {
 			assert.Error(t, err, "expected an error but got none")
 			assert.ErrorContains(t, err, tc.expectedError)
 
-			// Verify no workload was created for invalid profiles
-			workloads := &powerv1.PowerWorkloadList{}
-			err = r.Client.List(context.TODO(), workloads)
-			assert.NoError(t, err)
-			for _, workload := range workloads.Items {
-				assert.NotEqual(t, fmt.Sprintf("%s-%s", tc.profileName, tc.nodeName), workload.Name,
-					"no workload should be created for invalid profile")
-			}
 		})
 	}
 }
@@ -925,11 +903,6 @@ func TestPowerProfile_Reconcile_IncorrectEppValue(t *testing.T) {
 			}, profile)
 			assert.NoError(t, err, "profile should still exist after invalid EPP error")
 
-			// No workloads should be created for invalid profile
-			workloads := &powerv1.PowerWorkloadList{}
-			err = r.Client.List(context.TODO(), workloads)
-			assert.NoError(t, err, "error retrieving workloads")
-			assert.Empty(t, workloads.Items, "expected no power workload objects to be created")
 		})
 	}
 }
@@ -985,17 +958,6 @@ func TestPowerProfile_Reconcile_SharedProfileDoesNotExistInLibrary(t *testing.T)
 
 		_, err = r.Reconcile(context.TODO(), req)
 		assert.ErrorContains(t, err, "max and min frequency must be within the range")
-
-		workloads := &powerv1.PowerWorkloadList{}
-		err = r.Client.List(context.TODO(), workloads)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving the power workload objects", tc.testCase)
-		}
-
-		if len(workloads.Items) > 0 {
-			t.Errorf("%s - failed: expected the number of power workload objects to be zero", tc.testCase)
-		}
 	}
 }
 
@@ -1224,8 +1186,6 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 			t.Fatalf("%s - error reconciling object", tc.testCase)
 		}
 
-		// Note: PowerProfile controller no longer creates PowerWorkloads.
-		// PowerWorkloads are created by PowerPod controller when pods request exclusive CPUs.
 	}
 }
 
@@ -1463,13 +1423,6 @@ func TestPowerProfile_Reconcile_FeatureNotSupportedErr(t *testing.T) {
 			testCase:    "Test Case 1 - Shared profile",
 			profileName: "shared",
 			clientObjs: []runtime.Object{
-				&powerv1.PowerWorkload{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "shared-TestNode",
-						Namespace: PowerNamespace,
-					},
-					Spec: powerv1.PowerWorkloadSpec{},
-				},
 				&powerv1.PowerProfile{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "shared",
@@ -1501,13 +1454,6 @@ func TestPowerProfile_Reconcile_FeatureNotSupportedErr(t *testing.T) {
 			testCase:    "Test Case 2 - Exclusive profile",
 			profileName: "performance",
 			clientObjs: []runtime.Object{
-				&powerv1.PowerWorkload{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "performance-TestNode",
-						Namespace: PowerNamespace,
-					},
-					Spec: powerv1.PowerWorkloadSpec{},
-				},
 				&powerv1.PowerProfile{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "performance",
@@ -2425,9 +2371,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 				assert.False(t, hasExtendedResource, "Extended resource should not be created")
 			}
 
-			// Note: PowerProfile controller no longer creates PowerWorkloads.
-			// PowerWorkloads are created by PowerPod controller when pods request exclusive CPUs.
-
 			// Verify exclusive pool creation
 			exclusivePool := host.GetExclusivePool(tc.profileName)
 			if tc.expectMatch {
@@ -2515,9 +2458,6 @@ func TestPowerProfile_Reconcile_NodeSelectorCleanup(t *testing.T) {
 	_, hasExtendedResource := updatedNode.Status.Capacity[extendedResourceName]
 	assert.True(t, hasExtendedResource, "Extended resource should be created initially")
 
-	// Note: PowerProfile controller no longer creates PowerWorkloads.
-	// PowerWorkloads are created by PowerPod controller when pods request exclusive CPUs.
-
 	// Change node labels so they no longer match
 	updatedNode.Labels = map[string]string{
 		"node-type": "master", // Changed from worker
@@ -2538,7 +2478,6 @@ func TestPowerProfile_Reconcile_NodeSelectorCleanup(t *testing.T) {
 	_, hasExtendedResource = finalNode.Status.Capacity[extendedResourceName]
 	assert.False(t, hasExtendedResource, "Extended resource should be removed after cleanup")
 
-	// Note: PowerProfile controller no longer creates PowerWorkloads.
 	// Verify exclusive pool still exists (it's not cleaned up for safety)
 	exclusivePool := host.GetExclusivePool(profileName)
 	assert.NotNil(t, exclusivePool, "Exclusive pool should still exist after cleanup")

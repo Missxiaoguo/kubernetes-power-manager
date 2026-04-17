@@ -48,16 +48,16 @@ func Test_writeStatusErrors(t *testing.T) {
 	object = &powerv1.Uncore{}
 	assert.Nil(t, writeUpdatedStatusErrsIfRequired(ctx, nil, object, nil), "invalid object should return nil without doing anything")
 
-	object = &powerv1.PowerWorkload{
+	object = &powerv1.Uncore{
 		ObjectMeta: v1.ObjectMeta{
 			UID: "not empty",
 		},
 	}
-	clientMockObj.On("SubResourcePatch", ctx, mock.Anything, "status", &powerv1.PowerWorkload{
+	clientMockObj.On("SubResourcePatch", ctx, mock.Anything, "status", &powerv1.Uncore{
 		ObjectMeta: v1.ObjectMeta{
 			UID: "not empty",
 		},
-		Status: powerv1.PowerWorkloadStatus{
+		Status: powerv1.UncoreStatus{
 			StatusErrors: powerv1.StatusErrors{
 				Errors: []string{"err1"},
 			},
@@ -66,7 +66,7 @@ func Test_writeStatusErrors(t *testing.T) {
 	errorList = fmt.Errorf("err1")
 	assert.Nil(t, writeUpdatedStatusErrsIfRequired(ctx, clientStatusWriter, object, errorList), "API should get updated with object with errors")
 
-	object = &powerv1.PowerWorkload{
+	object = &powerv1.Uncore{
 		ObjectMeta: v1.ObjectMeta{
 			UID: "not empty",
 		},
@@ -311,6 +311,129 @@ func Test_formatCpuScalingPolicy(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expected, result)
 			}
+		})
+	}
+}
+
+func TestPrettifyCoreList(t *testing.T) {
+	tests := []struct {
+		name     string
+		cores    []uint
+		expected string
+	}{
+		{
+			name:     "empty list",
+			cores:    []uint{},
+			expected: "",
+		},
+		{
+			name:     "single core",
+			cores:    []uint{5},
+			expected: "5",
+		},
+		{
+			name:     "consecutive range",
+			cores:    []uint{1, 2, 3, 4},
+			expected: "1-4",
+		},
+		{
+			name:     "non-consecutive cores",
+			cores:    []uint{1, 3, 5},
+			expected: "1,3,5",
+		},
+		{
+			name:     "mixed ranges and singles",
+			cores:    []uint{1, 2, 3, 7, 10, 11, 12},
+			expected: "1-3,7,10-12",
+		},
+		{
+			name:     "unsorted input is sorted",
+			cores:    []uint{10, 2, 1, 3, 11},
+			expected: "1-3,10-11",
+		},
+		{
+			name:     "does not mutate input slice",
+			cores:    []uint{3, 1, 2},
+			expected: "1-3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			original := make([]uint, len(tt.cores))
+			copy(original, tt.cores)
+			result := prettifyCoreList(tt.cores)
+			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, original, tt.cores, "input slice should not be mutated")
+		})
+	}
+}
+
+func TestPrettifyCStatesMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		states   map[string]bool
+		expected string
+	}{
+		{
+			name:     "empty states",
+			states:   map[string]bool{},
+			expected: "",
+		},
+		{
+			name: "only enabled states",
+			states: map[string]bool{
+				"C1":  true,
+				"C1E": true,
+			},
+			expected: "enabled: C1,C1E",
+		},
+		{
+			name: "only disabled states",
+			states: map[string]bool{
+				"C2": false,
+				"C6": false,
+			},
+			expected: "disabled: C2,C6",
+		},
+		{
+			name: "mixed enabled and disabled states",
+			states: map[string]bool{
+				"C1":  true,
+				"C1E": true,
+				"C6":  false,
+			},
+			expected: "enabled: C1,C1E; disabled: C6",
+		},
+		{
+			name: "mixed enabled and disabled states - different order",
+			states: map[string]bool{
+				"C1":  true,
+				"C1E": false,
+				"C6":  true,
+			},
+			expected: "enabled: C1,C6; disabled: C1E",
+		},
+		{
+			name: "single enabled state",
+			states: map[string]bool{
+				"C1": true,
+			},
+			expected: "enabled: C1",
+		},
+		{
+			name: "single disabled state",
+			states: map[string]bool{
+				"C6": false,
+			},
+			expected: "disabled: C6",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := prettifyCStatesMap(tt.states)
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

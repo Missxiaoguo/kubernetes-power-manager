@@ -45,7 +45,7 @@ spec:
 
 ### Frequency adjustment flow
 
-1. A `PowerWorkload` referencing a `PowerProfile` with `workloadType: polling-dpdk` is reconciled by the PowerWorkload controller.
+1. A guaranteed pod requesting a `PowerProfile` with `workloadType: polling-dpdk` is reconciled by the PowerPod controller.
 2. The controller ensures a telemetry worker is created per DPDK pod to connect to its telemetry socket and sample cumulative `busy/total` cycle counters at a fixed internal window (≈10 ms). The worker computes windowed usage per CPU and stores the latest sample in a thread‑safe map.
 3. For each managed CPU, a scaling worker evaluates control every `samplePeriod`:
    - Reads the latest windowed usage.

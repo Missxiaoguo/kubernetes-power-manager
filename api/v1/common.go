@@ -19,6 +19,7 @@ package v1
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 type StatusErrors struct {
@@ -31,4 +32,40 @@ type PowerCRWithStatusErrors interface {
 	runtime.Object
 	SetStatusErrors(errs *[]string)
 	GetStatusErrors() *[]string
+}
+
+type GuaranteedPod struct {
+	// The name of the Node the Pod is running on
+	Node string `json:"node,omitempty"`
+
+	// The name of the Pod
+	Name string `json:"name,omitempty"`
+
+	Namespace string `json:"namespace,omitempty"`
+
+	// The UID of the Pod
+	UID string `json:"uid,omitempty"`
+
+	// The Containers that are running in the Pod
+	Containers []Container `json:"containers,omitempty"`
+}
+
+type Container struct {
+	// The name of the Container
+	Name string `json:"name,omitempty"`
+
+	// The ID of the Container
+	Id string `json:"id,omitempty"`
+
+	// The name of the Pod the Container is running on
+	Pod string `json:"pod,omitempty"`
+
+	// The UID of the Pod the Container is running on
+	PodUID types.UID `json:"podUID,omitempty"`
+
+	// The exclusive CPUs given to this Container
+	ExclusiveCPUs []uint `json:"exclusiveCpus,omitempty"`
+
+	// The PowerProfile that the Container is utilizing
+	PowerProfile string `json:"powerProfile,omitempty"`
 }

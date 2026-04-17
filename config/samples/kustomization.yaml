@@ -3,5 +3,4 @@ resources:
 - power_v1_powerconfig.yaml
 - power_v1_powernodeconfig.yaml
 - power_v1_shared_profile.yaml
-- power_v1_shared_workload.yaml
 #+kubebuilder:scaffold:manifestskustomizesamples
