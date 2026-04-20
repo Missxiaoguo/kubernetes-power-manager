@@ -233,11 +233,21 @@ undeploy:
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
 ifeq (false, $(OCP))
-	sed -i 's/- .*\/rbac\.yaml/- \.\/rbac.yaml/' config/rbac/kustomization.yaml
-	sed -i 's/- .*\/role\.yaml/- \.\/role.yaml/' config/rbac/kustomization.yaml
+	sed -i 's|- .*\/rbac\.yaml|- \.\/rbac.yaml|' config/rbac/kustomization.yaml
+	sed -i 's|- .*\/role\.yaml|- \.\/role.yaml|' config/rbac/kustomization.yaml
+	sed -i 's|- \.\./manager/ocp$$|- ../manager|' config/default/kustomization.yaml
+	sed -i '\|- \.\./certmanager$$|d' config/default/kustomization.yaml
+	sed -i '\|- \.\./webhook$$|a\- ../certmanager' config/default/kustomization.yaml
+	sed -i 's|- path: ocp/webhookcainjection_patch\.yaml$$|- path: webhookcainjection_patch.yaml|' config/default/kustomization.yaml
+	sed -i '\|- path: certmanager_replacements\.yaml$$|d' config/default/kustomization.yaml
+	sed -i '\|replacements:$$|a\- path: certmanager_replacements.yaml' config/default/kustomization.yaml
 else
-	sed -i 's/- .*\/rbac\.yaml/- \.\/ocp\/rbac.yaml/' config/rbac/kustomization.yaml
-	sed -i 's/- .*\/role\.yaml/- \.\/ocp\/role.yaml/' config/rbac/kustomization.yaml
+	sed -i 's|- .*\/rbac\.yaml|- \.\/ocp\/rbac.yaml|' config/rbac/kustomization.yaml
+	sed -i 's|- .*\/role\.yaml|- \.\/ocp\/role.yaml|' config/rbac/kustomization.yaml
+	sed -i 's|- \.\./manager$$|- ../manager/ocp|' config/default/kustomization.yaml
+	sed -i '\|- \.\./certmanager$$|d' config/default/kustomization.yaml
+	sed -i 's|- path: webhookcainjection_patch\.yaml$$|- path: ocp/webhookcainjection_patch.yaml|' config/default/kustomization.yaml
+	sed -i '\|- path: certmanager_replacements\.yaml$$|d' config/default/kustomization.yaml
 endif
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 
@@ -356,11 +366,6 @@ push:
 # Generate bundle manifests and metadata, then validate generated files.
 bundle: update manifests kustomize operator-sdk
 # directory used to get image name for bundle
-ifeq (false, $(OCP))
-	sed -i 's|^\- \.\./manager/ocp$$|- ../manager|' config/default/kustomization.yaml
-else
-	sed -i 's|^\- \.\./manager$$|- ../manager/ocp|' config/default/kustomization.yaml
-endif
 	$(OPERATOR_SDK) generate kustomize manifests -q
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/manifests | $(OPERATOR_SDK) generate bundle -q --use-image-digests --overwrite --version $(BUNDLE_VERSION) $(BUNDLE_METADATA_OPTS)

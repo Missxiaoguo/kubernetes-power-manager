@@ -1,0 +1,16 @@
+# Enable OpenShift service-ca to inject the CA bundle into the webhook configuration.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: power-manager-validating-webhook-configuration
+  annotations:
+    service.beta.openshift.io/inject-cabundle: "true"
+---
+# Request OpenShift service-ca to generate a serving certificate for the webhook service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: power-manager-webhook-service
+  namespace: system
+  annotations:
+    service.beta.openshift.io/serving-cert-secret-name: webhook-server-cert

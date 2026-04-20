@@ -17,3 +17,17 @@ resources:
 - ../crd
 - ../rbac
 - ../manager
+- ../webhook
+- ../certmanager
+
+patches:
+- path: manager_webhook_patch.yaml
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: controller-manager
+- path: webhookcainjection_patch.yaml
+
+replacements:
+- path: certmanager_replacements.yaml

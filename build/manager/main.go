@@ -29,6 +29,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
 
@@ -52,10 +53,15 @@ func init() {
 func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
+	var enableWebhooks bool
+	var webhookCertDir string
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "enable-leader-election", true,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.BoolVar(&enableWebhooks, "enable-webhooks", true, "Enable admission webhooks.")
+	flag.StringVar(&webhookCertDir, "webhook-cert-dir", "/tmp/k8s-webhook-server/serving-certs",
+		"Directory containing TLS certs (tls.crt, tls.key) for the webhook server.")
 
 	logOpts := zap.Options{}
 	logOpts.BindFlags(flag.CommandLine)
@@ -71,14 +77,23 @@ func main() {
 	)
 	renewDeadline := time.Second * time.Duration(20)
 	leaseDuration := time.Second * time.Duration(30)
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgrOpts := ctrl.Options{
 		Scheme:           scheme,
 		Metrics:          server.Options{BindAddress: metricsAddr},
 		LeaderElection:   enableLeaderElection,
 		LeaderElectionID: "power-operator-6846766c",
 		RenewDeadline:    &renewDeadline,
 		LeaseDuration:    &leaseDuration,
-	})
+	}
+
+	if enableWebhooks {
+		mgrOpts.WebhookServer = webhook.NewServer(webhook.Options{
+			Port:    9443,
+			CertDir: webhookCertDir,
+		})
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -96,6 +111,21 @@ func main() {
 		os.Exit(1)
 	}
 	// +kubebuilder:scaffold:builder
+
+	if enableWebhooks {
+		if err = powerv1.SetupPowerNodeConfigWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "PowerNodeConfig")
+			os.Exit(1)
+		}
+		if err = powerv1.SetupUncoreWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "Uncore")
+			os.Exit(1)
+		}
+		if err = powerv1.SetupPowerProfileWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "PowerProfile")
+			os.Exit(1)
+		}
+	}
 
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
