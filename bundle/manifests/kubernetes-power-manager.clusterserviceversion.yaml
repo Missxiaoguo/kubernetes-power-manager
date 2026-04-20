@@ -163,10 +163,13 @@ spec:
               resources:
                 - nodes
                 - nodes/status
+                - pods
                 - configmaps
                 - configmaps/status
                 - powerconfigs
                 - powerconfigs/status
+                - powernodeconfigs
+                - powernodeconfigs/status
                 - powerprofiles
                 - powerprofiles/status
                 - powernodestates
@@ -334,6 +337,8 @@ spec:
           apiVersions:
             - v1
           operations:
+            - CREATE
+            - UPDATE
             - DELETE
           resources:
             - powerprofiles

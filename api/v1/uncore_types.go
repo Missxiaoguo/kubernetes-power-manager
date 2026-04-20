@@ -28,6 +28,11 @@ type UncoreSpec struct {
 	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 
+	// NodeSelector specifies which nodes this Uncore configuration applies to.
+	// If not specified, the config applies to all nodes running the Power Node Agent.
+	// +optional
+	NodeSelector NodeSelector `json:"nodeSelector,omitempty"`
+
 	SysMax       *uint          `json:"sysMax,omitempty"`
 	SysMin       *uint          `json:"sysMin,omitempty"`
 	DieSelectors *[]DieSelector `json:"dieSelector,omitempty"`

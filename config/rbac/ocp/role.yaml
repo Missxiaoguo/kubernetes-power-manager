@@ -7,6 +7,7 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - nodes
   - pods
   verbs:
   - get
@@ -16,6 +17,7 @@ rules:
   - power.openshift.io
   resources:
   - powerconfigs
+  - powernodestates
   - powerprofiles
   - uncores
   verbs:
@@ -30,12 +32,21 @@ rules:
   - power.openshift.io
   resources:
   - powerconfigs/status
+  - powernodestates/status
   - powerprofiles/status
   - uncores/status
   verbs:
   - get
   - patch
   - update
+- apiGroups:
+  - power.openshift.io
+  resources:
+  - powernodeconfigs
+  verbs:
+  - get
+  - list
+  - watch
 - apiGroups:
   - power.openshift.io
   resources:

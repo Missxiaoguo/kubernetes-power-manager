@@ -159,11 +159,11 @@ test: generate fmt vet manifests test-envtest
 	go test -v ./... -coverprofile cover.out
 	cd power-optimization-library && go test -v ./... -coverprofile cover.out
 
-# Run SSA envtest tests (requires real API server via envtest, excluded from regular test runs via build tag)
+# Run envtest integration tests (requires real API server via envtest, excluded from regular test runs via build tag)
 .PHONY: test-envtest
 test-envtest: envtest manifests
 	KUBEBUILDER_ASSETS="$$($(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-		go test -v -tags=envtest ./controllers/ -count=1 -run TestSSA_
+		go test -v -tags=envtest ./api/v1/ ./controllers/ -count=1 -run 'TestEnvTest|TestSSA'
 
 # Build manager binary
 build: generate manifests
