@@ -42,8 +42,7 @@ func createConfigReconcilerObject(objs []client.Object) (*PowerConfigReconciler,
 	}
 	// Create a fake client to mock API calls.
 	cl := fake.NewClientBuilder().WithScheme(s).WithObjects(objs...).
-		WithStatusSubresource(&powerv1.PowerConfig{}).
-		WithStatusSubresource(&powerv1.PowerNode{}).Build()
+		WithStatusSubresource(&powerv1.PowerConfig{}).Build()
 
 	state := state.NewPowerNodeData()
 
@@ -123,15 +122,6 @@ func TestPowerConfig_Reconcile_Creation(t *testing.T) {
 			t.Errorf("%s failed: expected daemonSet '%s' to have been created", tc.testCase, NodeAgentDSName)
 		}
 
-		powerNode := &powerv1.PowerNode{}
-		err = r.Client.Get(context.TODO(), client.ObjectKey{
-			Name:      tc.nodeName,
-			Namespace: PowerNamespace,
-		}, powerNode)
-		if err != nil {
-			t.Errorf("%s failed: expected power node object '%s' to have been created", tc.testCase, tc.nodeName)
-		}
-
 		powerNodeState := &powerv1.PowerNodeState{}
 		powerNodeStateName := fmt.Sprintf("%s-power-state", tc.nodeName)
 		err = r.Client.Get(context.TODO(), client.ObjectKey{
@@ -184,20 +174,6 @@ func TestPowerConfig_Reconcile_Deletion(t *testing.T) {
 						},
 					},
 				},
-				&powerv1.PowerWorkload{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "performance-TestNode",
-						Namespace: PowerNamespace,
-					},
-					Spec: powerv1.PowerWorkloadSpec{},
-				},
-				&powerv1.PowerNode{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "TestNode",
-						Namespace: PowerNamespace,
-					},
-					Spec: powerv1.PowerNodeSpec{},
-				},
 				&powerv1.PowerNodeState{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "TestNode-power-state",
@@ -246,28 +222,6 @@ func TestPowerConfig_Reconcile_Deletion(t *testing.T) {
 
 		if len(profiles.Items) != tc.expectedNumberOfObjects {
 			t.Errorf("%s failed: expected number of power profile objects is %v, got %v", tc.testCase, tc.expectedNumberOfObjects, len(profiles.Items))
-		}
-
-		workloads := &powerv1.PowerWorkloadList{}
-		err = r.Client.List(context.TODO(), workloads)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving the power workload objects", tc.testCase)
-		}
-
-		if len(workloads.Items) != tc.expectedNumberOfObjects {
-			t.Errorf("%s failed: expected number of power workload objects is %v, got %v", tc.testCase, tc.expectedNumberOfObjects, len(workloads.Items))
-		}
-
-		powerNodes := &powerv1.PowerNodeList{}
-		err = r.Client.List(context.TODO(), powerNodes)
-		if err != nil {
-			t.Error(err)
-			t.Fatalf("%s - error retrieving power node objects", tc.testCase)
-		}
-
-		if len(powerNodes.Items) != tc.expectedNumberOfObjects {
-			t.Errorf("%s failed: expected number of power node objects is %v, got %v", tc.testCase, tc.expectedNumberOfObjects, len(powerNodes.Items))
 		}
 
 		powerNodeStates := &powerv1.PowerNodeStateList{}

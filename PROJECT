@@ -9,11 +9,6 @@ repo: github.com/openshift-kni/kubernetes-power-manager
 resources:
 - domain: openshift.io
   group: power
-  kind: PowerNode
-  path: github.com/openshift-kni/kubernetes-power-manager/api/v1
-  version: v1
-- domain: openshift.io
-  group: power
   kind: PowerProfile
   path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1
@@ -30,11 +25,6 @@ resources:
 - domain: openshift.io
   group: power
   kind: PowerNodeConfig
-  path: github.com/openshift-kni/kubernetes-power-manager/api/v1
-  version: v1
-- domain: openshift.io
-  group: power
-  kind: PowerWorkload
   path: github.com/openshift-kni/kubernetes-power-manager/api/v1
   version: v1
 - domain: openshift.io

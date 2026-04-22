@@ -648,24 +648,6 @@ func setupUncoreFuzz(t *testing.T, nodeName string, namespace string, extraNode 
 			},
 		},
 	}
-	powerNodesObj := &powerv1.PowerNodeList{
-		Items: []powerv1.PowerNode{
-			{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: nodeName,
-				},
-			},
-		},
-	}
-
-	if extraNode {
-		powerNodesObj.Items = append(powerNodesObj.Items, powerv1.PowerNode{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: node2Name,
-			},
-		})
-	}
-
 	powerProfilesObj := &powerv1.PowerProfileList{
 		Items: []powerv1.PowerProfile{
 			{
@@ -681,7 +663,7 @@ func setupUncoreFuzz(t *testing.T, nodeName string, namespace string, extraNode 
 		},
 	}
 
-	objs := []runtime.Object{UncoreObj, powerProfilesObj, powerNodesObj}
+	objs := []runtime.Object{UncoreObj, powerProfilesObj}
 	rec, _ := createUncoreReconcilerObject(objs)
 	rec.PowerLibrary = powerLib
 	return rec, req

@@ -83,33 +83,6 @@ metadata:
         },
         {
           "apiVersion": "power.openshift.io/v1",
-          "kind": "PowerWorkload",
-          "metadata": {
-            "labels": {
-              "app.kubernetes.io/created-by": "kubernetes-power-manager",
-              "app.kubernetes.io/instance": "shared-\u003cNODE_NAME\u003e-workload",
-              "app.kubernetes.io/managed-by": "kustomize",
-              "app.kubernetes.io/name": "PowerWorkload",
-              "app.kubernetes.io/part-of": "kubernetes-power-manager"
-            },
-            "name": "shared-\u003cNODE_NAME\u003e-workload",
-            "namespace": "power-manager"
-          },
-          "spec": {
-            "allCores": true,
-            "name": "shared-\u003cNODE_NAME\u003e-workload",
-            "powerNodeSelector": {
-              "kubernetes.io/hostname": "\u003cNODE_NAME\u003e"
-            },
-            "powerProfile": "shared",
-            "reservedCPUs": [
-              0,
-              1
-            ]
-          }
-        },
-        {
-          "apiVersion": "power.openshift.io/v1",
           "kind": "Uncore",
           "metadata": {
             "labels": {
@@ -158,11 +131,6 @@ spec:
         kind: PowerNodeConfig
         name: powernodeconfigs.power.openshift.io
         version: v1
-      - description: PowerNode is the Schema for the powernodes API
-        displayName: Power Node
-        kind: PowerNode
-        name: powernodes.power.openshift.io
-        version: v1
       - description: |-
           PowerNodeState is the Schema for the powernodestates API
           It provides per-node status for power management configuration
@@ -174,11 +142,6 @@ spec:
         displayName: Power Profile
         kind: PowerProfile
         name: powerprofiles.power.openshift.io
-        version: v1
-      - description: PowerWorkload is the Schema for the powerworkloads API
-        displayName: Power Workload
-        kind: PowerWorkload
-        name: powerworkloads.power.openshift.io
         version: v1
       - description: Uncore is the Schema for the uncores API
         displayName: Uncore
@@ -207,10 +170,6 @@ spec:
                 - powerconfigs/status
                 - powerprofiles
                 - powerprofiles/status
-                - powerworkloads
-                - powerworkloads/status
-                - powernodes
-                - powernodes/status
                 - powernodestates
                 - powernodestates/status
                 - events

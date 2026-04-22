@@ -16,9 +16,7 @@ rules:
   - power.openshift.io
   resources:
   - powerconfigs
-  - powernodes
   - powerprofiles
-  - powerworkloads
   - uncores
   verbs:
   - create
@@ -32,9 +30,7 @@ rules:
   - power.openshift.io
   resources:
   - powerconfigs/status
-  - powernodes/status
   - powerprofiles/status
-  - powerworkloads/status
   - uncores/status
   verbs:
   - get

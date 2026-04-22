@@ -23,22 +23,6 @@ rules:
 - apiGroups:
   - power.openshift.io
   resources:
-  - powernodes
-  verbs:
-  - get
-  - list
-  - update
-  - watch
-- apiGroups:
-  - power.openshift.io
-  resources:
-  - powernodes/status
-  verbs:
-  - get
-  - update
-- apiGroups:
-  - power.openshift.io
-  resources:
   - powerprofiles
   verbs:
   - get
@@ -49,22 +33,6 @@ rules:
   - power.openshift.io
   resources:
   - powerprofiles/status
-  verbs:
-  - get
-  - update
-- apiGroups:
-  - power.openshift.io
-  resources:
-  - powerworkloads
-  verbs:
-  - get
-  - list
-  - update
-  - watch
-- apiGroups:
-  - power.openshift.io
-  resources:
-  - powerworkloads/status
   verbs:
   - get
   - update

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/intel/power-optimization-library/pkg/power"
 	powerv1 "github.com/openshift-kni/kubernetes-power-manager/api/v1"
@@ -226,45 +225,7 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 			return ctrl.Result{}, err
 		}
 
-		// This block is trying to handle the edge case where a shared workload references a profile that was created later,
-		// but this approach is incomplete and problematic because:
-		//      1. Shared workloads can reference non-shared profiles
-		//      2. Shared workload naming is not guaranteed to follow the shared-<NodeName>-workload format
-		// TODO: Remove this workaround and implement proper webhook validation to reject workload creation if referenced profile is not found
-		if profile.Spec.Shared {
-			logger.V(5).Info(fmt.Sprintf(
-				"shared power profile successfully created: name - %s max - %d min - %d EPP - %s",
-				profile.Spec.Name, powerProfile.GetPStates().GetMaxFreq().IntVal, powerProfile.GetPStates().GetMinFreq().IntVal, actualEpp))
-			workloadName := fmt.Sprintf("shared-%s-workload", nodeName)
-			// check if the current node has a shared workload
-			workload := &powerv1.PowerWorkload{}
-			err = r.Client.Get(ctx, client.ObjectKey{
-				Name:      workloadName,
-				Namespace: req.NamespacedName.Namespace,
-			}, workload)
-			if err != nil {
-				if errors.IsNotFound(err) {
-					return ctrl.Result{}, nil
-				}
-				logger.Error(err, "client error")
-				return ctrl.Result{}, err
-			}
-			// check if the shared workload uses this profile
-			if workload.Spec.PowerProfile == profile.Spec.Name {
-				// if workload uses this profile, update it to use the latest info
-				workload.ObjectMeta.Annotations = map[string]string{"PM-updated": fmt.Sprint(time.Now().Unix())}
-				err = r.Client.Update(ctx, workload)
-				if err != nil {
-					logger.Error(err, "error updating workload attached to profile")
-					return ctrl.Result{}, err
-				}
-			}
-			return ctrl.Result{}, nil
-		}
-
-		logger.V(5).Info(fmt.Sprintf(
-			"power profile successfully created: name - %s max - %d min - %d EPP - %s",
-			profile.Spec.Name, powerProfile.GetPStates().GetMaxFreq().IntVal, powerProfile.GetPStates().GetMinFreq().IntVal, actualEpp))
+		logger.V(5).Info("power profile successfully created", "profile", profile.Spec.Name)
 	} else {
 		// Exclusive pool for this profile already exists, update it and all the other pools that use this profile
 		err = r.PowerLibrary.GetExclusivePool(profile.Spec.Name).SetPowerProfile(powerProfile)

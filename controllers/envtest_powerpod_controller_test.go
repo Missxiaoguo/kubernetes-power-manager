@@ -80,7 +80,7 @@ func createPodReconcilerWithEnvTest(
 }
 
 // createPodReconcilePrereqs creates the common prerequisite resources for pod reconciliation
-// envtests: Node, PowerNode, PowerNodeState, and the specified PowerProfiles.
+// envtests: Node, PowerNodeState, and the specified PowerProfiles.
 func createPodReconcilePrereqs(t *testing.T, cl client.Client, ctx context.Context, nodeName string, profileNames ...string) {
 	t.Helper()
 
@@ -91,9 +91,6 @@ func createPodReconcilePrereqs(t *testing.T, cl client.Client, ctx context.Conte
 				corev1.ResourceCPU: *resource.NewQuantity(16, resource.DecimalSI),
 			},
 		},
-	}))
-	require.NoError(t, cl.Create(ctx, &powerv1.PowerNode{
-		ObjectMeta: metav1.ObjectMeta{Name: nodeName, Namespace: PowerNamespace},
 	}))
 	createTestPowerNodeState(t, cl, fmt.Sprintf("%s-power-state", nodeName))
 	for _, name := range profileNames {

@@ -392,86 +392,43 @@ spec:
     feature.node.kubernetes.io/power-node: "true"
 ```
 
-### Power Workload controller
+### Power Node Config controller
 
-The Power Workload controller is responsible for the actual tuning of the cores. The Power Workload Controller uses the
-Power Optimization Library and requests that it creates the Pools. The Pools hold the `PowerProfile` associated with the
-cores and the cores that need to be configured.
+The Power Node Config controller is responsible for configuring the shared and reserved CPU pools on each node. It uses
+the Power Optimization Library to set the power profile on the shared pool, move CPUs between the shared and reserved
+pools, and apply frequency/power settings to reserved CPUs.
 
-`PowerWorkload` objects are automatically created for each valid non-Shared `PowerProfile` by the Power Profile controller.
-`PowerWorkload` objects can also be created directly by the user via the `PowerWorkload` spec. This is only recommended
-when creating the Shared `PowerWorkload` for a given Node, as this is the responsibility of the user. If no Shared
-`PowerWorkload` is created, the cores that remain in the *shared pool* on the Node will remain at their core frequency
-values instead of being tuned to lower frequencies. `PowerWorkloads` are specific to a given node, so one is created for
-each Node with a Pod requesting a `PowerProfile`, based on the `PowerProfile` requested.
+The `PowerNodeConfig` CR is created by the user to define the shared pool configuration for nodes matching its
+`spec.nodeSelector`. The shared pool profile tunes all cores on the system (except reserved CPUs) to the specified
+frequency settings. Reserved CPUs can optionally be configured with their own `PowerProfile`.
 
-> **Note: A Shared `PowerWorkload` is mandatory if guaranteed pods will need to use `PowerProfiles`.**
+> **Note: A `PowerNodeConfig` is mandatory if guaranteed pods will need to use `PowerProfiles`.**
 
-**Example PowerWorkload with exclusive CPUs:**
-
-```yaml
-apiVersion: "power.openshift.io/v1"
-kind: PowerWorkload
-metadata:
-    name: performance-example-node-workload
-    namespace: power-manager
-spec:
-   name: "performance-example-node-workload"
-   powerProfile: "performance-example-node"
-status:
-   workloadNodes:
-     containers:
-     - exclusiveCPUs:
-       - 2
-       - 3
-       - 66
-       - 67
-       id: f1be89f7dda457a7bb8929d4da8d3b3092c9e2a35d91065f1b1c9e71d19bcd4f
-       name: example-container
-       pod: example-pod
-       powerProfile: “performance-example-node”
-     name: “example-node”
-     cpuIds:
-     - 2
-     - 3
-     - 66
-     - 67
-```
-
-This workload assigns the **performance** `PowerProfile` to cores 2, 3, 66, and 67 on the node *example-node*.
-
-The Shared `PowerWorkload` created by the user is determined by the power workload controller based on the *allCores*
-value in the `PowerWorkload` spec.
-
-The reserved CPUs on the Node must also be specified, as these will not be considered for frequency tuning by the
-controller as they are always being used by Kubernetes’ processes.
-It is important that the reservedCPUs value directly corresponds to the reservedCPUs value in the user’s Kubelet config to
-keep them consistent.
-The user determines the Node for this `PowerWorkload` using the `spec.powerNodeSelector` to match the labels on the Node.
-The user then specifies the requested `PowerProfile` to use.
-
-The shared `PowerWorkload` must select a unique node through its `spec.powerNodeSelector` (create one shared
-`PowerWorkload` per node in multi-node clusters), so it is recommended that the `kubernetes.io/hostname` label be used.
-A shared `PowerProfile` can be used for multiple shared `PowerWorkloads`.
+Reserved CPUs can optionally be specified in the `PowerNodeConfig` to exclude them from shared pool frequency tuning,
+since these are typically used by Kubernetes system processes.
+If specified, the `reservedCPUs` values should correspond to the `reservedSystemCPUs` in the user’s Kubelet config.
 
 **Example:**
 
 ```yaml
 apiVersion: "power.openshift.io/v1"
-kind: PowerWorkload
+kind: PowerNodeConfig
 metadata:
-  name: shared-example-node-workload
+  name: shared-example-config
   namespace: power-manager
 spec:
-  name: "shared-example-node-workload"
-  allCores: true
+  sharedPowerProfile: shared
+  nodeSelector:
+    labelSelector:
+      matchLabels:
+        node-role.kubernetes.io/worker: ""
   reservedCPUs:
-    - cores: [0, 1]
-      powerProfile: "performance"
-  powerNodeSelector:
-    # Labels other than hostname can be used
-    - “kubernetes.io/hostname”: “example-node”
-  powerProfile: "shared-example-node"
+  - cores:
+    - 0
+    - 1
+    - 24
+    - 25
+    powerProfile: performance
 ```
 
 ### Power Profile Controller
@@ -491,12 +448,12 @@ spec:
   name: "performance-example-application"
   cpuCapacity: "75%"
   nodeSelector:
-  labelSelector:
-    matchExpressions:
-    - key: test
-      operator: In
-      values:
-      - test
+    labelSelector:
+      matchExpressions:
+      - key: test
+        operator: In
+        values:
+        - test
   pstates:
     max: 3700
     min: 3300
@@ -520,10 +477,9 @@ Note:
 Dynamic scaling for DPDK polling workloads is also supported via `spec.cpuScalingPolicy`.
 See [Dynamic CPU Frequency Scaling for DPDK workloads](docs/dpdk-dynamic-scaling.md) for details.
 
-The Shared `PowerProfile` must also be created by the user and does not require a Base PowerProfile. This allows the user
-to have a Shared `PowerProfile` per Node in their cluster, giving more room for different configurations. The Power
-controller determines that a `PowerProfile` is being designated as `Shared` through the use of the `spec.shared` parameter.
-This flag must be enabled when using a shared pool.
+A Shared `PowerProfile` must also be created by the user and referenced by the `PowerNodeConfig`'s `spec.sharedPowerProfile`
+field. The Power Profile controller determines that a `PowerProfile` is shared through the `spec.shared: true` parameter.
+The same shared `PowerProfile` can be referenced by multiple `PowerNodeConfig` CRs targeting different nodes.
 
 **Examples:**
 
@@ -550,17 +506,17 @@ metadata:
 spec:
   name: "shared-example-node2"
   cpuCapacity: "75%"
-   nodeSelector:
-   labelSelector:
-     matchExpressions:
-     - key: test
-       operator: In
-       values:
-       - test
+  nodeSelector:
+    labelSelector:
+      matchExpressions:
+      - key: test
+        operator: In
+        values:
+        - test
   shared: true
   pstates:
-    max: "20%" # scalar is also accepted; if missing, it defaults to the hardware max
-    min: "50%" # scalar is also accepted; if missing, it defaults to the hardware max
+    max: "50%" # scalar is also accepted; if missing, it defaults to the hardware max
+    min: "20%" # scalar is also accepted; if missing, it defaults to the hardware min
     governor: "powersave"
   # Names or maxLatencyUs, only one is supported.
   cstates:
@@ -570,50 +526,66 @@ spec:
       C6: false
 ```
 
-> **Note: The Power Profile controller will create a corresponding `PowerWorkload` for each valid
-non-Shared `PowerProfile`.**
+> **Note: Non-Shared `PowerProfiles` are advertised as extended resources on matching nodes and can be
+requested by guaranteed pods via the PodSpec.**
 
-### Power Node controller
+### PowerNodeState
 
-The Power Node controller provides observability into the node's power management operations. It displays the current state of PowerProfiles, PowerWorkloads, core assignments, and guaranteed pod containers.
+The `PowerNodeState` CR provides observability into the node's power management operations. It is automatically managed
+by the controllers and displays the current state of PowerProfiles, CPU pool configurations, and guaranteed pod
+container assignments.
 
-**Example Status:**
+The `PowerNodeState` status is updated via Server-Side Apply (SSA) by the PowerProfile, PowerPod, and PowerNodeConfig
+controllers, each owning their respective fields.
+
+**Example:**
 
 ```yaml
+apiVersion: power.openshift.io/v1
+kind: PowerNodeState
+metadata:
+  name: example-node-power-state
+  namespace: power-manager
+spec: {}
 status:
-  powerContainers:
-  - exclusiveCpus:
-    - 2
-    - 26
-    id: cri-o://e91dca501a08c343bb18e42e86d3d6c9e146db50782fe56ec5fe776160dc43dc
-    name: example-container
-    pod: example-pod
-    powerProfile: balance-performance
-    workload: performance-example-node-workload
+  cpuPools:
+    exclusive:
+    - pod: guaranteed-perf-pod-2
+      podUID: 8fb49327-3e69-4b68-8e64-b21ab0660462
+      powerContainers:
+      - cpuIDs:
+        - 2
+        - 26
+        id: cri-o://94d80f7e714933ebe2fc3aef8e9076aa6e8d4ce7c026e961f9547515ce9d8aa2
+        name: app-container
+        powerProfile: application
+      - cpuIDs:
+        - 3
+        id: cri-o://d085c76e40eb0e8e593e616611499e7331605b5d1d65c7d05280c5ea47788fda
+        name: performance-container
+        powerProfile: performance
+    reserved:
+    - powerNodeConfig: shared-performance
+      powerProfileCPUs:
+      - cpuIDs: 0-1,24-25
+        powerProfile: performance
+    shared:
+      cpuIDs: 4-23,27-47
+      powerNodeConfig: shared-performance
+      powerProfile: shared
   powerProfiles:
-  - 'balance-performance: 2900000 || 2700000 || balance_performance || powersave ||
-    enabled: C1,C1E,POLL; disabled: C6'
-  - 'balance-power: 2200000 || 2000000 || balance_power || powersave || enabled: C1,C1E,POLL;
-    disabled: C6'
-  - 'performance: 95% || 75% || performance || powersave || enabled: C1,C1E,POLL;
-    disabled: C6'
-  - 'shared-power-saving: 1800000 || 800000 || power || powersave || enabled: C1,C1E,C6,POLL'
-  powerWorkloads:
-  - 'balance-power: balance-power || '
-  - 'performance: performance || '
-  - 'balance-performance: balance-performance || 2,26'
-  reservedPools:
-  - 3600000 || 3400000 || 0-1,24-25
-  sharedPool: shared-power-saving || 1800000 || 800000 || 3-23,27-47
+  - config: 'Min: 3000, Max: 3900, Governor: powersave, EPP: , C-States: enabled:
+      C1,C1E; disabled: C6,POLL'
+    name: application
+  - config: 'Min: 2800, Max: 3200, Governor: powersave, EPP: , C-States: enabled:
+      C1,C1E,C6; disabled: POLL'
+    name: balance-performance
+  - config: 'Min: 3200, Max: 3400, Governor: performance, EPP: performance, C-States:
+      enabled: C1; disabled: C1E,C6,POLL'
+    name: performance
+  - config: 'Min: 1000, Max: 1000, Governor: powersave, EPP: power, C-States: '
+    name: shared
 ```
-
-The status shows:
-
-- **powerProfiles**: Available profiles with frequencies, EPP, governor, and C-state configuration
-- **powerWorkloads**: Active workloads with their assigned cores  
-- **powerContainers**: Guaranteed pod containers with exclusive core assignments
-- **sharedPool**: Shared pool profile and core assignments
-- **reservedPools**: Reserved platform cores with custom profiles
 
 ### Power Pod controller
 
@@ -621,7 +593,8 @@ The Power Pod Controller watches for pods. When a pod comes along the Power Pod 
 guaranteed quality of service class (using exclusive
 cores, [see documentation](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/), taking a core
 out of the shared pool as it is the only option in Kubernetes that can do this operation). Then it examines the Pods to
-determine which PowerProfile has been requested and then updates the appropriate `PowerWorkload`.
+determine which PowerProfile has been requested, moves the pod's CPUs into the corresponding exclusive pool in the Power
+Optimization Library, and updates the `PowerNodeState` status.
 
 > **Note**: the request and the limits must have a matching number of cores and are also on a container-by-container basis.
 Currently the Kubernetes Power Manager supports multiple `PowerProfile` per Pod, but only one `PowerProfile` per container.
@@ -678,16 +651,17 @@ status:
 5. If needed, create other non-Shared `PowerProfiles`.
     > Note: These would usually be used for reserved or exclusive CPUs.
 
-6. Create the **Shared PowerWorkload** - use the example [Shared PowerWorkload](examples/example-shared-workload.yaml).
+6. Create the **PowerNodeConfig** to configure shared and reserved CPU pools.
 
-    Replace the necessary values with those that correspond to your cluster and apply the Workload:
+    Replace the necessary values with those that correspond to your cluster and apply:
 
     ```console
-    kubectl apply -f examples/example-shared-workload.yaml
+    kubectl apply -f examples/example-powernodeconfig.yaml
     ```
 
-    - Once applied, the PowerWorkload controller will get triggered and create the corresponding Pool.
-    - All of the cores on the system except for the reservedCPUs will then be brought down to this lower frequency level.
+
+    - Once applied, the PowerNodeConfig controller will configure the shared and reserved CPU pools.
+    - All of the cores on the system except for the reservedCPUs will be tuned to the shared profile's frequency settings.
     - The reservedCPUs will be kept at the system default min and max frequency by default. If the user specifies a
      `PowerProfile` along with a set of reserved
       cores then a separate pool will be created for those cores and that profile. If an invalid profile is supplied the
@@ -702,21 +676,16 @@ status:
     kubectl apply -f examples/example-pod.yaml
     ```
 
-    At this point, if only the *performance* `PowerProfile` has been created, the cluster will contain 2 PowerProfiles and 2 PowerWorkloads:
+    At this point, the cluster will contain the PowerProfiles you created:
 
     ```console
     # kubectl get powerprofiles -n power-manager
     NAME                          AGE
     performance                   59m
-    shared-<NODE_NAME>            60m
-
-    # kubectl get powerworkloads -n power-manager
-    NAME                                   AGE
-    performance-<NODE_NAME>-workload       63m
-    shared-<NODE_NAME>-workload            61m
+    shared-example                60m
     ```
 
-    Check the `PowerNode` *status* CR for a summary of the KPM resources and the CPU configuration.
+    Check the `PowerNodeState` status for a summary of the CPU pool configuration on each node.
 
 8. **Delete Pods**
 
@@ -724,5 +693,5 @@ status:
     kubectl delete pods <name>
     ```
 
-    When a Pod that was associated with a `PowerWorkload` is deleted, the cores associated with that Pod will be removed from the corresponding `PowerWorkload`.
-    All cores removed from the PowerWorkload are added back to the Shared PowerWorkload for that Node and returned to the lower frequencies.
+    When a Pod with exclusive CPU assignments is deleted, the cores associated with that Pod are moved back to the
+    shared pool and returned to the shared profile's frequencies. The `PowerNodeState` status is updated accordingly.
