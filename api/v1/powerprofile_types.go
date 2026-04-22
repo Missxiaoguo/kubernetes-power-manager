@@ -27,9 +27,6 @@ import (
 type PowerProfileSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
-	// The name of the PowerProfile
-	Name string `json:"name"`
-
 	Shared bool `json:"shared,omitempty"`
 
 	// NodeSelector specifies which nodes this PowerProfile should be applied to

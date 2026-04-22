@@ -89,7 +89,6 @@ func Test_addPowerNodeStatusProfileEntry(t *testing.T) {
 			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
-			Name: "test-profile",
 			PStates: powerv1.PStatesConfig{
 				Min:      intStrFromInt(2000),
 				Max:      intStrFromInt(3000),
@@ -204,7 +203,6 @@ func Test_addPowerNodeStatusProfileEntry(t *testing.T) {
 					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerProfileSpec{
-					Name: "dpdk-profile",
 					PStates: powerv1.PStatesConfig{
 						Min:      intStrFromInt(2000),
 						Max:      intStrFromInt(3000),

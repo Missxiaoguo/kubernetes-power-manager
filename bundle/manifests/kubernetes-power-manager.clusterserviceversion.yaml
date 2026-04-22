@@ -71,7 +71,6 @@ metadata:
             "cstates": {
               "maxLatencyUs": 1
             },
-            "name": "shared",
             "pstates": {
               "epp": "power",
               "governor": "powersave",

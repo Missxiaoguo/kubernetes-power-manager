@@ -91,11 +91,11 @@ func isValidEpp(inputName string) bool {
 
 // doesNodeMatchPowerProfileSelector checks if a PowerProfile should be applied to a specific node.
 func doesNodeMatchPowerProfileSelector(c client.Client, profile *powerv1.PowerProfile, nodeName string, logger *logr.Logger) (bool, error) {
-	logger.V(5).Info("Checking if PowerProfile should be applied to node", "profile", profile.Spec.Name, "nodeName", nodeName)
+	logger.V(5).Info("Checking if PowerProfile should be applied to node", "profile", profile.Name, "nodeName", nodeName)
 	// If no label selector is specified, apply to all nodes.
 	labelSelector := profile.Spec.NodeSelector.LabelSelector
 	if len(labelSelector.MatchLabels) == 0 && len(labelSelector.MatchExpressions) == 0 {
-		logger.V(5).Info("No label selector specified, applying PowerProfile to all nodes", "profile", profile.Spec.Name, "nodeName", nodeName)
+		logger.V(5).Info("No label selector specified, applying PowerProfile to all nodes", "profile", profile.Name, "nodeName", nodeName)
 		return true, nil
 	}
 
@@ -239,8 +239,8 @@ func addPowerNodeStatusProfileEntry(ctx context.Context, c client.Client, nodeNa
 	}
 
 	errList := util.UnpackErrsToStrings(profileErrors)
-	profileStatus := powerv1.PowerNodeProfileStatus{Name: profile.Spec.Name, Config: config, Errors: *errList}
-	fieldManager := powerProfileFieldManager(profile.Spec.Name)
+	profileStatus := powerv1.PowerNodeProfileStatus{Name: profile.Name, Config: config, Errors: *errList}
+	fieldManager := powerProfileFieldManager(profile.Name)
 
 	err = applyPowerNodeStateProfilesStatus(ctx, c, powerNodeStateName, []powerv1.PowerNodeProfileStatus{profileStatus}, fieldManager)
 	if err != nil {
@@ -255,7 +255,7 @@ func addPowerNodeStatusProfileEntry(ctx context.Context, c client.Client, nodeNa
 
 	logger.Info("Updated PowerNodeState with profile validation results",
 		"powerNodeState", powerNodeStateName,
-		"profile", profile.Spec.Name,
+		"profile", profile.Name,
 		"errors", len(*errList))
 
 	return nil

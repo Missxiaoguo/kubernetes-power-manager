@@ -10,7 +10,6 @@ metadata:
   name: shared
   namespace: power-manager
 spec:
-  name: "shared"
   shared: true
   pstates:
     max: 1000

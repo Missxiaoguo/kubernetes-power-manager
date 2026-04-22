@@ -91,7 +91,6 @@ sharedprofile:
   name: shared
   namespace: power-manager
   spec:
-    name: "shared"
     max: 1000
     min: 1000
     epp: "power"

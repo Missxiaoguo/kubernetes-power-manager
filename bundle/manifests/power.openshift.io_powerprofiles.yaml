@@ -139,9 +139,6 @@ spec:
                 - message: Specify either 'names' or 'maxLatencyUs' for C-state configuration,
                     but not both
                   rule: '!(has(self.names) && has(self.maxLatencyUs))'
-              name:
-                description: The name of the PowerProfile
-                type: string
               nodeSelector:
                 description: |-
                   NodeSelector specifies which nodes this PowerProfile should be applied to
@@ -227,8 +224,6 @@ spec:
                 type: object
               shared:
                 type: boolean
-            required:
-            - name
             type: object
             x-kubernetes-validations:
             - message: pstates.governor must be 'userspace' when cpuScalingPolicy

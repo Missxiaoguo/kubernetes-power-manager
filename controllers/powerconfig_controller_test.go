@@ -166,7 +166,6 @@ func TestPowerConfig_Reconcile_Deletion(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},

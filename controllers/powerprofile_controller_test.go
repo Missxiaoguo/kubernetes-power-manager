@@ -98,7 +98,6 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerProfileSpec{
-					Name: "performance",
 					PStates: powerv1.PStatesConfig{
 						Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 						Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -123,7 +122,6 @@ func TestPowerProfile_Reconcile_ExclusivePoolCreation(t *testing.T) {
 					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerProfileSpec{
-					Name: "performance",
 					PStates: powerv1.PStatesConfig{
 						Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 						Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -200,7 +198,6 @@ func TestPowerProfile_Reconcile_SharedPoolCreation(t *testing.T) {
 				Namespace: PowerNamespace,
 			},
 			Spec: powerv1.PowerProfileSpec{
-				Name:   "shared",
 				Shared: true,
 				PStates: powerv1.PStatesConfig{
 					Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
@@ -273,7 +270,6 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -304,7 +300,6 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
 						PStates: powerv1.PStatesConfig{
 							Max: nil,
 							Min: nil,
@@ -335,7 +330,6 @@ func TestPowerProfile_Reconcile_NonPowerProfileNotInLibrary(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "user-created",
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -417,7 +411,6 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -448,7 +441,6 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
 						PStates: powerv1.PStatesConfig{
 							Max: nil,
 							Min: nil,
@@ -479,7 +471,6 @@ func TestPowerProfile_Reconcile_NonPowerProfileInLibrary(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "user-created",
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -649,7 +640,6 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyHandling(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: tc.profileName,
 						PStates: powerv1.PStatesConfig{
 							Max:      tc.max,
 							Min:      tc.min,
@@ -792,7 +782,6 @@ func TestPowerProfile_Reconcile_MaxMinFrequencyValidationErrors(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: tc.profileName,
 						PStates: powerv1.PStatesConfig{
 							Max:      tc.max,
 							Min:      tc.min,
@@ -857,7 +846,6 @@ func TestPowerProfile_Reconcile_IncorrectEppValue(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "user-created",
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -925,7 +913,6 @@ func TestPowerProfile_Reconcile_SharedProfileDoesNotExistInLibrary(t *testing.T)
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name:   "shared",
 						Shared: true,
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 800},
@@ -1070,7 +1057,6 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -1101,7 +1087,6 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
 						PStates: powerv1.PStatesConfig{
 							Max: nil,
 							Min: nil,
@@ -1132,7 +1117,6 @@ func TestPowerProfile_Reconcile_AcpiDriver(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "user-created",
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -1245,7 +1229,6 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -1291,7 +1274,6 @@ func TestPowerProfile_Reconcile_LibraryErrs(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -1429,7 +1411,6 @@ func TestPowerProfile_Reconcile_FeatureNotSupportedErr(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name:   "shared",
 						Shared: true,
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
@@ -1460,7 +1441,6 @@ func TestPowerProfile_Reconcile_FeatureNotSupportedErr(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
 						PStates: powerv1.PStatesConfig{
 							Max: &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min: &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -1598,7 +1578,6 @@ func TestPowerProfile_Reconcile_UnsupportedGovernor(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "performance",
 						PStates: powerv1.PStatesConfig{
 							Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -1630,7 +1609,6 @@ func TestPowerProfile_Reconcile_UnsupportedGovernor(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name:   "shared",
 						Shared: true,
 						PStates: powerv1.PStatesConfig{
 							Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 1000},
@@ -1713,7 +1691,6 @@ func FuzzPowerProfileController(f *testing.F) {
 					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerProfileSpec{
-					Name: prof,
 					PStates: powerv1.PStatesConfig{
 						Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: int32(maxVal)},
 						Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: int32(minVal)},
@@ -1875,7 +1852,6 @@ func TestPowerProfile_Reconcile_ProfileUpdateAffectsAllPools(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: tc.profileName,
 						PStates: powerv1.PStatesConfig{
 							Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 							Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -2290,7 +2266,6 @@ func TestPowerProfile_Reconcile_NodeSelectorAndCapacity(t *testing.T) {
 					Namespace: PowerNamespace,
 				},
 				Spec: powerv1.PowerProfileSpec{
-					Name: tc.profileName,
 					PStates: powerv1.PStatesConfig{
 						Max:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3600},
 						Min:      &intstr.IntOrString{Type: intstr.Int, IntVal: 3200},
@@ -2410,7 +2385,6 @@ func TestPowerProfile_Reconcile_NodeSelectorCleanup(t *testing.T) {
 			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
-			Name: profileName,
 			NodeSelector: powerv1.NodeSelector{
 				LabelSelector: metav1.LabelSelector{
 					MatchLabels: map[string]string{

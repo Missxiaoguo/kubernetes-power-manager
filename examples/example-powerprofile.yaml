@@ -7,7 +7,6 @@ metadata:
  name: application
  namespace: power-manager
 spec:
- name: application
  # The CpuCapacity is used to set the maximum number of CPUs that can be used by the PowerProfile.
  cpuCapacity: 40
  # cpuCapacity: "50%"

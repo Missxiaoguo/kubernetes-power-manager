@@ -79,7 +79,7 @@ func createTestPowerNodeState(t *testing.T, cl client.Client, name string) {
 func newTestPowerProfile(name string, shared bool) *powerv1.PowerProfile {
 	return &powerv1.PowerProfile{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: PowerNamespace},
-		Spec:       powerv1.PowerProfileSpec{Name: name, Shared: shared},
+		Spec:       powerv1.PowerProfileSpec{Shared: shared},
 	}
 }
 
