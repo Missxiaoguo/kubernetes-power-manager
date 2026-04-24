@@ -5,7 +5,6 @@ metadata:
   name: {{ .Values.sharedprofile.name }}
   namespace: {{ .Values.sharedprofile.namespace }}
 spec:
-  name: {{ .Values.sharedprofile.spec.name }}
   max: {{ .Values.sharedprofile.spec.max }}
   min: {{ .Values.sharedprofile.spec.min }}
   epp: {{ .Values.sharedprofile.spec.epp }}

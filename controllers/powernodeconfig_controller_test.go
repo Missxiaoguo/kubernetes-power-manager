@@ -291,8 +291,8 @@ func TestValidatePowerNodeConfigProfiles(t *testing.T) {
 			config: newPowerNodeConfig("c", "shared-prof", nil, []powerv1.ReservedSpec{{Cores: []uint{0}, PowerProfile: "reserved-prof"}}, time.Now()),
 			clientObjs: []runtime.Object{
 				newTestNode("test-node", map[string]string{}),
-				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "shared-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "shared-prof", Shared: true}},
-				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "reserved-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "reserved-prof"}},
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "shared-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Shared: true}},
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "reserved-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{}},
 			},
 			setupMock: func() *hostMock {
 				h := new(hostMock)
@@ -306,7 +306,7 @@ func TestValidatePowerNodeConfigProfiles(t *testing.T) {
 			config: newPowerNodeConfig("c", "not-shared", nil, nil, time.Now()),
 			clientObjs: []runtime.Object{
 				newTestNode("test-node", map[string]string{}),
-				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "not-shared", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "not-shared", Shared: false}},
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "not-shared", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Shared: false}},
 			},
 			setupMock: func() *hostMock {
 				return new(hostMock)
@@ -319,7 +319,7 @@ func TestValidatePowerNodeConfigProfiles(t *testing.T) {
 			config: newPowerNodeConfig("c", "missing", nil, nil, time.Now()),
 			clientObjs: []runtime.Object{
 				newTestNode("test-node", map[string]string{}),
-				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "missing", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "missing", Shared: true}},
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "missing", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Shared: true}},
 			},
 			setupMock: func() *hostMock {
 				h := new(hostMock)
@@ -337,7 +337,7 @@ func TestValidatePowerNodeConfigProfiles(t *testing.T) {
 			}, time.Now()),
 			clientObjs: []runtime.Object{
 				newTestNode("test-node", map[string]string{}),
-				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "shared-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "shared-prof", Shared: true}},
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "shared-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Shared: true}},
 			},
 			setupMock: func() *hostMock {
 				return new(hostMock)
@@ -353,7 +353,7 @@ func TestValidatePowerNodeConfigProfiles(t *testing.T) {
 			}, time.Now()),
 			clientObjs: []runtime.Object{
 				newTestNode("test-node", map[string]string{}),
-				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "shared-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "shared-prof", Shared: true}},
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "shared-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Shared: true}},
 			},
 			setupMock: func() *hostMock {
 				return new(hostMock)
@@ -366,8 +366,8 @@ func TestValidatePowerNodeConfigProfiles(t *testing.T) {
 			config: newPowerNodeConfig("c", "shared-prof", nil, []powerv1.ReservedSpec{{Cores: []uint{0}, PowerProfile: "missing"}}, time.Now()),
 			clientObjs: []runtime.Object{
 				newTestNode("test-node", map[string]string{}),
-				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "shared-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "shared-prof", Shared: true}},
-				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "missing", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "missing"}},
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "shared-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Shared: true}},
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "missing", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{}},
 			},
 			setupMock: func() *hostMock {
 				h := new(hostMock)
@@ -764,7 +764,7 @@ func TestApplyPowerNodeConfig(t *testing.T) {
 			clientObjs: []runtime.Object{
 				newTestNode("test-node", map[string]string{}),
 				newPowerNodeState("test-node", ""),
-				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "missing-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "missing-prof"}},
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "missing-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{}},
 			},
 			setupMock: func() *hostMock {
 				h := new(hostMock)
@@ -779,7 +779,7 @@ func TestApplyPowerNodeConfig(t *testing.T) {
 			clientObjs: []runtime.Object{
 				newTestNode("test-node", map[string]string{}),
 				newPowerNodeState("test-node", ""),
-				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "test-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Name: "test-prof", Shared: true}},
+				&powerv1.PowerProfile{ObjectMeta: metav1.ObjectMeta{Name: "test-prof", Namespace: PowerNamespace}, Spec: powerv1.PowerProfileSpec{Shared: true}},
 			},
 			setupMock: func() *hostMock {
 				h := new(hostMock)

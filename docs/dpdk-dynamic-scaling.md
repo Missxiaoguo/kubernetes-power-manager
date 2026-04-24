@@ -18,7 +18,6 @@ kind: PowerProfile
 metadata:
   name: dpdk-scaling
 spec:
-  name: dpdk-scaling
   pstates:
     governor: userspace
     min: 0%

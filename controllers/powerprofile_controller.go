@@ -204,7 +204,7 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 	// Create and validate power profile in the power library
 	powerProfile, err := power.NewPowerProfile(
-		profile.Spec.Name, profile.Spec.PStates.Min, profile.Spec.PStates.Max,
+		profile.Name, profile.Spec.PStates.Min, profile.Spec.PStates.Max,
 		profile.Spec.PStates.Governor, actualEpp,
 		profile.Spec.CStates.Names, profile.Spec.CStates.MaxLatencyUs)
 	if err != nil {
@@ -212,24 +212,24 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		return ctrl.Result{}, err
 	}
 	// An exclusive pool should be created for both shared and non-shared profiles.
-	profileFromLibrary := r.PowerLibrary.GetExclusivePool(profile.Spec.Name)
+	profileFromLibrary := r.PowerLibrary.GetExclusivePool(profile.Name)
 	if profileFromLibrary == nil {
-		pool, err := r.PowerLibrary.AddExclusivePool(profile.Spec.Name)
+		pool, err := r.PowerLibrary.AddExclusivePool(profile.Name)
 		if err != nil {
 			logger.Error(err, "failed to create the power profile")
 			return ctrl.Result{}, err
 		}
 		err = pool.SetPowerProfile(powerProfile)
 		if err != nil {
-			logger.Error(err, fmt.Sprintf("error adding the profile '%s' to the power library for host '%s'", profile.Spec.Name, nodeName))
+			logger.Error(err, fmt.Sprintf("error adding the profile '%s' to the power library for host '%s'", profile.Name, nodeName))
 			return ctrl.Result{}, err
 		}
 
-		logger.V(5).Info("power profile successfully created", "profile", profile.Spec.Name)
+		logger.V(5).Info("power profile successfully created", "profile", profile.Name)
 	} else {
 		// Exclusive pool for this profile already exists, update it and all the other pools that use this profile
-		err = r.PowerLibrary.GetExclusivePool(profile.Spec.Name).SetPowerProfile(powerProfile)
-		msg := fmt.Sprintf("updating the power profile '%s' to the power library for node '%s'", profile.Spec.Name, nodeName)
+		err = r.PowerLibrary.GetExclusivePool(profile.Name).SetPowerProfile(powerProfile)
+		msg := fmt.Sprintf("updating the power profile '%s' to the power library for node '%s'", profile.Name, nodeName)
 		logger.V(5).Info(msg)
 		if err != nil {
 			return ctrl.Result{}, fmt.Errorf("error %s: %v", msg, err)
@@ -237,8 +237,8 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		// Update shared pool if it uses this profile
 		sharedPool := r.PowerLibrary.GetSharedPool()
-		if sharedPool.GetPowerProfile() != nil && sharedPool.GetPowerProfile().Name() == profile.Spec.Name {
-			msg := fmt.Sprintf("updating shared pool in power library with updated profile '%s' for node '%s'", profile.Spec.Name, nodeName)
+		if sharedPool.GetPowerProfile() != nil && sharedPool.GetPowerProfile().Name() == profile.Name {
+			msg := fmt.Sprintf("updating shared pool in power library with updated profile '%s' for node '%s'", profile.Name, nodeName)
 			logger.V(5).Info(msg)
 			err := sharedPool.SetPowerProfile(powerProfile)
 			if err != nil {
@@ -251,8 +251,8 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		for _, pool := range *exclusivePools {
 			if strings.Contains(pool.Name(), nodeName+"-reserved-") &&
 				pool.GetPowerProfile() != nil &&
-				pool.GetPowerProfile().Name() == profile.Spec.Name {
-				msg := fmt.Sprintf("updating special reserved pool '%s' in power library with updated profile '%s' for node '%s'", pool.Name(), profile.Spec.Name, nodeName)
+				pool.GetPowerProfile().Name() == profile.Name {
+				msg := fmt.Sprintf("updating special reserved pool '%s' in power library with updated profile '%s' for node '%s'", pool.Name(), profile.Name, nodeName)
 				logger.V(5).Info(msg)
 				err := pool.SetPowerProfile(powerProfile)
 				if err != nil {
@@ -263,7 +263,7 @@ func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request
 
 		logger.V(5).Info(fmt.Sprintf(
 			"power profile successfully updated: name - %s max - %d min - %d EPP - %s",
-			profile.Spec.Name, powerProfile.GetPStates().GetMaxFreq().IntVal, powerProfile.GetPStates().GetMinFreq().IntVal, actualEpp))
+			profile.Name, powerProfile.GetPStates().GetMaxFreq().IntVal, powerProfile.GetPStates().GetMinFreq().IntVal, actualEpp))
 	}
 
 	if profile.Spec.Shared {
@@ -311,7 +311,7 @@ func (r *PowerProfileReconciler) ensureExtendedResources(ctx context.Context, no
 	}
 
 	profilesAvailable := resource.NewQuantity(numExtendedResources, resource.DecimalSI)
-	extendedResourceName := corev1.ResourceName(fmt.Sprintf("%s%s", ExtendedResourcePrefix, profile.Spec.Name))
+	extendedResourceName := corev1.ResourceName(fmt.Sprintf("%s%s", ExtendedResourcePrefix, profile.Name))
 	node.Status.Capacity[extendedResourceName] = *profilesAvailable
 
 	err = r.Client.Status().Update(ctx, node)
@@ -352,18 +352,18 @@ func (r *PowerProfileReconciler) removeExtendedResources(ctx context.Context, no
 
 // cleanupProfileFromNode removes only extended resources from a node when it no longer matches the PowerProfile selector.
 func (r *PowerProfileReconciler) cleanupProfileFromNode(ctx context.Context, profile *powerv1.PowerProfile, nodeName string, logger *logr.Logger) error {
-	logger.V(5).Info("Cleaning up PowerProfile extended resources from node", "profile", profile.Spec.Name, "nodeName", nodeName)
+	logger.V(5).Info("Cleaning up PowerProfile extended resources from node", "profile", profile.Name, "nodeName", nodeName)
 
 	// Only remove extended resources from the node.
 	// Keep pools, workloads, and shared PowerProfile configurations as pods/services may depend on them.
-	err := r.removeExtendedResources(ctx, nodeName, profile.Spec.Name, logger)
+	err := r.removeExtendedResources(ctx, nodeName, profile.Name, logger)
 	if err != nil {
 		logger.Error(err, "error removing extended resources")
 		return err
 	}
 
 	// Remove the profile from PowerNodeState since it no longer applies to this node.
-	err = removePowerNodeStatusProfileEntry(ctx, r.Client, nodeName, profile.Spec.Name, logger)
+	err = removePowerNodeStatusProfileEntry(ctx, r.Client, nodeName, profile.Name, logger)
 	if err != nil {
 		logger.Error(err, "error removing profile from PowerNodeState")
 		// Return the error so the caller can requeue to retry status cleanup.
@@ -371,7 +371,7 @@ func (r *PowerProfileReconciler) cleanupProfileFromNode(ctx context.Context, pro
 		return err
 	}
 
-	logger.V(5).Info("Successfully cleaned up PowerProfile extended resources from node", "profile", profile.Spec.Name, "nodeName", nodeName)
+	logger.V(5).Info("Successfully cleaned up PowerProfile extended resources from node", "profile", profile.Name, "nodeName", nodeName)
 	return nil
 }
 

@@ -445,7 +445,6 @@ kind: PowerProfile
 metadata:
   name: performance-example-application
 spec:
-  name: "performance-example-application"
   cpuCapacity: "75%"
   nodeSelector:
     labelSelector:
@@ -489,7 +488,6 @@ kind: PowerProfile
 metadata:
   name: shared-example-node1
 spec:
-  name: "shared-example-node1"
   shared: true
   pstates:
     max: 1500
@@ -504,7 +502,6 @@ kind: PowerProfile
 metadata:
   name: shared-example-node2
 spec:
-  name: "shared-example-node2"
   cpuCapacity: "75%"
   nodeSelector:
     labelSelector:

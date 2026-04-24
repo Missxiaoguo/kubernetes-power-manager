@@ -160,9 +160,7 @@ var defaultProfile = &powerv1.PowerProfile{
 		Name:      "performance",
 		Namespace: PowerNamespace,
 	},
-	Spec: powerv1.PowerProfileSpec{
-		Name: "performance",
-	},
+	Spec: powerv1.PowerProfileSpec{},
 }
 
 var defaultPowerNodeState = &powerv1.PowerNodeState{
@@ -340,9 +338,7 @@ func TestPowerPod_Reconcile_Create(t *testing.T) {
 						Name:      "balance-performance",
 						Namespace: PowerNamespace,
 					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "balance-performance",
-					},
+					Spec: powerv1.PowerProfileSpec{},
 				},
 				&corev1.Pod{
 					ObjectMeta: metav1.ObjectMeta{
@@ -667,9 +663,7 @@ func TestPowerPod_Reconcile_ControllerErrors(t *testing.T) {
 						Name:      "balance-performance",
 						Namespace: PowerNamespace,
 					},
-					Spec: powerv1.PowerProfileSpec{
-						Name: "balance-performance",
-					},
+					Spec: powerv1.PowerProfileSpec{},
 				},
 
 				&corev1.Pod{
@@ -1375,7 +1369,6 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
-			Name: "performance",
 			NodeSelector: powerv1.NodeSelector{
 				LabelSelector: metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -1392,7 +1385,6 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
-			Name: "gpu-optimized",
 			NodeSelector: powerv1.NodeSelector{
 				LabelSelector: metav1.LabelSelector{
 					MatchLabels: map[string]string{
@@ -1408,10 +1400,7 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			Name:      "universal",
 			Namespace: PowerNamespace,
 		},
-		Spec: powerv1.PowerProfileSpec{
-			Name: "universal",
-			// No node selector - should apply to all nodes
-		},
+		Spec: powerv1.PowerProfileSpec{},
 	}
 
 	expressionMatchingProfile := &powerv1.PowerProfile{
@@ -1420,7 +1409,6 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 			Namespace: PowerNamespace,
 		},
 		Spec: powerv1.PowerProfileSpec{
-			Name: "zone-specific",
 			NodeSelector: powerv1.NodeSelector{
 				LabelSelector: metav1.LabelSelector{
 					MatchExpressions: []metav1.LabelSelectorRequirement{
@@ -1778,7 +1766,6 @@ func TestPowerPod_ValidateProfileNodeSelectorMatching(t *testing.T) {
 						Namespace: PowerNamespace,
 					},
 					Spec: powerv1.PowerProfileSpec{
-						Name: "nonexistent",
 						NodeSelector: powerv1.NodeSelector{
 							LabelSelector: metav1.LabelSelector{
 								MatchLabels: map[string]string{
@@ -2410,7 +2397,7 @@ func TestPowerPod_Reconcile_WithCpuScalingPolicy(t *testing.T) {
 			}
 			profile := &powerv1.PowerProfile{
 				ObjectMeta: metav1.ObjectMeta{Name: tc.profileName, Namespace: PowerNamespace},
-				Spec:       powerv1.PowerProfileSpec{Name: tc.profileName, CpuScalingPolicy: policy},
+				Spec:       powerv1.PowerProfileSpec{CpuScalingPolicy: policy},
 			}
 
 			// Build resource requirements referencing the profile.
@@ -2551,7 +2538,7 @@ func TestPowerPod_Reconcile_MultipleDPDKContainersRejected(t *testing.T) {
 	}
 	profile := &powerv1.PowerProfile{
 		ObjectMeta: metav1.ObjectMeta{Name: profileName, Namespace: PowerNamespace},
-		Spec:       powerv1.PowerProfileSpec{Name: profileName, CpuScalingPolicy: policy},
+		Spec:       powerv1.PowerProfileSpec{CpuScalingPolicy: policy},
 	}
 
 	// Both containers request the same DPDK profile.

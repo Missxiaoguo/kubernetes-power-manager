@@ -96,7 +96,7 @@ func createPodReconcilePrereqs(t *testing.T, cl client.Client, ctx context.Conte
 	for _, name := range profileNames {
 		require.NoError(t, cl.Create(ctx, &powerv1.PowerProfile{
 			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: PowerNamespace},
-			Spec:       powerv1.PowerProfileSpec{Name: name},
+			Spec:       powerv1.PowerProfileSpec{},
 		}))
 	}
 }
