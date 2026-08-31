@@ -51,12 +51,10 @@ type UncoreReconciler struct {
 	PowerLibrary power.Host
 }
 
-//+kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=uncores,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=uncores/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=uncores/finalizers,verbs=update
-//+kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates,verbs=get;list;watch
-//+kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
+//+kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=uncores,verbs=get;list;watch,roleName=node-agent-role
+//+kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates,verbs=get;list;watch,roleName=node-agent-role
+//+kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates/status,verbs=get;patch,roleName=node-agent-role
+//+kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch,roleName=node-agent-role
 
 // Reconcile evaluates all Uncore CRs matching this node, resolves conflicts,
 // and configures or cleans up uncore frequency settings accordingly.

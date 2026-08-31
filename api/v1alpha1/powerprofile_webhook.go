@@ -35,8 +35,8 @@ var extendedResourcePrefix = GroupVersion.Group + "/"
 
 const podPowerProfileIndex = ".spec.containers.resources.powerProfile"
 
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodeconfigs,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodeconfigs,verbs=get;list;watch,roleName=manager-role
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch,roleName=manager-role
 
 // +kubebuilder:webhook:path=/validate-power-cluster-power-manager-github-io-v1alpha1-powerprofile,mutating=false,failurePolicy=fail,sideEffects=None,groups=power.cluster-power-manager.github.io,resources=powerprofiles,verbs=create;update;delete,versions=v1alpha1,name=vpowerprofile.kb.io,admissionReviewVersions=v1
 

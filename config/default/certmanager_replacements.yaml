@@ -4,7 +4,7 @@
 - source:
     kind: Service
     version: v1
-    name: power-manager-webhook-service
+    name: webhook-service
     fieldPath: metadata.name
   targets:
   - select:
@@ -20,7 +20,7 @@
 - source:
     kind: Service
     version: v1
-    name: power-manager-webhook-service
+    name: webhook-service
     fieldPath: metadata.namespace
   targets:
   - select:
@@ -36,13 +36,13 @@
 - source:
     kind: Service
     version: v1
-    name: power-manager-webhook-service
+    name: webhook-service
     fieldPath: metadata.namespace
   targets:
   - select:
       group: admissionregistration.k8s.io
       kind: ValidatingWebhookConfiguration
-      name: power-manager-validating-webhook-configuration
+      name: validating-webhook-configuration
     fieldPaths:
     - metadata.annotations.[cert-manager.io/inject-ca-from]
     options:
@@ -58,7 +58,7 @@
   - select:
       group: admissionregistration.k8s.io
       kind: ValidatingWebhookConfiguration
-      name: power-manager-validating-webhook-configuration
+      name: validating-webhook-configuration
     fieldPaths:
     - metadata.annotations.[cert-manager.io/inject-ca-from]
     options:

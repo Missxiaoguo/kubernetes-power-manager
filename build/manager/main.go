@@ -22,11 +22,14 @@ import (
 	"time"
 
 	"go.uber.org/zap/zapcore"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -84,6 +87,16 @@ func main() {
 		LeaderElectionID: "power-operator-6846766c",
 		RenewDeadline:    &renewDeadline,
 		LeaseDuration:    &leaseDuration,
+		Cache: cache.Options{
+			ByObject: map[client.Object]cache.ByObject{
+				// Scope DaemonSet informer to the operator namespace.
+				&appsv1.DaemonSet{}: {
+					Namespaces: map[string]cache.Config{
+						powerv1alpha1.GetCPMNamespace(): {},
+					},
+				},
+			},
+		},
 	}
 
 	if enableWebhooks {

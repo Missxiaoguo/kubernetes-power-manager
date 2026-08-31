@@ -55,10 +55,11 @@ type PowerProfileReconciler struct {
 	PowerLibrary power.Host
 }
 
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerprofiles,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerprofiles/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates,verbs=get;list;watch
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerprofiles,verbs=get;list;watch,roleName=node-agent-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates,verbs=get;list;watch,roleName=node-agent-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates/status,verbs=get;patch,roleName=node-agent-role
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch,roleName=node-agent-role
+// +kubebuilder:rbac:groups="",resources=nodes/status,verbs=get;update;patch,roleName=node-agent-role
 
 // Reconcile method that implements the reconcile loop
 func (r *PowerProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request) (result ctrl.Result, retErr error) {

@@ -24,7 +24,7 @@ spec:
       labels:
         control-plane: controller-manager
     spec:
-      serviceAccountName: power-manager-operator
+      serviceAccountName: controller-manager
       containers:
         - command:
             - /manager

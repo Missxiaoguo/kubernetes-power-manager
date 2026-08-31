@@ -1,5 +1,7 @@
 namespace: power-manager
 
+namePrefix: power-manager-
+
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
@@ -17,22 +19,10 @@ patches:
     name: controller-manager
 - path: webhookcainjection_patch.yaml
 - path: webhook_service_patch.yaml
-# Add SCC "use privileged" to the namespace-scoped operator Role
-- target:
-    kind: Role
-    name: operator-custom-resource-definitions-role
-  patch: |-
-    - op: add
-      path: /rules/-
-      value:
-        apiGroups: ["security.openshift.io"]
-        resourceNames: ["privileged"]
-        resources: ["securitycontextconstraints"]
-        verbs: ["use"]
 # Add SCC to the node-agent ClusterRole
 - target:
     kind: ClusterRole
-    name: node-agent-cluster-resources
+    name: node-agent-role
   patch: |-
     - op: add
       path: /rules/-

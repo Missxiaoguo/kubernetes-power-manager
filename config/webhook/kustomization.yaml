@@ -1,5 +1,3 @@
-namePrefix: power-manager-
-
 resources:
   - manifests.yaml
   - service.yaml

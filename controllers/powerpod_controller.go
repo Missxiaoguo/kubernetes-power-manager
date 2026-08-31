@@ -71,10 +71,11 @@ type PowerPodReconciler struct {
 	CPUScalingManager   scaling.CPUScalingManager
 }
 
-// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerprofiles,verbs=get;list;watch
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates,verbs=get;list;watch
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch,roleName=node-agent-role
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch,roleName=node-agent-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerprofiles,verbs=get;list;watch,roleName=node-agent-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates,verbs=get;list;watch,roleName=node-agent-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates/status,verbs=get;patch,roleName=node-agent-role
 
 func (r *PowerPodReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := r.Log.WithValues("powerpod", req.NamespacedName)

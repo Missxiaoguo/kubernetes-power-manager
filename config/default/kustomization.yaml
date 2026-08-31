@@ -6,6 +6,7 @@ namespace: power-manager
 # "wordpress" becomes "alices-wordpress".
 # Note that it should also match with the prefix (text before '-') of the namespace
 # field above.
+namePrefix: power-manager-
 
 # Labels to add to all resources and selectors.
 #commonLabels:

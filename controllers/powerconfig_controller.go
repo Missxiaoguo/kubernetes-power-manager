@@ -56,10 +56,12 @@ type PowerConfigReconciler struct {
 	State  *state.PowerNodeData
 }
 
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerconfigs,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerconfigs/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch,roleName=manager-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerconfigs,verbs=get;list;watch;delete,roleName=manager-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerconfigs/status,verbs=get;patch,roleName=manager-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerprofiles,verbs=get;list;watch;delete,roleName=manager-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates,verbs=get;list;watch;create;delete,roleName=manager-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates/status,verbs=get;patch,roleName=manager-role
 
 func (r *PowerConfigReconciler) Reconcile(c context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = context.Background()

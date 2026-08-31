@@ -51,11 +51,11 @@ type PowerNodeConfigReconciler struct {
 	PowerLibrary power.Host
 }
 
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodeconfigs,verbs=get;list;watch
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates,verbs=get;list;watch
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
-// +kubebuilder:rbac:groups="",resources=pods,verbs=list;watch
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodeconfigs,verbs=get;list;watch,roleName=node-agent-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerprofiles,verbs=get;list;watch,roleName=node-agent-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates,verbs=get;list;watch,roleName=node-agent-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodestates/status,verbs=get;patch,roleName=node-agent-role
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch,roleName=node-agent-role
 
 // Reconcile evaluates all PowerNodeConfigs matching this node, resolves conflicts,
 // and configures or cleans up shared and reserved CPU pools accordingly.

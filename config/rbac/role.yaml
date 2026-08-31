@@ -17,24 +17,58 @@ rules:
   - power.cluster-power-manager.github.io
   resources:
   - powerconfigs
-  - powernodestates
   - powerprofiles
-  - uncores
   verbs:
-  - create
   - delete
   - get
   - list
-  - patch
-  - update
   - watch
 - apiGroups:
   - power.cluster-power-manager.github.io
   resources:
   - powerconfigs/status
   - powernodestates/status
-  - powerprofiles/status
-  - uncores/status
+  verbs:
+  - get
+  - patch
+- apiGroups:
+  - power.cluster-power-manager.github.io
+  resources:
+  - powernodeconfigs
+  - uncores
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - power.cluster-power-manager.github.io
+  resources:
+  - powernodestates
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: node-agent-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - nodes/status
   verbs:
   - get
   - patch
@@ -43,6 +77,9 @@ rules:
   - power.cluster-power-manager.github.io
   resources:
   - powernodeconfigs
+  - powernodestates
+  - powerprofiles
+  - uncores
   verbs:
   - get
   - list
@@ -50,6 +87,7 @@ rules:
 - apiGroups:
   - power.cluster-power-manager.github.io
   resources:
-  - uncores/finalizers
+  - powernodestates/status
   verbs:
-  - update
+  - get
+  - patch

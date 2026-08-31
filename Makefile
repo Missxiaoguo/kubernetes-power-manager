@@ -9,7 +9,7 @@ HELM_CHART ?= v2.5.0
 HELM_VERSION := $(shell echo $(HELM_CHART) | cut -d "v" -f2)
 
 # CONTROLLER_GEN_VERSION defines the controller-gen version to download from go modules.
-CONTROLLER_GEN_VERSION ?= v0.18.0
+CONTROLLER_GEN_VERSION ?= v0.21.0
 
 # KUSTOMIZE_VERSION defines the kustomize version to download from go modules.
 KUSTOMIZE_VERSION ?= v5@v5.7.1
@@ -103,7 +103,7 @@ $(CONTROLLER_GEN): $(LOCALBIN)
 	fi
 	@if [ ! -f $(CONTROLLER_GEN) ]; then \
 		echo "Downloading controller-gen..." ;\
-		GOBIN=$(LOCALBIN) GOFLAGS="-mod=mod" go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION) ;\
+		GOBIN=$(LOCALBIN) GOFLAGS="-mod=mod" GOTOOLCHAIN=auto go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION) ;\
 		echo "controller-gen downloaded successfully." ;\
 	fi
 
@@ -268,6 +268,8 @@ endif
 # Generate manifests e.g. CRD, RBAC etc.
 # OCP-specific resources are handled by the config/ocp/ kustomize overlay at deploy time,
 # so no sed patching of kustomization files is needed here.
+# RBAC: Each kubebuilder marker should specify roleName=manager-role or roleName=node-agent-role
+# so controller-gen (v0.21+) can generate different ClusterRoles for manager and node agent.
 manifests: controller-gen
 	$(CONTROLLER_GEN) $(CRD_OPTIONS) rbac:roleName=manager-role webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 

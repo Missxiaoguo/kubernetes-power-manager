@@ -4,9 +4,13 @@
 ---
 {{- include "manager-chart-library.agentserviceaccount" . }}
 ---
-{{- include "manager-chart-library.operatorrole" . }}
+{{- include "manager-chart-library.leaderelectionrole" . }}
 ---
-{{- include "manager-chart-library.operatorrolebinding" . }}
+{{- include "manager-chart-library.leaderelectionrolebinding" . }}
+---
+{{- include "manager-chart-library.daemonsetrole" . }}
+---
+{{- include "manager-chart-library.daemonsetrolebinding" . }}
 ---
 {{- include "manager-chart-library.operatorclusterrole" . }}
 ---

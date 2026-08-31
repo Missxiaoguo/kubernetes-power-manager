@@ -29,8 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
-// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
-// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerprofiles,verbs=get
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch,roleName=manager-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powerprofiles,verbs=get;list;watch,roleName=manager-role
+// +kubebuilder:rbac:groups=power.cluster-power-manager.github.io,resources=powernodeconfigs,verbs=get;list;watch,roleName=manager-role
 
 // +kubebuilder:webhook:path=/validate-power-cluster-power-manager-github-io-v1alpha1-powernodeconfig,mutating=false,failurePolicy=fail,sideEffects=None,groups=power.cluster-power-manager.github.io,resources=powernodeconfigs,verbs=create;update,versions=v1alpha1,name=vpowernodeconfig.kb.io,admissionReviewVersions=v1
 
