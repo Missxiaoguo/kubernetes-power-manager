@@ -74,6 +74,35 @@ function wait_for_container_cpus {
     echo "$cpus"
 }
 
+# dump_tmux_pane prints the tmux pane so a failed testpmd start is visible.
+function dump_tmux_pane {
+    local pod="$1"
+    local container="$2"
+    local session="$3"
+    echo "  --- tmux $session ($pod/$container) ---" >&2
+    oc exec -n power-manager "$pod" -c "$container" -- tmux capture-pane -pt "$session" 2>/dev/null || true
+}
+
+# wait_for_testpmd_prompt waits until the tmux pane shows the interactive prompt.
+function wait_for_testpmd_prompt {
+    local pod="$1"
+    local container="$2"
+    local session="$3"
+    local attempts=0
+    local max_attempts=30
+    while true; do
+        if oc exec -n power-manager "$pod" -c "$container" -- tmux capture-pane -pt "$session" 2>/dev/null | grep -q 'testpmd>'; then
+            return 0
+        fi
+        if (( attempts++ >= max_attempts )); then
+            echo "ERROR: $session testpmd did not reach the prompt in $pod/$container" >&2
+            dump_tmux_pane "$pod" "$container" "$session"
+            return 1
+        fi
+        sleep 1
+    done
+}
+
 # setup_dpdk_for_pod starts the DPDK server and client processes on a single pod.
 function setup_dpdk_for_pod {
     local pod="$1"
@@ -92,30 +121,28 @@ function setup_dpdk_for_pod {
     client_cpus=$(build_lcore_map "$client_list")
     local client_cpus_num=$(($(echo "$client_cpus" | grep -o '@' | wc -l) - 1))
 
-    # Server receives traffic, updates checksums and forwards packets back to client
+    # Unique per pod so two replicas on the same node (hostNetwork) do not
+    # collide on the memif unix socket or DPDK client runtime files.
+    # Server keeps file-prefix=rte so the telemetry socket stays at /var/run/dpdk/rte/.
+    local client_prefix="c$(echo "$pod" | cksum | awk '{print $1}')"
+    local memif_sock="/var/run/memif/memif-${client_prefix}.sock"
+
     echo "  Starting server (CPUs: $server_cpus)..."
+    # Pass the command to tmux as one argv so a narrow pane cannot wrap it.
+    # exec bash keeps the session if testpmd exits, so the EAL error is still visible.
     oc exec -n power-manager "$pod" -c server -- \
-        tmux new-session -s server -d "dpdk-testpmd --no-pci --lcores $server_cpus --file-prefix=rte \
-        --huge-dir=\"/hugepages-1Gi\" \
-        --vdev=\"net_memif0,role=server,socket=/var/run/memif/memif1.sock\" -- \
-        --rxq=$server_cpus_num --txq=$server_cpus_num --nb-cores=$server_cpus_num \
-        --interactive --rss-udp --forward-mode=csum --record-core-cycles --record-burst-stats"
-    sleep 1
+        tmux new-session -d -s server \
+        "dpdk-testpmd --no-pci --lcores $server_cpus --file-prefix=rte --huge-dir=/hugepages-1Gi --vdev=net_memif0,role=server,socket=${memif_sock} -- --rxq=$server_cpus_num --txq=$server_cpus_num --nb-cores=$server_cpus_num --interactive --rss-udp --forward-mode=csum --record-core-cycles --record-burst-stats; exec bash"
+    wait_for_testpmd_prompt "$pod" server server
 
-    # Client generates traffic and transmits to server
-    echo "  Starting client (CPUs: $client_cpus)..."
+    echo "  Starting client (CPUs: $client_cpus, file-prefix=$client_prefix)..."
     oc exec -n power-manager "$pod" -c client -- \
-        tmux new-session -s client -d "dpdk-testpmd --no-pci --lcores $client_cpus --file-prefix=client \
-        --huge-dir=\"/hugepages-1Gi\" \
-        --vdev=\"net_memif0,role=client,socket=/var/run/memif/memif1.sock\" -- \
-        --rxq=$server_cpus_num --txq=$server_cpus_num --nb-cores=$client_cpus_num \
-        --interactive --rss-udp --forward-mode=txonly"
+        tmux new-session -d -s client \
+        "dpdk-testpmd --no-pci --lcores $client_cpus --file-prefix=$client_prefix --huge-dir=/hugepages-1Gi --vdev=net_memif0,role=client,socket=${memif_sock} -- --rxq=$server_cpus_num --txq=$server_cpus_num --nb-cores=$client_cpus_num --interactive --rss-udp --forward-mode=txonly; exec bash"
+    wait_for_testpmd_prompt "$pod" client client
 
-    # Push heavier traffic from the client
     oc exec -n power-manager "$pod" -c client -- tmux send-keys -t client "set burst 512" C-m
-    # Start packet generation from client
     oc exec -n power-manager "$pod" -c client -- tmux send-keys -t client "start" C-m
-    # Start packet processing from server
     oc exec -n power-manager "$pod" -c server -- tmux send-keys -t server "start" C-m
     echo "  Pod $pod deployed successfully"
 }
