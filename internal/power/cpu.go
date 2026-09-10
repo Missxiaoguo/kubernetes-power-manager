@@ -30,8 +30,10 @@ type CPU interface {
 type cpuImpl struct {
 	id    uint
 	mutex sync.Locker
-	pool  Pool
-	core  Core
+	// hostMutex is the host-wide lock shared with every pool on the host.
+	hostMutex sync.Locker
+	pool      Pool
+	core      Core
 }
 
 func newCPU(coreID uint, core Core) (CPU, error) {
@@ -72,6 +74,13 @@ func (cpu *cpuImpl) consolidateUnsafe() error {
 // SetPool moves current core to a specified target pool
 // allowed movements are reservedPoolType <-> sharedPoolType and sharedPoolType <-> any exclusive pool
 func (cpu *cpuImpl) SetPool(targetPool Pool) error {
+	if targetPool == nil {
+		return fmt.Errorf("target pool cannot be nil")
+	}
+
+	unlock := lockHostMutex(cpu.hostMutex, "cpu", cpu.id, "target", targetPool.Name())
+	defer unlock()
+
 	/*
 		case 0: current and target pool are the same -> do nothing
 
@@ -88,13 +97,7 @@ func (cpu *cpuImpl) SetPool(targetPool Pool) error {
 		case 9: target = exclusive, current = reserved -> error
 
 	*/
-	if targetPool == nil {
-		return fmt.Errorf("target pool cannot be nil")
-	}
-
 	log.Info("Set pool", "cpu", cpu.id, "source pool", cpu.pool.Name(), "target pool", targetPool.Name())
-	cpu.mutex.Lock()
-	defer cpu.mutex.Unlock()
 
 	if cpu.pool == targetPool { // case 0,1,5
 		return nil
@@ -121,18 +124,8 @@ func (cpu *cpuImpl) SetPool(targetPool Pool) error {
 }
 
 func (cpu *cpuImpl) doSetPool(pool Pool) error {
-	cpu.pool.poolMutex().Lock()
-	pool.poolMutex().Lock()
-	log.V(4).Info("acquired mutexes", "source", cpu.pool.Name(), "target", pool.Name(), "cpu", cpu.id)
-
 	origPool := cpu.pool
 	cpu.pool = pool
-
-	defer func() {
-		log.V(4).Info("releasing mutexes", "source", origPool.Name(), "target", pool.Name())
-		origPool.poolMutex().Unlock()
-		pool.poolMutex().Unlock()
-	}()
 
 	origPoolCpus := origPool.Cpus()
 	log.V(4).Info("removing cpu from pool", "pool", origPool.Name(), "coreID", cpu.id)
@@ -175,6 +168,9 @@ func (cpu *cpuImpl) GetCore() Core {
 
 func (cpu *cpuImpl) _setPoolProperty(pool Pool) {
 	cpu.pool = pool
+	if pool != nil {
+		cpu.hostMutex = pool.getHostMutex()
+	}
 }
 
 // read property of specific CPU as an int, takes CPUid and path to specific file within cpu subdirectory in sysfs

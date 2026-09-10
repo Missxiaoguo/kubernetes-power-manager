@@ -18,6 +18,10 @@ type hostImpl struct {
 	sharedPool     Pool
 	topology       Topology
 	featureStates  *FeatureSet
+
+	// hostMutex is shared by every pool and CPU. It serializes pool membership
+	// and power-profile updates.
+	hostMutex sync.Locker
 }
 
 // Host represents the actual machine to be managed
@@ -46,11 +50,24 @@ type Host interface {
 	NumCoreTypes() uint
 }
 
+// lockHostMutex acquires the host mutex. Every pool and CPU on a host shares
+// this mutex. Do not acquire it twice in the same goroutine: a Go mutex
+// deadlocks if locked again before it is unlocked.
+func lockHostMutex(mutex sync.Locker, keysAndValues ...interface{}) func() {
+	log.V(4).Info("host mutex lock", keysAndValues...)
+	mutex.Lock()
+	return func() {
+		mutex.Unlock()
+		log.V(4).Info("host mutex unlock", keysAndValues...)
+	}
+}
+
 // create a pre-populated Host object
 func initHost(nodeName string) (Host, error) {
 
 	host := &hostImpl{
 		name:           nodeName,
+		hostMutex:      &sync.Mutex{},
 		exclusivePools: PoolList{},
 	}
 	host.featureStates = &featureList
@@ -64,15 +81,17 @@ func initHost(nodeName string) (Host, error) {
 
 	// create predefined pools
 	host.reservedPool = &reservedPoolType{poolImpl{
-		name:  reservedPoolName,
-		mutex: &sync.Mutex{},
-		host:  host,
+		name:      reservedPoolName,
+		mutex:     &sync.Mutex{},
+		hostMutex: host.hostMutex,
+		host:      host,
 	}}
 	host.sharedPool = &sharedPoolType{poolImpl{
-		name:  sharedPoolName,
-		cpus:  CPUList{},
-		mutex: &sync.Mutex{},
-		host:  host,
+		name:      sharedPoolName,
+		cpus:      CPUList{},
+		mutex:     &sync.Mutex{},
+		hostMutex: host.hostMutex,
+		host:      host,
 	}}
 
 	topology, err := discoverTopology(host.architecture)
@@ -159,14 +178,18 @@ func (host *hostImpl) GetFreqRanges() CoreTypeList {
 
 // AddExclusivePool creates new empty pool
 func (host *hostImpl) AddExclusivePool(poolName string) (Pool, error) {
+	unlock := lockHostMutex(host.hostMutex, "pool", poolName)
+	defer unlock()
+
 	if i := host.exclusivePools.IndexOfName(poolName); i >= 0 {
 		return host.exclusivePools[i], fmt.Errorf("pool with name %s already exists", poolName)
 	}
 	var pool Pool = &exclusivePoolType{poolImpl{
-		name:  poolName,
-		mutex: &sync.Mutex{},
-		cpus:  make([]CPU, 0),
-		host:  host,
+		name:      poolName,
+		mutex:     &sync.Mutex{},
+		hostMutex: host.hostMutex,
+		cpus:      make([]CPU, 0),
+		host:      host,
 	}}
 
 	host.exclusivePools.add(pool)

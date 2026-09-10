@@ -153,7 +153,7 @@ func TestHost_initHost(t *testing.T) {
 func TestHostImpl_AddExclusivePool(t *testing.T) {
 	// happy path
 	poolName := "poolName"
-	host := &hostImpl{}
+	host := &hostImpl{hostMutex: &sync.Mutex{}}
 
 	pool, err := host.AddExclusivePool(poolName)
 	assert.Nil(t, err)
@@ -203,7 +203,7 @@ func (s *hostTestsSuite) TestRemoveExclusivePool() {
 func (s *hostTestsSuite) TestHostImpl_SetReservedPoolCores() {
 	cores := make(CPUList, 4)
 	topology := new(mockCPUTopology)
-	host := &hostImpl{topology: topology}
+	host := &hostImpl{topology: topology, hostMutex: &sync.Mutex{}}
 	for i := range cores {
 		m := new(mockCPUCore)
 		core, err := newCPU(uint(i), m)
@@ -212,8 +212,8 @@ func (s *hostTestsSuite) TestHostImpl_SetReservedPoolCores() {
 		cores[i] = core
 	}
 	topology.On("CPUs").Return(&cores)
-	host.reservedPool = &reservedPoolType{poolImpl{host: host, mutex: &sync.Mutex{}, cpus: make(CPUList, 0)}}
-	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host, cpus: cores}}
+	host.reservedPool = &reservedPoolType{poolImpl{host: host, mutex: &sync.Mutex{}, hostMutex: host.hostMutex, cpus: make(CPUList, 0)}}
+	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, hostMutex: host.hostMutex, host: host, cpus: cores}}
 
 	for _, core := range cores {
 		core._setPoolProperty(host.sharedPool)
@@ -229,8 +229,8 @@ func (s *hostTestsSuite) TestHostImpl_SetReservedPoolCores() {
 func (s *hostTestsSuite) TestAddSharedPool() {
 	cores := make(CPUList, 4)
 	topology := new(mockCPUTopology)
-	host := &hostImpl{topology: topology}
-	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host}}
+	host := &hostImpl{topology: topology, hostMutex: &sync.Mutex{}}
+	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, hostMutex: host.hostMutex, host: host}}
 	for i := range cores {
 		m := new(mockCPUCore)
 		core, err := newCPU(uint(i), m)
@@ -240,7 +240,7 @@ func (s *hostTestsSuite) TestAddSharedPool() {
 	}
 	topology.On("CPUs").Return(&cores)
 
-	host.reservedPool = &reservedPoolType{poolImpl{host: host, mutex: &sync.Mutex{}, cpus: cores}}
+	host.reservedPool = &reservedPoolType{poolImpl{host: host, mutex: &sync.Mutex{}, hostMutex: host.hostMutex, cpus: cores}}
 	for _, core := range cores {
 		core._setPoolProperty(host.reservedPool)
 	}
@@ -257,6 +257,7 @@ func (s *hostTestsSuite) TestRemoveCoreFromExclusivePool() {
 		name:         "test",
 		powerProfile: &profileImpl{},
 		mutex:        &sync.Mutex{},
+		hostMutex:    &sync.Mutex{},
 	}
 	cores := make(CPUList, 4)
 	for i := range cores {
@@ -274,13 +275,14 @@ func (s *hostTestsSuite) TestRemoveCoreFromExclusivePool() {
 		name:           "test_host",
 		exclusivePools: []Pool{pool},
 		topology:       topology,
+		hostMutex:      pool.hostMutex,
 	}
 	pool.host = host
 	for _, core := range cores {
 		core._setPoolProperty(host.exclusivePools[0])
 	}
 
-	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host}}
+	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, hostMutex: host.hostMutex, host: host}}
 
 	coresToRemove := make(CPUList, 2)
 	copy(coresToRemove, cores[0:2])
@@ -296,12 +298,14 @@ func (s *hostTestsSuite) TestRemoveCoreFromExclusivePool() {
 func (s *hostTestsSuite) TestAddCoresToExclusivePool() {
 	topology := new(mockCPUTopology)
 	host := &hostImpl{
-		topology: topology,
+		topology:  topology,
+		hostMutex: &sync.Mutex{},
 	}
 	host.exclusivePools = []Pool{&exclusivePoolType{poolImpl{
 		name:         "test",
 		cpus:         make([]CPU, 0),
 		mutex:        &sync.Mutex{},
+		hostMutex:    host.hostMutex,
 		powerProfile: &profileImpl{},
 		host:         host,
 	}}}
@@ -315,7 +319,7 @@ func (s *hostTestsSuite) TestAddCoresToExclusivePool() {
 		cores[i] = core
 	}
 	topology.On("CPUs").Return(&cores)
-	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host, cpus: cores}}
+	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, hostMutex: host.hostMutex, host: host, cpus: cores}}
 	for _, core := range cores {
 		core._setPoolProperty(host.sharedPool)
 	}
@@ -350,7 +354,7 @@ func (s *hostTestsSuite) TestUpdateProfile() {
 		},
 	}
 	defer func() { featureList = origFeatureList }()
-	pool := &poolImpl{name: "ex", mutex: &sync.Mutex{}, powerProfile: profile, host: &host}
+	pool := &poolImpl{name: "ex", mutex: &sync.Mutex{}, hostMutex: &sync.Mutex{}, powerProfile: profile, host: &host}
 	host.exclusivePools = []Pool{pool}
 	s.Equal(uint(host.GetExclusivePool("ex").GetPowerProfile().GetPStates().GetMinFreq().IntVal), uint(2500))
 	s.Equal(uint(host.GetExclusivePool("ex").GetPowerProfile().GetPStates().GetMaxFreq().IntVal), uint(3200))
@@ -375,11 +379,12 @@ func (s *hostTestsSuite) TestUpdateProfile() {
 
 func (s *hostTestsSuite) TestRemoveCoresFromSharedPool() {
 	topology := new(mockCPUTopology)
-	host := &hostImpl{topology: topology}
+	host := &hostImpl{topology: topology, hostMutex: &sync.Mutex{}}
 	host.exclusivePools = []Pool{&poolImpl{
 		name:         "test",
 		cpus:         make([]CPU, 0),
 		mutex:        &sync.Mutex{},
+		hostMutex:    host.hostMutex,
 		powerProfile: &profileImpl{},
 		host:         host,
 	}}
@@ -392,8 +397,8 @@ func (s *hostTestsSuite) TestRemoveCoresFromSharedPool() {
 
 		cores[i] = core
 	}
-	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, host: host, cpus: cores}}
-	host.reservedPool = &reservedPoolType{poolImpl{host: host, mutex: &sync.Mutex{}, cpus: make([]CPU, 0)}}
+	host.sharedPool = &sharedPoolType{poolImpl{powerProfile: &profileImpl{}, mutex: &sync.Mutex{}, hostMutex: host.hostMutex, host: host, cpus: cores}}
+	host.reservedPool = &reservedPoolType{poolImpl{host: host, mutex: &sync.Mutex{}, hostMutex: host.hostMutex, cpus: make([]CPU, 0)}}
 
 	for _, core := range cores {
 		core._setPoolProperty(host.sharedPool)
@@ -492,12 +497,13 @@ func (s *hostTestsSuite) TestDeleteProfile() {
 	p2copy := make(CPUList, len(p2cores))
 	copy(p2copy, p2cores)
 
-	host := &hostImpl{}
+	host := &hostImpl{hostMutex: &sync.Mutex{}}
 	exclusive := []Pool{
 		&exclusivePoolType{poolImpl{
 			name:         "pool1",
 			cpus:         p1cores,
 			mutex:        &sync.Mutex{},
+			hostMutex:    host.hostMutex,
 			powerProfile: &profileImpl{name: "profile1"},
 			host:         host,
 		}},
@@ -505,6 +511,7 @@ func (s *hostTestsSuite) TestDeleteProfile() {
 			name:         "pool2",
 			cpus:         p2cores,
 			mutex:        &sync.Mutex{},
+			hostMutex:    host.hostMutex,
 			powerProfile: &profileImpl{name: "profile2"},
 			host:         host,
 		}},
@@ -513,6 +520,7 @@ func (s *hostTestsSuite) TestDeleteProfile() {
 		name:         sharedPoolName,
 		cpus:         sharedCores,
 		mutex:        &sync.Mutex{},
+		hostMutex:    host.hostMutex,
 		powerProfile: &profileImpl{name: sharedPoolName},
 		host:         host,
 	}}

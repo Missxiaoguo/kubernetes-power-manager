@@ -6,9 +6,11 @@ import (
 )
 
 type poolImpl struct {
-	name         string
-	cpus         CPUList
-	mutex        sync.Locker
+	name  string
+	cpus  CPUList
+	mutex sync.Locker
+	// hostMutex is the host lock, shared by all pools on the host.
+	hostMutex    sync.Locker
 	host         Host
 	powerProfile Profile
 }
@@ -30,6 +32,7 @@ type Pool interface {
 	GetPowerProfile() Profile
 
 	poolMutex() sync.Locker
+	getHostMutex() sync.Locker
 
 	// private interface members
 	getHost() Host
@@ -73,16 +76,17 @@ func (pool *poolImpl) poolMutex() sync.Locker {
 	return pool.mutex
 }
 
+func (pool *poolImpl) getHostMutex() sync.Locker {
+	return pool.hostMutex
+}
+
 func (pool *poolImpl) SetPowerProfile(profile Profile) error {
-	log.V(4).Info("SetPowerProfile mutex lock", "pool", pool.name)
-	pool.mutex.Lock()
+	unlock := lockHostMutex(pool.hostMutex, "pool", pool.name)
+	defer unlock()
+
 	pool.powerProfile = profile
-	defer func() {
-		pool.mutex.Unlock()
-		log.V(4).Info("SetPowerProfile mutex unlock", "pool", pool.name)
-	}()
 	for _, cpu := range pool.cpus {
-		err := cpu.consolidate()
+		err := cpu.consolidateUnsafe()
 		if err != nil {
 			return err
 		}
@@ -284,6 +288,9 @@ func (pool *exclusivePoolType) Remove() error {
 	if err := pool.Clear(); err != nil {
 		return err
 	}
+
+	unlock := lockHostMutex(pool.hostMutex, "pool", pool.name)
+	defer unlock()
 	if err := pool.host.GetAllExclusivePools().remove(pool); err != nil {
 		return err
 	}

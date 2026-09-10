@@ -4,31 +4,258 @@ package power
 import (
 	"errors"
 	"fmt"
-	"maps"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-// this test checks for potential race condition where one go routine moves cpus to a pool and another changes a power
-// profile of the target pool
-func TestConcurrentMoveCpusSetProfile(t *testing.T) {
-	const count = 5
-	for i := 0; i < count; i++ {
-		doConcurrentMoveCPUSetProfile(t)
+const mutationTestTimeout = 5 * time.Second
+
+// notifyingMutex reports lock attempts before waiting for the mutex. The first
+// caller can also be held after acquiring it so tests can prove that a second
+// mutation waits at the host boundary.
+type notifyingMutex struct {
+	mutex    sync.Mutex
+	attempts chan struct{}
+	entered  chan struct{}
+	release  chan struct{}
+	once     sync.Once
+}
+
+func newNotifyingMutex() *notifyingMutex {
+	return &notifyingMutex{attempts: make(chan struct{}, 4)}
+}
+
+func newGatedNotifyingMutex() *notifyingMutex {
+	return &notifyingMutex{
+		attempts: make(chan struct{}, 4),
+		entered:  make(chan struct{}),
+		release:  make(chan struct{}),
 	}
-	// reset feature list
+}
+
+func (m *notifyingMutex) Lock() {
+	select {
+	case m.attempts <- struct{}{}:
+	default:
+	}
+	m.mutex.Lock()
+	if m.release != nil {
+		m.once.Do(func() {
+			close(m.entered)
+			<-m.release
+		})
+	}
+}
+
+func (m *notifyingMutex) Unlock() {
+	m.mutex.Unlock()
+}
+
+func waitForSignal(t *testing.T, signal <-chan struct{}, description string) {
+	t.Helper()
+	select {
+	case <-signal:
+	case <-time.After(mutationTestTimeout):
+		t.Fatalf("timed out waiting for %s", description)
+	}
+}
+
+func waitForResult(t *testing.T, result <-chan error, description string) error {
+	t.Helper()
+	select {
+	case err := <-result:
+		return err
+	case <-time.After(mutationTestTimeout):
+		t.Fatalf("timed out waiting for %s", description)
+		return nil
+	}
+}
+
+// TestConcurrentHostMutations proves overlapping host mutations serialize on
+// the host mutex.
+func TestConcurrentHostMutations(t *testing.T) {
+	tests := []struct {
+		name string
+		run  func(*testing.T)
+	}{
+		{
+			name: "reserved-to-shared move vs SetPowerProfile",
+			run:  testReservedToSharedMoveVsSetPowerProfile,
+		},
+		{
+			name: "shared-to-exclusive vs exclusive-to-shared moves",
+			run:  testOppositeDirectionPoolMoves,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, tc.run)
+	}
+}
+
+// Exclusive pool Remove() takes the host mutex after Clear(); it must wait
+// if another host mutation is in progress.
+func TestExclusivePoolRemovalUsesHostMutex(t *testing.T) {
+	instance := setupIntegrationHost(t, 2)
+
+	pool, err := instance.AddExclusivePool("exclusive")
+	require.NoError(t, err)
+
+	// Hold the host mutex before Remove() so the call must block.
+	hostMutex := newNotifyingMutex()
+	hostMutex.Lock()
+	waitForSignal(t, hostMutex.attempts, "test to acquire the host mutex")
+	replaceHostMutexForTest(t, instance, hostMutex)
+
+	removeResult := make(chan error, 1)
+	go func() { removeResult <- pool.Remove() }()
+	waitForSignal(t, hostMutex.attempts, "pool removal to reach the host mutex")
+	select {
+	case err := <-removeResult:
+		t.Fatalf("exclusive pool removal finished while the host mutex was held: %v", err)
+	default:
+	}
+
+	hostMutex.Unlock()
+	require.NoError(t, waitForResult(t, removeResult, "exclusive pool removal"))
+	assert.Nil(t, instance.GetExclusivePool("exclusive"))
+	assert.Empty(t, *instance.GetAllExclusivePools())
+}
+
+// reserved→shared MoveCpus vs SetPowerProfile on the shared pool.
+func testReservedToSharedMoveVsSetPowerProfile(t *testing.T) {
+	const numCpus = 88
+	instance := setupIntegrationHost(t, numCpus)
+	assert.ElementsMatch(t, *instance.GetReservedPool().Cpus(), *instance.GetAllCpus())
+	assert.Empty(t, *instance.GetSharedPool().Cpus())
+
+	profile, err := NewPowerProfile("pwr", &intstr.IntOrString{Type: intstr.Int, IntVal: 100}, &intstr.IntOrString{Type: intstr.Int, IntVal: 1000}, "performance", "performance", map[string]bool{"C1": true, "C6": false}, nil)
+	require.NoError(t, err)
+
+	// Gate the host mutex so the first mutation can be held mid-flight.
+	hostMutex := newGatedNotifyingMutex()
+	replaceHostMutexForTest(t, instance, hostMutex)
+
+	// 1. Start the reserved→shared move and wait until it holds the host mutex.
+	moveResult := make(chan error, 1)
+	go func() { moveResult <- instance.GetSharedPool().MoveCpus(*instance.GetAllCpus()) }()
+	waitForSignal(t, hostMutex.attempts, "reserved-to-shared move to acquire the host mutex")
+	waitForSignal(t, hostMutex.entered, "reserved-to-shared move to hold the host mutex")
+	select {
+	case err := <-moveResult:
+		t.Fatalf("reserved-to-shared move finished before SetPowerProfile started: %v", err)
+	default:
+	}
+
+	// 2. Start SetPowerProfile; it must block on the host mutex.
+	profileResult := make(chan error, 1)
+	go func() { profileResult <- instance.GetSharedPool().SetPowerProfile(profile) }()
+	waitForSignal(t, hostMutex.attempts, "SetPowerProfile to reach the host mutex")
+	select {
+	case err := <-profileResult:
+		t.Fatalf("SetPowerProfile finished while the move still held the host mutex: %v", err)
+	default:
+	}
+	assert.Empty(t, *instance.GetSharedPool().Cpus())
+
+	// 3. Release the move; both complete, then every CPU is in shared with the profile.
+	close(hostMutex.release)
+	require.NoError(t, waitForResult(t, moveResult, "reserved-to-shared move"))
+	require.NoError(t, waitForResult(t, profileResult, "SetPowerProfile"))
+
+	assert.Equal(t, profile, instance.GetSharedPool().GetPowerProfile())
+	assert.ElementsMatch(t, *instance.GetAllCpus(), *instance.GetSharedPool().Cpus())
+	for i := uint(0); i < numCpus; i++ {
+		assert.NoError(t, verifyPowerProfile(i, profile), "cpuid", i)
+	}
+}
+
+// Shared→exclusive and exclusive→shared moves on overlapping CPUs.
+func testOppositeDirectionPoolMoves(t *testing.T) {
+	instance := setupIntegrationHost(t, 4)
+	require.NoError(t, instance.GetSharedPool().MoveCPUIDs([]uint{0, 1}))
+	exclusive, err := instance.AddExclusivePool("exclusive")
+	require.NoError(t, err)
+	require.NoError(t, exclusive.MoveCPUIDs([]uint{1}))
+	assert.ElementsMatch(t, []uint{0}, instance.GetSharedPool().Cpus().IDs())
+	assert.ElementsMatch(t, []uint{1}, exclusive.Cpus().IDs())
+
+	// Gate the host mutex so the first mutation can be held mid-flight.
+	hostMutex := newGatedNotifyingMutex()
+	replaceHostMutexForTest(t, instance, hostMutex)
+
+	// 1. Start shared→exclusive (CPU 0) and wait until it holds the host mutex.
+	toExclusive := make(chan error, 1)
+	go func() { toExclusive <- exclusive.MoveCPUIDs([]uint{0}) }()
+	waitForSignal(t, hostMutex.attempts, "shared-to-exclusive move to acquire the host mutex")
+	waitForSignal(t, hostMutex.entered, "shared-to-exclusive move to hold the host mutex")
+	select {
+	case err := <-toExclusive:
+		t.Fatalf("shared-to-exclusive move finished before the opposite move started: %v", err)
+	default:
+	}
+
+	// 2. Start exclusive→shared (CPU 1); it must block, and membership is unchanged.
+	toShared := make(chan error, 1)
+	go func() { toShared <- instance.GetSharedPool().MoveCPUIDs([]uint{1}) }()
+	waitForSignal(t, hostMutex.attempts, "exclusive-to-shared move to reach the host mutex")
+	select {
+	case err := <-toShared:
+		t.Fatalf("exclusive-to-shared move finished while the first move still held the host mutex: %v", err)
+	default:
+	}
+	assert.ElementsMatch(t, []uint{0}, instance.GetSharedPool().Cpus().IDs())
+	assert.ElementsMatch(t, []uint{1}, exclusive.Cpus().IDs())
+
+	// 3. Release the first move; both complete and the CPUs have swapped pools.
+	close(hostMutex.release)
+	require.NoError(t, waitForResult(t, toExclusive, "shared-to-exclusive move"))
+	require.NoError(t, waitForResult(t, toShared, "exclusive-to-shared move"))
+	assert.ElementsMatch(t, []uint{1}, instance.GetSharedPool().Cpus().IDs())
+	assert.ElementsMatch(t, []uint{0}, exclusive.Cpus().IDs())
+}
+
+func replaceHostMutexForTest(t *testing.T, instance Host, hostMutex sync.Locker) {
+	t.Helper()
+
+	host, ok := instance.(*hostImpl)
+	require.True(t, ok, "expected the real host implementation")
+	host.hostMutex = hostMutex
+
+	reservedPool, ok := host.reservedPool.(*reservedPoolType)
+	require.True(t, ok, "expected the real reserved pool implementation")
+	reservedPool.hostMutex = hostMutex
+
+	sharedPool, ok := host.sharedPool.(*sharedPoolType)
+	require.True(t, ok, "expected the real shared pool implementation")
+	sharedPool.hostMutex = hostMutex
+
+	for _, pool := range host.exclusivePools {
+		exclusivePool, ok := pool.(*exclusivePoolType)
+		require.True(t, ok, "expected the real exclusive pool implementation")
+		exclusivePool.hostMutex = hostMutex
+	}
+	for _, cpu := range *host.GetAllCpus() {
+		cpuImpl, ok := cpu.(*cpuImpl)
+		require.True(t, ok, "expected the real CPU implementation")
+		cpuImpl.hostMutex = hostMutex
+	}
+}
+
+func resetFeatureList() {
 	for _, status := range featureList {
 		status.err = errUninitialized
 	}
 }
 
-func doConcurrentMoveCPUSetProfile(t *testing.T) {
-	const numCpus = 88
-	emin := "11100"
-	emax := "5550000"
+func setupIntegrationHost(t *testing.T, numCpus int) Host {
+	t.Helper()
+	t.Cleanup(resetFeatureList)
+
 	cpuConfig := map[string]string{
 		"min":                 "11100",
 		"max":                 "9990000",
@@ -36,26 +263,11 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 		"available_governors": "performance",
 		"epp":                 "performance",
 	}
-
-	ecoreConfig := map[string]string{}
-	maps.Copy(ecoreConfig, cpuConfig)
-	ecoreConfig["min"] = emin
-	ecoreConfig["max"] = emax
-
 	cpuConfigAll := map[string]map[string]string{}
-
 	cpuTopologyMap := map[string]map[string]string{}
 	cpuCstatesMap := map[string]map[string]map[string]string{}
 	for i := 0; i < numCpus; i++ {
-		// set e cores
-		if i > numCpus/2 {
-			cpuConfigAll[fmt.Sprint("cpu", i)] = ecoreConfig
-		} else {
-			// set p cores
-			cpuConfigAll[fmt.Sprint("cpu", i)] = cpuConfig
-		}
-
-		// set c-states
+		cpuConfigAll[fmt.Sprint("cpu", i)] = cpuConfig
 		cpuCstatesMap[fmt.Sprint("cpu", i)] = map[string]map[string]string{
 			"state0": {"name": "POLL", "disable": "0", "latency": "0"},
 			"state1": {"name": "C1", "disable": "0", "latency": "1"},
@@ -63,8 +275,6 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 			"state3": {"name": "C6", "disable": "0", "latency": "170"},
 		}
 		cpuCstatesMap["Driver"] = map[string]map[string]string{"intel_idle\n": nil}
-
-		// for this test we don't care about topology, so we just emulate 1 pkg, 1 die, numCpus cores, no hyperthreading
 		cpuTopologyMap[fmt.Sprint("cpu", i)] = map[string]string{
 			"pkg":  "0",
 			"die":  "0",
@@ -72,51 +282,20 @@ func doConcurrentMoveCPUSetProfile(t *testing.T) {
 		}
 	}
 
-	// Setup features except for uncore
-	defer setupCPUCStatesTests(cpuCstatesMap)()
-	defer setupUncoreTests(map[string]map[string]string{}, "")()
-	defer setupCPUScalingTests(cpuConfigAll)()
-	defer setupTopologyTest(cpuTopologyMap)()
+	t.Cleanup(setupCPUCStatesTests(cpuCstatesMap))
+	t.Cleanup(setupUncoreTests(map[string]map[string]string{}, ""))
+	t.Cleanup(setupCPUScalingTests(cpuConfigAll))
+	t.Cleanup(setupTopologyTest(cpuTopologyMap))
 
 	originalGetFromLscpu := GetFromLscpu
-	defer func() { GetFromLscpu = originalGetFromLscpu }()
 	GetFromLscpu = TestGetFromLscpu
+	t.Cleanup(func() { GetFromLscpu = originalGetFromLscpu })
 
 	instance, err := CreateInstance("host")
-
-	assert.ErrorContainsf(t, err, "intel_uncore_frequency not loaded", "expecting uncore feature error")
-	assert.NotNil(t, instance)
-
-	assert.Len(t, *instance.GetAllCpus(), numCpus)
-	assert.ElementsMatch(t, *instance.GetReservedPool().Cpus(), *instance.GetAllCpus())
-	assert.Empty(t, *instance.GetSharedPool().Cpus())
-
-	powerProfile, err := NewPowerProfile("pwr", &intstr.IntOrString{Type: intstr.Int, IntVal: 100}, &intstr.IntOrString{Type: intstr.Int, IntVal: 1000}, "performance", "performance", map[string]bool{"C1": true, "C6": false}, nil)
-	assert.NoError(t, err)
-
-	moveCoresErrChan := make(chan error)
-	setPowerProfileErrChan2 := make(chan error)
-
-	go func(instance Host, errChannel chan error) {
-		errChannel <- instance.GetSharedPool().MoveCpus(*instance.GetAllCpus())
-	}(instance, moveCoresErrChan)
-
-	go func(instance Host, profile Profile, errChannel chan error) {
-		time.Sleep(5 * time.Millisecond)
-		errChannel <- instance.GetSharedPool().SetPowerProfile(profile)
-	}(instance, powerProfile, setPowerProfileErrChan2)
-
-	assert.NoError(t, <-moveCoresErrChan)
-	close(moveCoresErrChan)
-
-	assert.NoError(t, <-setPowerProfileErrChan2)
-	close(setPowerProfileErrChan2)
-
-	assert.Equal(t, powerProfile, instance.GetSharedPool().GetPowerProfile())
-	assert.ElementsMatch(t, *instance.GetAllCpus(), *instance.GetSharedPool().Cpus())
-	for i := uint(0); i < numCpus; i++ {
-		assert.NoError(t, verifyPowerProfile(i, powerProfile), "cpuid", i)
-	}
+	require.ErrorContainsf(t, err, "intel_uncore_frequency not loaded", "expecting uncore feature error")
+	require.NotNil(t, instance)
+	require.Len(t, *instance.GetAllCpus(), numCpus)
+	return instance
 }
 
 // verifies that the cpu is configured correctly

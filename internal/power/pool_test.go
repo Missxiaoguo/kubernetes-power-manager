@@ -17,6 +17,10 @@ func (m *poolMock) poolMutex() sync.Locker {
 	return m.Called().Get(0).(sync.Locker)
 }
 
+func (m *poolMock) getHostMutex() sync.Locker {
+	return m.Called().Get(0).(sync.Locker)
+}
+
 func (m *poolMock) SetCStates(states CStates) error {
 	return m.Called(states).Error(0)
 }
@@ -405,19 +409,19 @@ func TestPoolImpl_SetPowerProfile(t *testing.T) {
 	cores := make(CPUList, 2)
 	for i := range cores {
 		core := new(cpuMock)
-		core.On("consolidate").Return(nil)
+		core.On("consolidateUnsafe").Return(nil)
 		cores[i] = core
 	}
 
-	poolMutex := new(mutexMock)
-	poolMutex.On("Unlock").Return().NotBefore(
-		poolMutex.On("Lock").Return(),
+	hostMutex := new(mutexMock)
+	hostMutex.On("Unlock").Return().NotBefore(
+		hostMutex.On("Lock").Return(),
 	)
-	pool := &poolImpl{cpus: cores, mutex: poolMutex}
+	pool := &poolImpl{cpus: cores, hostMutex: hostMutex}
 	powerProfile := new(profileImpl)
 	assert.NoError(t, pool.SetPowerProfile(powerProfile))
 	assert.True(t, pool.powerProfile == powerProfile)
-	poolMutex.AssertExpectations(t)
+	hostMutex.AssertExpectations(t)
 	for _, core := range cores {
 		core.(*cpuMock).AssertExpectations(t)
 	}
@@ -436,7 +440,7 @@ func TestExclusivePoolType_Remove(t *testing.T) {
 	host := new(hostMock)
 	host.On("GetAllCpus").Return(new(CPUList))
 
-	pool := &exclusivePoolType{poolImpl{host: host}}
+	pool := &exclusivePoolType{poolImpl{host: host, hostMutex: &sync.Mutex{}}}
 	pools := PoolList{pool}
 	host.On("GetAllExclusivePools").Return(&pools)
 	assert.NoError(t, pool.Remove())
